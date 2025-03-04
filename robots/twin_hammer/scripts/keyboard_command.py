@@ -58,7 +58,7 @@ def printMsg(msg, msg_len = 50):
 if __name__=="__main__":
         settings = termios.tcgetattr(sys.stdin)
         rospy.init_node("keyboard_command")
-        robot_ns = rospy.get_param("~robot_ns", "");
+        robot_ns = rospy.get_param("~robot_ns", "")
         print(msg)
 
         if not robot_ns:
@@ -228,7 +228,10 @@ if __name__=="__main__":
                         haptics_wrench_msg.wrench.torque.y = desire_wrench[4]
                         haptics_wrench_msg.wrench.torque.z = desire_wrench[5]
                         if key == 'm':
-                          haptics_wrench_pub.publish(haptics_wrench_msg)
+                                haptics_wrench_pub.publish(haptics_wrench_msg)
+                        if key == 'n' or key == 'l':
+                                desire_wrench = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+                                haptics_wrench_pub.publish(haptics_wrench_msg)
 
                         if key == '\x03':
                                 break
