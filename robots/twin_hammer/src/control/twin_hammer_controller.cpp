@@ -290,7 +290,7 @@ void TwinHammerController::controlCore()
     }
     if(i==1){
       filtered_gimbal_2_roll_ = (1-delay_param_) * filtered_gimbal_2_roll_ + delay_param_ * gimbal_i_roll;
-      double diff_gimbal_2_roll = gimbal_i_roll - gimbal_states_angles_.at(2);
+      double diff_gimbal_2_roll = gimbal_i_roll + gimbal_states_angles_.at(2);
       if(abs(diff_gimbal_2_roll) < gimbal_round_range_){
         if(use_polynominal_){
           double poly_rounded_gimbal_2_roll = GimbalRoundPolynominal(diff_gimbal_2_roll, gimbal_round_range_);

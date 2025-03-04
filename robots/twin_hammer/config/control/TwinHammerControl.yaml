@@ -9,8 +9,8 @@ controller:
   gimbal_pitch_delta_angle: 0.1
   gravity_acc: 3.0
   delay_param: 0.5
-  gimbal_round_range: 0.8
-  gaussian_exp: 100
+  gimbal_round_range: 0.4
+  gaussian_exp: 10
 
   xy:
     p_gain: 0.5
