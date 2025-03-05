@@ -19,7 +19,7 @@ class position_teleop():
     self.nav_pub = rospy.Publisher('/'+self.robot_name+'/uav/nav', FlightNav, queue_size=1)
     self.att_pub = rospy.Publisher('/'+self.robot_name+'/final_target_baselink_rot', DesireCoord, queue_size=1)
     self.flight_state_sub = rospy.Subscriber('/'+self.robot_name+'/flight_state', UInt8, self.flight_state_cb)
-    self.device_pos_sub = rospy.Subscriber('/twin_hammer/mocap/pose', PoseStamped, self.device_pos_cb)
+    self.device_pos_sub = rospy.Subscriber('/device/mocap/pose', PoseStamped, self.device_pos_cb)
     self.robot_pos_sub = rospy.Subscriber('/'+self.robot_name+'/mocap/pose', PoseStamped, self.robot_pos_cb)
     self.flight_nav = FlightNav()
     self.flight_nav.target = FlightNav.COG
@@ -63,8 +63,10 @@ class position_teleop():
     r = rospy.Rate(40)
     while not rospy.is_shutdown():
 
-      if self.hovering:
-        target_pos = (self.device_pos - self.device_init_pos + self.robot_init_pos) * self.pos_scale
+      if self.hovering and self.device_pos!=None and self.device_init_pos!=None and self.robot_init_pos!=None:
+        target_pos = [0.0,0.0,0.0]
+        for i in range(3):
+          target_pos[i] = (self.device_pos[i] - self.device_init_pos[i] + self.robot_init_pos[i]) * self.pos_scale
         self.flight_nav.target_pos_x = target_pos[0]
         self.flight_nav.target_pos_y = target_pos[1]
         self.flight_nav.target_pos_z = target_pos[2]

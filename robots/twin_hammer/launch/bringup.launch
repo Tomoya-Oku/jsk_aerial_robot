@@ -120,7 +120,7 @@
     <param name="robot_name" value="$(arg teleop_robot_name)" />
   </node>
   ########## dummy mocap node when not use device position #########
-  <node pkg="twin_hammer" type="dummy_mocap_node.py" name="dummy_mocap" output="screen" if="$(eval not arg('simulation') and arg('real_machine') and not arg('teleop_from_mocap'))" />
+  <node pkg="twin_hammer" type="dummy_mocap_node.py" name="dummy_mocap" output="screen" if="$(eval not arg('simulation') and arg('real_machine'))" />
 
   ########## gimbal servo initialize #########
   <node pkg="twin_hammer" type="init_gimbal_angle.py" name="init_gimbal_angle" output="screen" if="$(eval not arg('simulation') and arg('real_machine') )" />

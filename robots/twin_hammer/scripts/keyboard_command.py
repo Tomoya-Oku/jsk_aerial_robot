@@ -57,8 +57,9 @@ def printMsg(msg, msg_len = 50):
 
 if __name__=="__main__":
         settings = termios.tcgetattr(sys.stdin)
-        rospy.init_node("keyboard_command")
-        robot_ns = rospy.get_param("~robot_ns", "")
+        rospy.init_node("keyboard_command_for_twin_hammer")
+        # robot_ns = rospy.get_param("~robot_ns", "")
+        robot_ns = "/twin_hammer"
         print(msg)
 
         if not robot_ns:
