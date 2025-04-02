@@ -4,39 +4,16 @@ import rospy
 import time
 import math
 import tf.transformations as tf
-from scipy.optimize import fsolve
 from std_msgs.msg import Int8
 from aerial_robot_msgs.msg import FlightNav
 from spinal.msg import DesireCoord
 from geometry_msgs.msg import PoseStamped, WrenchStamped
 
 def exponential(x, base, k_exp):
-  # return math.pow(base,x) * k_exp
   return pow(x,base) * k_exp
-
-def exp_eqs(vars, base):
-  x, k_exp = vars
-  eq1 = exponential(x,base,k_exp) - x
-  # eq2 = math.log(base) * exponential(x,base,k_exp) - 1
-  eq2 = base * exponential(x,base-1,k_exp) - 1
-  return [eq1,eq2]
-
-def find_range_k_exp(base, initial_guess=(1.0,1.0)):
-  range_sol, k_exp_sol = fsolve(exp_eqs, initial_guess, args=(base))
-  return range_sol, k_exp_sol
 
 def logarithm(x, base, k_log):
   return math.log(x,base) * k_log
-
-def log_eqs(vars, base):
-  x,k_log = vars
-  eq1 = logarithm(x,base,k_log) - x
-  eq2 = k_log / (math.log(base)*x) - 1
-  return [eq1,eq2]
-
-def find_range_k_log(base, initial_guess=(1.0,1.0)):
-  range_sol, k_log_sol = fsolve(log_eqs, initial_guess, args=(base))
-  return range_sol, k_log_sol
 
 class force_feedback_from_robot():
 
@@ -55,9 +32,11 @@ class force_feedback_from_robot():
 
     self.k_p = 1.0
     self.exp_base = 1.3
-    self.log_base = 2.5
-    self.range_exp, self.k_exp = find_range_k_exp(self.exp_base)
-    self.range_log, self.k_log = find_range_k_log(self.log_base)
+    self.log_base = 1.3
+    self.k_exp = 1.0
+    self.k_log = 1.1
+    self.range_log = math.e
+    self.a_log = self.k_log / (math.e * math.log(self.log_base))
     # time.sleep(0.5)
 
   def robot_wrench_cb(self,msg):
@@ -75,12 +54,10 @@ class force_feedback_from_robot():
         haptics_wrench[i] = wrench_i * self.k_p
 
         # exponential conversion
-        if wrench_i>self.range_exp:
+        if wrench_i>=0.0:
           haptics_wrench[i] = exponential(wrench_i, self.exp_base, self.k_exp)
-        elif wrench_i<-self.range_exp:
-          haptics_wrench[i] = -exponential(-wrench_i, self.exp_base, self.k_exp)
         else:
-          haptics_wrench[i] = wrench_i
+          haptics_wrench[i] = -exponential(-wrench_i, self.exp_base, self.k_exp)
 
         # log conversion
         if wrench_i>self.range_log:
@@ -88,7 +65,7 @@ class force_feedback_from_robot():
         elif wrench_i<-self.range_log:
           haptics_wrench[i] = -logarithm(-wrench_i, self.log_base, self.k_log)
         else:
-          haptics_wrench[i] = wrench_i
+          haptics_wrench[i] = wrench_i * self.a_log
 
         self.haptics_wrench_msg.wrench.force.x = haptics_wrench[0]
         self.haptics_wrench_msg.wrench.force.y = haptics_wrench[1]
