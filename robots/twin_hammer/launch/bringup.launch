@@ -10,8 +10,7 @@
   <arg name="headless" default="True" />
   <arg name="optimize" default="False" />
   <arg name="dummy_weight" default="False" />
-  <arg name="teleop_from_mocap" default="False" />
-  <arg name="teleop_robot_name" default="quadrotor" />
+  <arg name="teleop_mode" default="False" />
   <arg name="worldtype" default="$(find aerial_robot_simulation)/gazebo_model/world/empty.world" />
   <arg name="launch_gazebo" default="True" />
   <arg name="direct_model" default="False" />
@@ -87,7 +86,7 @@
     <arg name="real_machine" value="$(arg real_machine)" />
     <arg name="simulation" value="$(arg simulation)" />
     <arg name="robot_ns" value="$(arg robot_ns)" />
-    <arg name="teleop_from_mocap" value="$(arg teleop_from_mocap)" />
+    <arg name="teleop_from_mocap" value="$(arg teleop_mode)" />
   </include >
 
   ###########  Servo Bridge  ###########
@@ -109,18 +108,11 @@
   </include>
 
   ########## Simulation in Mujoco #########
-  <include file="$(find aerial_robot_simulation)/launch/mujoco.launch" if="$(eval arg('simulation') and not arg('real_machine') and arg('mujoco'))" >
+  <!-- <include file="$(find aerial_robot_simulation)/launch/mujoco.launch" if="$(eval arg('simulation') and not arg('real_machine') and arg('mujoco'))" >
     <arg name="robot_ns" value="$(arg robot_ns)" />
     <arg name="headless" value="$(arg headless)"/>
     <arg name="mujoco_model" value="$(find twin_hammer)/mujoco/robot.xml"/>
-  </include>
-
-  ########## position teleoperation from mocap of device #########
-  <node pkg="twin_hammer" type="position_teleop_from_mocap.py" name="position_teleop_from_mocap" output="screen" if="$(arg teleop_from_mocap)" >
-    <param name="robot_name" value="$(arg teleop_robot_name)" />
-  </node>
-  ########## dummy mocap node when not use device position #########
-  <node pkg="twin_hammer" type="dummy_mocap_node.py" name="dummy_mocap" output="screen" if="$(eval not arg('simulation') and arg('real_machine'))" />
+  </include> -->
 
   ########## gimbal servo initialize #########
   <node pkg="twin_hammer" type="init_gimbal_angle.py" name="init_gimbal_angle" output="screen" if="$(eval not arg('simulation') and arg('real_machine') )" />

@@ -231,8 +231,8 @@ void TwinHammerController::controlCore()
     full_q_mat.middleCols(last_col, 3) = wrench_map;
     last_col += 3;
   }
-  full_q_mat.topRows(3) = mass_inv * full_q_mat.topRows(3);
-  full_q_mat.bottomRows(3) = inertia_inv * full_q_mat.bottomRows(3);
+  // full_q_mat.topRows(3) = mass_inv * full_q_mat.topRows(3);
+  // full_q_mat.bottomRows(3) = inertia_inv * full_q_mat.bottomRows(3);
 
   Eigen::MatrixXd q1_mat = Eigen::MatrixXd::Zero(5,3*virtual_rotor_num); // remove tx
   q1_mat.topRows(3) = full_q_mat.topRows(3);

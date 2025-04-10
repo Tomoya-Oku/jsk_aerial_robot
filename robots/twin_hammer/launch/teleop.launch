@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="robot_name" default="quadrotor" />
+  <!-- <arg name="real_machine" default="True" /> -->
+  <arg name="control_mode" default="pos" />
+  <arg name="mocap_debug_mode" default="false" />
+
+  <node name="teleop_from_mocap" pkg="twin_hammer" type="teleop_from_mocap.py" output="screen" >
+    <param name="robot_name" value="$(arg robot_name)" />
+    <!-- <param name="real_machine" value="$(arg real_machine)" /> -->
+    <param name="control_mode" value="$(arg control_mode)" />
+  </node>
+
+  <node name="force_feedback_from_robot" pkg="twin_hammer" type="force_feedback_from_robot.py" output="screen" >
+    <param name="robot_name" value="$(arg robot_name)" />
+    <!-- <param name="real_machine" value="$(arg real_machine)" /> -->
+  </node>
+
+  <include file="$(find twin_hammer)/launch/include/mocap.launch" if="$(arg mocap_debug_mode)" /> 
+
+</launch>

@@ -19,9 +19,8 @@ class force_feedback_from_robot():
 
   def __init__(self):
 
-    self.real_machine = rospy.get_param("~real_machine", False)
+    # self.real_machine = rospy.get_param("~real_machine", False)
     self.robot_name = rospy.get_param("~robot_name", "quadrotor")
-    self.pos_scale = rospy.get_param("~pos_scale", 1.1)
 
     # self.haptics_switch_pub = rospy.Publisher('/twin_hammer/haptics_switch', Int8, queue_size=1)
     self.haptics_wrench_pub = rospy.Publisher('/twin_hammer/haptics_wrench', WrenchStamped, queue_size=1)
@@ -35,6 +34,7 @@ class force_feedback_from_robot():
     self.log_base = 1.3
     self.k_exp = 1.0
     self.k_log = 1.1
+    # belows are dependent valuables
     self.range_log = math.e
     self.a_log = self.k_log / (math.e * math.log(self.log_base))
     # time.sleep(0.5)
