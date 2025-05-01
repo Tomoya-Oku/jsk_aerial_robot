@@ -33,7 +33,7 @@
     <param name="estimation/mode" value= "$(arg sim_estimate_mode)" if="$(arg simulation)" />
     <param name="estimation/mode" value= "$(arg estimate_mode)" if="$(arg real_machine)"/>
 
-    <param name="uav_model" value= "32" />
+    <param name="uav_model" value= "0" />
     <rosparam file="$(arg config_dir)/model/TwinHammerModel.yaml" command="load" />
 
     ###########  Motor Config  ###########
