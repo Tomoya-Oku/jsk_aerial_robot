@@ -154,7 +154,7 @@ void TwinHammerController::controlCore()
   tf::Matrix3x3 uav_rot = estimator_->getOrientation(Frame::COG, estimate_mode_);
   if(use_haptics_flag_)
   {
-    tf::Vector3 tf_haptics_force(haptics_force_.x(), haptics_force_.y(), haptics_force_.z()+gravity_acc_);
+    tf::Vector3 tf_haptics_force(haptics_force_.x(), haptics_force_.y(), haptics_force_.z()+gravity_acc_*twin_hammer_model_->getMass());
     target_acc_w = tf_haptics_force;
   }
   else
