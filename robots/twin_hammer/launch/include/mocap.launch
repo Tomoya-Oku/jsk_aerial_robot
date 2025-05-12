@@ -24,8 +24,8 @@
 
       rigid_bodies:
          '$(arg twin_hammer_id)':
-               pose: /device/mocap/pose
-               pose2d: /device/mocap/ground_pose
+               pose: /twin_hammer/mocap/pose
+               pose2d: /twin_hammer/mocap/ground_pose
                child_frame_id: baselink
                parent_frame_id: world
       optitrack_config:
