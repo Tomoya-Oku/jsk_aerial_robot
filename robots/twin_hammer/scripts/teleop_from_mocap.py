@@ -18,8 +18,8 @@ class teleop_from_mocap():
     self.pos_scale = rospy.get_param("~pos_scale", 1.1)
     self.vel_scale = rospy.get_param("~vel_scale", 0.5)
     self.ang_vel_scale = rospy.get_param("~ang_vel_scale", 0.5)
-    self.feedback_force_scale = rospy.get_param("~feedback_force_scale", 5.0)
-    self.feedback_torque_scale = rospy.get_param("~feedback_torque_scale", 5.0)
+    self.feedback_force_scale = rospy.get_param("~feedback_force_scale", 10.0)
+    self.feedback_torque_scale = rospy.get_param("~feedback_torque_scale", 1.0)
 
     self.nav_pub = rospy.Publisher('/'+self.robot_name+'/uav/nav', FlightNav, queue_size=1)
     self.att_pub = rospy.Publisher('/'+self.robot_name+'/final_target_baselink_rot', DesireCoord, queue_size=1)
@@ -70,15 +70,16 @@ class teleop_from_mocap():
       self.robot_init_att = self.robot_att
 
   def main(self):
-    r = rospy.Rate(40)
+    target_pos = [0.0,0.0,0.0]
+    target_att = [0.0,0.0,0.0]
+    target_vel = [0.0,0.0,0.0]
+    target_ang_vel = [0.0,0.0,0.0]
+    feedback_wrench = [0.0,0.0,0.0,0.0,0.0,0.0]
+
+    r = rospy.Rate(100)
     while not rospy.is_shutdown():
 
       if self.hovering and self.device_pos!=None and self.device_init_pos!=None and self.robot_init_pos!=None:
-        target_pos = [0.0,0.0,0.0]
-        target_att = [0.0,0.0,0.0]
-        target_vel = [0.0,0.0,0.0]
-        target_ang_vel = [0.0,0.0,0.0]
-        feedback_wrench = [0.0,0.0,0.0,0.0,0.0,0.0]
         for i in range(3):
           target_pos[i] = (self.device_pos[i] - self.device_init_pos[i] + self.robot_init_pos[i]) * self.pos_scale
           target_att[i] = self.device_att[i]
@@ -86,15 +87,16 @@ class teleop_from_mocap():
           target_vel[i] = self.robot_pos[i] + (self.device_pos[i] - self.device_init_pos[i]) * self.vel_scale
           # target_ang_vel[i] = (self.device_att[i] - self.device_init_att[i]) * self.ang_vel_scale
           target_ang_vel[i] = self.robot_att[i] + (self.device_att[i] - self.device_init_att[i]) * self.ang_vel_scale
-          feedback_wrench[i] = (self.device_pos[i] - self.device_init_pos[i]) * self.feedback_force_scale
-          feedback_wrench[i+3] = (self.device_att[i] - self.device_init_att[i]) * self.feedback_torque_scale
-        if self.robot_pos[2] > 2.0:
-          target_pos[2] = 2.0
+          feedback_wrench[i] = - (self.device_pos[i] - self.device_init_pos[i]) * self.feedback_force_scale
+          # feedback_wrench[i+3] = (self.device_att[i] - self.device_init_att[i]) * self.feedback_torque_scale
+          feedback_wrench[i+3] = - self.device_att[i]
+        if self.robot_pos[2] > 1.5:
+          target_pos[2] = 1.5
           target_vel[2] = 0.0
-        if self.robot_pos[2] < 0.5:
-          target_pos[2] = 0.5
+        if self.robot_pos[2] < 0.3:
+          target_pos[2] = 0.3
           target_vel[2] = 0.0
-        
+
         if self.control_mode == "pos":
           self.flight_nav.target_pos_x = target_pos[0]
           self.flight_nav.target_pos_y = target_pos[1]
@@ -117,7 +119,7 @@ class teleop_from_mocap():
 
       if self.hovering and not self.landing:
         if self.wait_flag:
-          rospy.sleep(1.0)
+          rospy.sleep(2.0)
           self.wait_flag = False
         self.nav_pub.publish(self.flight_nav)
         self.att_pub.publish(self.desire_att_nav)
