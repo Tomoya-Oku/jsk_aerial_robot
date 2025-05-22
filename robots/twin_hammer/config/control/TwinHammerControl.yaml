@@ -5,12 +5,13 @@ controller:
   use_haptics: true
   use_polynominal: false
   use_gaussian: false
-  gimbal_roll_delta_angle: 0.1
-  gimbal_pitch_delta_angle: 0.1
-  gravity_acc: 3.0
-  delay_param: 0.5
   gimbal_round_range: 0.4
   gaussian_exp: 10
+  gimbal_roll_vel_limit: 1000.0
+  gimbal_roll_acc_limit: 1000.0
+  counter_torque_limit: 1.5
+  gravity_acc: 5.0
+  delay_param: 0.5
 
   xy:
     p_gain: 0.5

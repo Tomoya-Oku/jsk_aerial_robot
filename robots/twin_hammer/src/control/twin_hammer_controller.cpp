@@ -81,12 +81,14 @@ void TwinHammerController::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
   PoseLinearController::initialize(nh, nhp, robot_model, estimator, navigator, ctrl_loop_rate);
   twin_hammer_model_ = boost::dynamic_pointer_cast<TwinHammerModel>(robot_model);
 
+  time_prev_ = 0.0;
   target_base_thrust_.resize(motor_num_, 0.0);
   target_gimbal_angles_.resize(motor_num_, 0.01);
   prev_gimbal_angles_.resize(motor_num_, 0.0);
   gimbal_states_angles_.resize(motor_num_, 0.0);
   target_wrench_acc_cog_ = Eigen::VectorXd::Zero(6);
 
+  test_counter_torque_pub_ = nh_.advertise<std_msgs::Float64MultiArray>("test_counter_torque",1);
   flight_cmd_pub_ = nh_.advertise<spinal::FourAxisCommand>("four_axes/command", 1);
   gimbal_control_pub_ = nh_.advertise<sensor_msgs::JointState>("gimbals_ctrl", 1);
   gimbal_states_sub_ = nh_.subscribe("joint_states", 1, &TwinHammerController::GimbalStatesCallback, this);
@@ -109,8 +111,9 @@ void TwinHammerController::rosParamInit()
   getParam<bool>(control_nh, "use_haptics", use_haptics_flag_, true);
   getParam<bool>(control_nh, "use_polynominal", use_polynominal_, true);
   getParam<bool>(control_nh, "use_gaussian", use_gaussian_, true);
-  getParam<double>(control_nh, "gimbal_roll_delta_angle", gimbal_roll_delta_angle_, 0.1);
-  getParam<double>(control_nh, "gimbal_pitch_delta_angle", gimbal_pitch_delta_angle_, 0.1);
+  getParam<double>(control_nh, "gimbal_roll_vel_limit", gimbal_roll_vel_limit_, 100.0);
+  getParam<double>(control_nh, "gimbal_roll_acc_limit", gimbal_roll_acc_limit_, 100.0);
+  getParam<double>(control_nh, "counter_torque_limit", counter_torque_limit_, 1.0);
   getParam<double>(control_nh, "gravity_acc", gravity_acc_, 1.0);
   getParam<double>(control_nh, "delay_param", delay_param_, 1.0);
   getParam<double>(control_nh, "gimbal_round_range", gimbal_round_range_, 0.2);
@@ -149,6 +152,7 @@ void TwinHammerController::HapticsWrenchCallback(geometry_msgs::WrenchStamped ms
 
 void TwinHammerController::controlCore()
 {
+  double time_now = ros::Time::now().toSec();
   PoseLinearController::controlCore();
   tf::Vector3 target_acc_w(0.0, 0.0, 0.0);
   tf::Matrix3x3 uav_rot = estimator_->getOrientation(Frame::COG, estimate_mode_);
@@ -218,8 +222,6 @@ void TwinHammerController::controlCore()
   }
   std::vector<Eigen::Vector3d> virtual_rotors_origin_from_cog = {virtual_rotor_1_origin, virtual_rotor_2_origin};
 
-  double t = ros::Time::now().toSec();
-
   Eigen::MatrixXd wrench_map = Eigen::MatrixXd::Zero(6,3);
   wrench_map.block(0,0,3,3) = Eigen::MatrixXd::Identity(3,3);
   int last_col = 0;
@@ -230,14 +232,12 @@ void TwinHammerController::controlCore()
     full_q_mat.middleCols(last_col, 3) = wrench_map;
     last_col += 3;
   }
-  // full_q_mat.topRows(3) = mass_inv * full_q_mat.topRows(3);
-  // full_q_mat.bottomRows(3) = inertia_inv * full_q_mat.bottomRows(3);
 
-  Eigen::MatrixXd q1_mat = Eigen::MatrixXd::Zero(5,3*virtual_rotor_num); // remove tx
+  Eigen::MatrixXd q1_mat = Eigen::MatrixXd::Zero(5,3*virtual_rotor_num); /* remove tx */
   q1_mat.topRows(3) = full_q_mat.topRows(3);
   q1_mat.bottomRows(2) = full_q_mat.bottomRows(2);
   Eigen::MatrixXd q1_mat_inv = aerial_robot_model::pseudoinverse(q1_mat);
-  Eigen::VectorXd target_wrench_acc_cog_5d = Eigen::VectorXd::Zero(5); // remove tx
+  Eigen::VectorXd target_wrench_acc_cog_5d = Eigen::VectorXd::Zero(5); /* remove tx */
   target_wrench_acc_cog_5d.head(3) = target_wrench_acc_cog_.head(3);
   target_wrench_acc_cog_5d.tail(2) = target_wrench_acc_cog_.tail(2);
   target_vectoring_f_ = q1_mat_inv * target_wrench_acc_cog_5d;
@@ -254,6 +254,7 @@ void TwinHammerController::controlCore()
     if(gimbal_i_roll > 3.1 || gimbal_i_roll < -3.1){gimbal_i_roll = 0.0;}
     double gimbal_i_pitch = atan2(f_i.x(), -f_i.y() * sin(gimbal_i_roll) + f_i.z() * cos(gimbal_i_roll));
     if(gimbal_i_pitch > 3.1 || gimbal_i_pitch < -3.1){gimbal_i_pitch = 3.14159265;}
+    /* round gimbal roll angle */
     if(i==0){
       filtered_gimbal_1_roll_ = (1-delay_param_) * filtered_gimbal_1_roll_ + delay_param_ * gimbal_i_roll;
       double diff_gimbal_1_roll = gimbal_i_roll - gimbal_states_angles_.at(0);
@@ -298,15 +299,46 @@ void TwinHammerController::controlCore()
     target_gimbal_angles_.at(2*i+1) = gimbal_i_pitch;
     last_col += 3;
   }
-  for(int i=0; i<prev_gimbal_angles_.size(); i++){
+
+  /* calculate counter torque by rotating gimbal roll */
+  Eigen::Vector2d gimbal_roll_ang_diff(target_gimbal_angles_.at(0)-prev_gimbal_angles_.at(0), target_gimbal_angles_.at(2)-prev_gimbal_angles_.at(2));
+  Eigen::Vector2d gimbal_roll_vel = gimbal_roll_ang_diff / (time_now - time_prev_);
+  for(int i=0; i<gimbal_roll_vel.size(); i++){
+    if(abs(gimbal_roll_vel(i)) > gimbal_roll_vel_limit_){
+      gimbal_roll_vel(i) = gimbal_roll_vel_limit_;
+    }
+  }
+  Eigen::Vector2d gimbal_roll_acc = (gimbal_roll_vel - prev_gimbal_roll_vel_) / (time_now - time_prev_);
+  for(int i=0; i<gimbal_roll_acc.size(); i++){
+    if(abs(gimbal_roll_acc(i)) > gimbal_roll_acc_limit_){
+      gimbal_roll_acc(i) = gimbal_roll_acc_limit_;
+    }
+  }
+  Eigen::Matrix3d gimbal1_inertia = twin_hammer_model_->getGimbal1Inertia();
+  Eigen::Matrix3d gimbal2_inertia = twin_hammer_model_->getGimbal2Inertia();
+  Eigen::Vector2d gimbal_roll_inertia(gimbal1_inertia(0,0), gimbal2_inertia(0,0)); /* ｘ軸回りの慣性であってるはず　要チェック*/
+  Eigen::Vector2d counter_torque = gimbal_roll_inertia.cwiseProduct(gimbal_roll_acc);
+  for(int i=0; i<counter_torque.size(); i++){
+    if(counter_torque(i) > counter_torque_limit_){
+      counter_torque(i) = counter_torque_limit_;
+    }
+  }
+  std_msgs::Float64MultiArray test_msg;
+  test_msg.data.resize(counter_torque.size());
+  test_msg.data[0] = counter_torque(0);
+  test_msg.data[1] = counter_torque(1);
+  test_counter_torque_pub_.publish(test_msg);
+
+  for(int i=0; i<target_gimbal_angles_.size(); i++){
     prev_gimbal_angles_.at(i) = target_gimbal_angles_.at(i);
   }
-
+  prev_gimbal_roll_vel_ = gimbal_roll_vel;
+  
   Eigen::Vector3d target_vec = Eigen::Vector3d::Zero(3);
   double t_x = target_wrench_acc_cog_(3);
   target_vec(0) = virtual_thrust_1;
   target_vec(1) = virtual_thrust_2;
-  target_vec(2) = t_x;
+  target_vec(2) = t_x + counter_torque.sum();
   // for(int i=0; i<target_vec.size();i++){
   //   std::cout << target_vec(i) << ",";
   // }
@@ -335,6 +367,7 @@ void TwinHammerController::controlCore()
   Eigen::MatrixXd q2_mat_inv = aerial_robot_model::pseudoinverse(q2_mat);
   Eigen::VectorXd target_thrust = q2_mat_inv * target_vec;
 
+  /* recalculate thrusts to satisfy the arming force */
   Eigen::Vector3d arming_factor = target_vec;
   Eigen::MatrixXd q3_mat = Eigen::MatrixXd::Zero(3,4);
   for(int i=0; i<motor_num_; i++){
@@ -362,11 +395,15 @@ void TwinHammerController::controlCore()
   }
   Eigen::Vector3d check_target_vec;
   check_target_vec = q2_mat * check_thrust;
+  if (target_vec(2)-check_target_vec(2)>0.1){
+    ROS_WARN_STREAM("actual roll torque is " << check_target_vec(2) << "Nm");
+  }
 //   for(int i=0; i<check_target_vec.size();i++){
 //     std::cout << check_target_vec(i) << ',';
 //   }
 //   std::cout << std::endl;
 //   std::cout << "----------------------------------------------" << std::endl;
+  time_prev_ = time_now;
 }
 
 void TwinHammerController::sendCmd()

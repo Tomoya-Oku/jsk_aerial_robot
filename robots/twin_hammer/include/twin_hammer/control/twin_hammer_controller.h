@@ -27,9 +27,11 @@ namespace aerial_robot_control
 
   private:
     boost::shared_ptr<TwinHammerModel> twin_hammer_model_;
-    double gimbal_roll_delta_angle_;
-    double gimbal_pitch_delta_angle_;
+    double gimbal_roll_vel_limit_;
+    double gimbal_roll_acc_limit_;
+    double counter_torque_limit_;
     double gravity_acc_;
+    double time_prev_;
 
     bool use_polynominal_;
     bool use_gaussian_;
@@ -43,6 +45,7 @@ namespace aerial_robot_control
     std::vector<double> opt_x_;
     std::vector<double> prev_opt_x_;
 
+    ros::Publisher test_counter_torque_pub_;
     ros::Publisher flight_cmd_pub_;
     ros::Publisher gimbal_control_pub_;
     ros::Subscriber gimbal_states_sub_;
@@ -54,6 +57,7 @@ namespace aerial_robot_control
     std::vector<double> gimbal_states_angles_;
     Eigen::VectorXd target_vectoring_f_;
     Eigen::VectorXd target_wrench_acc_cog_;
+    Eigen::Vector2d prev_gimbal_roll_vel_;
 
     bool use_haptics_flag_;
     bool haptics_switch_;

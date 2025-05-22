@@ -15,14 +15,14 @@ public:
                     double fc_t_min_thre = 0,
                     double epsilon = 10);
   virtual ~TwinHammerModel() = default;
+  const Eigen::Matrix3d& getGimbal1Inertia() const {return inertia_gimbal1_total_eigen_;}
+  const Eigen::Matrix3d& getGimbal2Inertia() const {return inertia_gimbal2_total_eigen_;}
 
 private:
   ros::NodeHandle nh_;
-  // tf2_ros::TransformListener tfListener_;
-  // tf2_ros::Buffer tfBuffer_;
-  // tf2_ros::TransformBroadcaster br_;
+  Eigen::Matrix3d inertia_gimbal1_total_eigen_;
+  Eigen::Matrix3d inertia_gimbal2_total_eigen_;
 
 protected:
   void updateRobotModelImpl(const KDL::JntArray& joint_positions) override;
 };
-
