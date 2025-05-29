@@ -8,7 +8,6 @@ import tf.transformations as tf
 from scipy.spatial.transform import Rotation as R
 from std_msgs.msg import Int8
 from aerial_robot_msgs.msg import FlightNav
-from spinal.msg import DesireCoord
 from geometry_msgs.msg import PoseStamped, WrenchStamped
 
 def exponential(x, base, k_exp):
@@ -21,7 +20,6 @@ class force_feedback_from_robot():
 
   def __init__(self):
 
-    # self.real_machine = rospy.get_param("~real_machine", False)
     self.robot_name = rospy.get_param("~robot_name", "quadrotor")
     self.convert_method = rospy.get_param("~convert_method", "log") # "prop" or "exp" or "log"
     self.frame = rospy.get_param("~frame", "world") # "local" or "world"

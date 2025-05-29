@@ -4,7 +4,7 @@
   <arg name="real_machine" default="false" />
   <arg name="simulation" default="false" />
   <arg name="robot_ns" default="twin_hammer" />
-  <arg name="teleop_from_mocap" default="false" />
+  <arg name="use_mocap" default="false" />
 
   <group ns="$(arg robot_ns)">
 
@@ -19,9 +19,9 @@
 
         <!-- mocap -->
         <!-- <include file="$(find aerial_robot_base)/launch/external_module/mocap.launch" /> -->
-        <include file="$(find twin_hammer)/launch/include/mocap.launch" if="$(arg teleop_from_mocap)" />
+        <include file="$(find twin_hammer)/launch/include/mocap.launch" if="$(arg use_mocap)" />
         ########## dummy mocap node when not use device position #########
-        <node pkg="twin_hammer" type="dummy_mocap_node.py" name="dummy_mocap" output="screen" if="$(eval not arg('simulation') and arg('real_machine') and not arg ('teleop_from_mocap'))" />
+        <node pkg="twin_hammer" type="dummy_mocap_node.py" name="dummy_mocap" output="screen" if="$(eval not arg('simulation') and arg('real_machine') and not arg ('use_mocap'))" />
 
 
         <!-- joint rough calib -->

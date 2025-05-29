@@ -10,7 +10,7 @@
   <arg name="headless" default="True" />
   <arg name="optimize" default="False" />
   <arg name="dummy_weight" default="False" />
-  <arg name="teleop_mode" default="False" />
+  <arg name="use_mocap" default="False" />
   <arg name="worldtype" default="$(find aerial_robot_simulation)/gazebo_model/world/empty.world" />
   <arg name="launch_gazebo" default="True" />
   <arg name="direct_model" default="False" />
@@ -86,7 +86,7 @@
     <arg name="real_machine" value="$(arg real_machine)" />
     <arg name="simulation" value="$(arg simulation)" />
     <arg name="robot_ns" value="$(arg robot_ns)" />
-    <arg name="teleop_from_mocap" value="$(arg teleop_mode)" />
+    <arg name="use_mocap" value="$(arg use_mocap)" />
   </include >
 
   ###########  Servo Bridge  ###########

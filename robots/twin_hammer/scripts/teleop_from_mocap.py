@@ -12,7 +12,6 @@ class teleop_from_mocap():
 
   def __init__(self):
 
-    # self.real_machine = rospy.get_param("~real_machine", False)
     self.robot_name = rospy.get_param("~robot_name", "quadrotor")
     self.control_mode = rospy.get_param("~control_mode", "pos") # "pos" or "vel"
     self.pos_scale = rospy.get_param("~pos_scale", 1.1)
@@ -76,7 +75,7 @@ class teleop_from_mocap():
     target_ang_vel = [0.0,0.0,0.0]
     feedback_wrench = [0.0,0.0,0.0,0.0,0.0,0.0]
 
-    r = rospy.Rate(100)
+    r = rospy.Rate(40)
     while not rospy.is_shutdown():
 
       if self.hovering and self.device_pos!=None and self.device_init_pos!=None and self.robot_init_pos!=None:
@@ -90,12 +89,23 @@ class teleop_from_mocap():
           feedback_wrench[i] = - (self.device_pos[i] - self.device_init_pos[i]) * self.feedback_force_scale
           # feedback_wrench[i+3] = (self.device_att[i] - self.device_init_att[i]) * self.feedback_torque_scale
           feedback_wrench[i+3] = - self.device_att[i]
+        
+        """ limitation of z and att for safety """
         if self.robot_pos[2] > 1.5:
           target_pos[2] = 1.5
           target_vel[2] = 0.0
         if self.robot_pos[2] < 0.3:
           target_pos[2] = 0.3
           target_vel[2] = 0.0
+        for i in range(2):  # except yaw
+          if target_att[i] > 0.5:
+            target_att[i] = 0.5
+          if target_att[i] < -0.5:
+            target_att[i] = -0.5
+          if target_ang_vel[i] > 0.5:
+            target_ang_vel[i] = 0.5
+          if target_ang_vel[i] < -0.5:
+            target_ang_vel[i] = -0.5
 
         if self.control_mode == "pos":
           self.flight_nav.target_pos_x = target_pos[0]
@@ -110,6 +120,8 @@ class teleop_from_mocap():
           # self.flight_nav.target_pos_z = target_vel[2]
           self.flight_nav.target_pos_z = target_pos[2]
           self.flight_nav.target_omega_z = target_ang_vel[2]
+          self.desire_att_nav.roll = target_ang_vel[0]
+          self.desire_att_nav.pitch = target_ang_vel[1]
           self.haptics_wrench_msg.wrench.force.x = feedback_wrench[0]
           self.haptics_wrench_msg.wrench.force.y = feedback_wrench[1]
           self.haptics_wrench_msg.wrench.force.z = feedback_wrench[2]
@@ -119,7 +131,7 @@ class teleop_from_mocap():
 
       if self.hovering and not self.landing:
         if self.wait_flag:
-          rospy.sleep(2.0)
+          rospy.sleep(3.0)
           self.wait_flag = False
         self.nav_pub.publish(self.flight_nav)
         self.att_pub.publish(self.desire_att_nav)
