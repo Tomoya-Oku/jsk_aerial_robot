@@ -15,8 +15,8 @@ class teleop_from_mocap():
     self.robot_name = rospy.get_param("~robot_name", "quadrotor")
     self.control_mode = rospy.get_param("~control_mode", "pos") # "pos" or "vel"
     self.pos_scale = rospy.get_param("~pos_scale", 1.1)
-    self.vel_scale = rospy.get_param("~vel_scale", 0.5)
-    self.ang_vel_scale = rospy.get_param("~ang_vel_scale", 0.5)
+    self.vel_scale = rospy.get_param("~vel_scale", 0.1)
+    self.ang_vel_scale = rospy.get_param("~ang_vel_scale", 0.1)
     self.feedback_force_scale = rospy.get_param("~feedback_force_scale", 10.0)
     self.feedback_torque_scale = rospy.get_param("~feedback_torque_scale", 1.0)
 

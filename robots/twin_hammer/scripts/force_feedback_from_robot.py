@@ -21,8 +21,8 @@ class force_feedback_from_robot():
   def __init__(self):
 
     self.robot_name = rospy.get_param("~robot_name", "quadrotor")
-    self.convert_method = rospy.get_param("~convert_method", "log") # "prop" or "exp" or "log"
-    self.frame = rospy.get_param("~frame", "world") # "local" or "world"
+    self.convert_method = rospy.get_param("~convert_method", "prop") # "prop" or "exp" or "log"
+    self.frame = rospy.get_param("~frame", "local") # "local" or "world"
 
     # self.haptics_switch_pub = rospy.Publisher('/twin_hammer/haptics_switch', Int8, queue_size=1)
     self.haptics_wrench_pub = rospy.Publisher('/twin_hammer/haptics_wrench', WrenchStamped, queue_size=1)
@@ -112,6 +112,16 @@ class force_feedback_from_robot():
         
       if self.frame == "world":
         haptics_wrench = np.dot(self.Ad_R_inv_device,haptics_wrench)
+
+      for i in range(3):
+        if haptics_wrench[i] > 5:
+          haptics_wrench[i] = 5
+        if haptics_wrench[i] < -5:
+          haptics_wrench[i] = -5
+        if haptics_wrench[i+3] > 1:
+          haptics_wrench[i+3] = 1
+        if haptics_wrench[i+3] > -1:
+          haptics_wrench[i+3] = -1
 
       self.haptics_wrench_msg.wrench.force.x = haptics_wrench[0]
       self.haptics_wrench_msg.wrench.force.y = haptics_wrench[1]
