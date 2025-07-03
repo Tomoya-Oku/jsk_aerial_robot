@@ -4,7 +4,7 @@ from __future__ import print_function # for print function in python2
 import sys, select, termios, tty
 
 import rospy
-from std_msgs.msg import Empty
+from std_msgs.msg import Empty, String
 from aerial_robot_msgs.msg import FlightNav
 from std_msgs.msg import Int8
 from geometry_msgs.msg import WrenchStamped
@@ -83,6 +83,7 @@ if __name__=="__main__":
         nav_pub = rospy.Publisher(robot_ns + '/uav/nav', FlightNav, queue_size=1)
         haptics_switch_pub = rospy.Publisher(robot_ns + '/haptics_switch', Int8, queue_size=1)
         haptics_wrench_pub = rospy.Publisher(robot_ns + '/haptics_wrench', WrenchStamped, queue_size=1)
+        teleop_mode_pub = rospy.Publisher(robot_ns + '/teleop_mode', String, queue_size=1)
 
         xy_vel   = rospy.get_param("xy_vel", 0.2)
         z_vel    = rospy.get_param("z_vel", 0.2)
@@ -101,6 +102,7 @@ if __name__=="__main__":
                         nav_msg.target = FlightNav.COG
                         haptics_switch_msg = Int8()
                         haptics_wrench_msg = WrenchStamped()
+                        teleop_mode_msg = String()
 
                         key = getKey()
 
@@ -173,6 +175,15 @@ if __name__=="__main__":
                                 haptics_switch_msg.data = 0
                                 haptics_switch_pub.publish(haptics_switch_msg)
                                 msg = "haptics force off"
+
+                        if key == 'b':
+                                teleop_mode_msg.data = 'pos'
+                                teleop_mode_pub.publish(teleop_mode_msg)
+                                msg = "POS mode"
+                        if key == 'v':
+                                teleop_mode_msg.data = 'vel'
+                                teleop_mode_pub.publish(teleop_mode_msg)
+                                msg = "VEL mode"
 
                         if key == '0':
                                 input_num = 0.0

@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <launch>
-  <arg name="robot_name" default="beetle1" />
+  <arg name="robot_name" default="gimbalrotor" />
   <arg name="control_mode" default="pos" />
   <arg name="mocap_debug_mode" default="false" />
 

@@ -41,8 +41,8 @@ class force_feedback_from_robot():
       [np.zeros((3,3)), np.identity(3)]
     ])
     self.k_p = 1.0
-    self.exp_base = 1.3
-    self.log_base = 1.3
+    self.exp_base = 1.45
+    self.log_base = 1.45
     self.k_exp = 1.0
     self.k_log = 1.1
     # belows are dependent valuables
