@@ -9,7 +9,7 @@
     <param name="control_mode" value="$(arg control_mode)" />
   </node>
 
-  <!-- <node name="force_feedback_from_robot" pkg="twin_hammer" type="force_feedback_from_robot.py" output="screen" /> -->
+  <node name="force_feedback_from_robot" pkg="twin_hammer" type="force_feedback_from_robot.py" output="screen" />
 
   <include file="$(find twin_hammer)/launch/include/mocap.launch" if="$(arg mocap_debug_mode)" /> 
 

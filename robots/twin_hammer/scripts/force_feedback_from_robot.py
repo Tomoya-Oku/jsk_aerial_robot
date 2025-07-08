@@ -20,18 +20,19 @@ class force_feedback_from_robot():
 
   def __init__(self):
 
-    self.robot_name = rospy.get_param("~robot_name", "quadrotor")
-    self.convert_method = rospy.get_param("~convert_method", "prop") # "prop" or "exp" or "log"
+    self.robot_name = rospy.get_param("~robot_name", "gimbalrotor")
+    self.convert_method = rospy.get_param("~convert_method", "log") # "prop" or "exp" or "log"
     self.frame = rospy.get_param("~frame", "local") # "local" or "world"
 
     # self.haptics_switch_pub = rospy.Publisher('/twin_hammer/haptics_switch', Int8, queue_size=1)
-    self.haptics_wrench_pub = rospy.Publisher('/twin_hammer/haptics_wrench', WrenchStamped, queue_size=1)
+    self.haptics_wrench_pub = rospy.Publisher('/twin_hammer/haptics_wrench_test', WrenchStamped, queue_size=1)
     self.robot_mocap_sub = rospy.Subscriber('/'+self.robot_name+'/mocap/pose', PoseStamped, self.robot_mocap_cb)
     self.device_mocap_sub = rospy.Subscriber('/twin_hammer/mocap/pose', PoseStamped, self.device_mocap_cb)
     self.robot_wrench_sub = rospy.Subscriber('/cfs/data', WrenchStamped, self.robot_wrench_cb)
 
     self.haptics_wrench_msg = WrenchStamped()
     self.robot_wrench = []
+    self.filterd_robot_wrench_local = [0.0,0.0,0.0,0.0,0.0,0.0]
     self.Ad_R_robot = np.block([
       [np.identity(3), np.zeros((3,3))],
       [np.zeros((3,3)), np.identity(3)]
@@ -43,8 +44,8 @@ class force_feedback_from_robot():
     self.k_p = 1.0
     self.exp_base = 1.45
     self.log_base = 1.45
-    self.k_exp = 1.0
-    self.k_log = 1.1
+    self.k_exp = 0.4
+    self.k_log = 1.3
     # belows are dependent valuables
     self.range_log = math.e
     self.a_log = self.k_log / (math.e * math.log(self.log_base))
@@ -76,9 +77,12 @@ class force_feedback_from_robot():
     torque_y = msg.wrench.torque.x
     torque_z = msg.wrench.torque.y
     wrench_local = [force_x, force_y, force_z, torque_x, torque_y, torque_z]
-    wrench_world = np.dot(self.Ad_R_robot,wrench_local)
+    delay_param = 0.05
+    for i in range (len(wrench_local)):
+      self.filterd_robot_wrench_local[i] = (1-delay_param) * self.filterd_robot_wrench_local[i] + delay_param * wrench_local[i]
+    wrench_world = np.dot(self.Ad_R_robot,self.filterd_robot_wrench_local)
     if self.frame == "local":
-      self.robot_wrench = wrench_local
+      self.robot_wrench = self.filterd_robot_wrench_local
     elif self.frame == "world":
       self.robot_wrench = wrench_world
 
@@ -113,15 +117,17 @@ class force_feedback_from_robot():
       if self.frame == "world":
         haptics_wrench = np.dot(self.Ad_R_inv_device,haptics_wrench)
 
+      force_limit = 10
+      torque_limit = 1.5
       for i in range(3):
-        if haptics_wrench[i] > 5:
-          haptics_wrench[i] = 5
-        if haptics_wrench[i] < -5:
-          haptics_wrench[i] = -5
-        if haptics_wrench[i+3] > 1:
-          haptics_wrench[i+3] = 1
-        if haptics_wrench[i+3] > -1:
-          haptics_wrench[i+3] = -1
+        if haptics_wrench[i] > force_limit:
+          haptics_wrench[i] = force_limit
+        if haptics_wrench[i] < -force_limit:
+          haptics_wrench[i] = -force_limit
+        if haptics_wrench[i+3] > torque_limit:
+          haptics_wrench[i+3] = torque_limit
+        if haptics_wrench[i+3] < -torque_limit:
+          haptics_wrench[i+3] = -torque_limit
 
       self.haptics_wrench_msg.wrench.force.x = haptics_wrench[0]
       self.haptics_wrench_msg.wrench.force.y = haptics_wrench[1]

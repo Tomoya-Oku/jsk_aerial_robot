@@ -36,15 +36,15 @@ def find_range_k_log(base, initial_guess=(1.0,1.0)):
   range_sol, k_log_sol = fsolve(log_eqs, initial_guess, args=(base))
   return range_sol, k_log_sol
 
-exp_base = 1.2
-log_base = 1.2
-k_exp = 1.0
-k_log = 0.5
+exp_base = 1.45
+log_base = 1.45
+k_exp = 0.2
+k_log = 1.5
 a_log = k_log / (math.e*math.log(log_base))
 range_log = math.e
 y_exp_list = []
 y_log_list = []
-x = np.linspace(-10, 10, 1000)
+x = np.linspace(-20, 20, 1000)
 # range_exp, k_exp = find_range_k_exp(exp_base)
 # print("range_exp = ",range_exp)
 # print("k_exp = ", k_exp)

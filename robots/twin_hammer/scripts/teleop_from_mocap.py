@@ -115,13 +115,13 @@ class teleop_from_mocap():
           # feedback_wrench[i+3] = - self.device_att[i]
         
         """ limitation of z and att for safety """
-        if self.robot_pos[2] > 1.0:
-          target_pos[2] = 1.0
+        if self.robot_pos[2] > 1.2:
+          target_pos[2] = 1.2
           target_vel[2] = 0.0
         if self.robot_pos[2] < 0.3:
           target_pos[2] = 0.3
           target_vel[2] = 0.0
-        limit_angle = 0.2
+        limit_angle = 0.35
         for i in range(2):  # except yaw
           if target_att[i] > limit_angle:
             target_att[i] = limit_angle
