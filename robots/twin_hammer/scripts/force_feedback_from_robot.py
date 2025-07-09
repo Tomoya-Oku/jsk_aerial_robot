@@ -25,7 +25,7 @@ class force_feedback_from_robot():
     self.frame = rospy.get_param("~frame", "local") # "local" or "world"
 
     # self.haptics_switch_pub = rospy.Publisher('/twin_hammer/haptics_switch', Int8, queue_size=1)
-    self.haptics_wrench_pub = rospy.Publisher('/twin_hammer/haptics_wrench_test', WrenchStamped, queue_size=1)
+    self.haptics_wrench_pub = rospy.Publisher('/twin_hammer/haptics_wrench', WrenchStamped, queue_size=1)
     self.robot_mocap_sub = rospy.Subscriber('/'+self.robot_name+'/mocap/pose', PoseStamped, self.robot_mocap_cb)
     self.device_mocap_sub = rospy.Subscriber('/twin_hammer/mocap/pose', PoseStamped, self.device_mocap_cb)
     self.robot_wrench_sub = rospy.Subscriber('/cfs/data', WrenchStamped, self.robot_wrench_cb)
@@ -45,7 +45,7 @@ class force_feedback_from_robot():
     self.exp_base = 1.45
     self.log_base = 1.45
     self.k_exp = 0.4
-    self.k_log = 1.3
+    self.k_log = 1.0
     # belows are dependent valuables
     self.range_log = math.e
     self.a_log = self.k_log / (math.e * math.log(self.log_base))

@@ -16,7 +16,7 @@ class teleop_from_mocap():
     self.robot_name = rospy.get_param("~robot_name", "quadrotor")
     self.control_mode = rospy.get_param("~control_mode", "pos") # "pos" or "vel"
     self.pos_scale = rospy.get_param("~pos_scale", 1.0)
-    self.vel_scale = rospy.get_param("~vel_scale", 0.2)
+    self.vel_scale = rospy.get_param("~vel_scale", 0.3)
     self.ang_vel_scale = rospy.get_param("~ang_vel_scale", 0.08)
     self.feedback_force_scale = rospy.get_param("~feedback_force_scale", 10.0)
     self.feedback_torque_scale = rospy.get_param("~feedback_torque_scale", 1.0)
@@ -51,7 +51,8 @@ class teleop_from_mocap():
     self.device_init_att = None
     self.robot_init_pos = None
     self.robot_init_att = None
-    self.initialize_flag = False
+    self.device_initialize_flag = False
+    self.robot_initialize_flag = False
     self.wait_flag = True
 
   def flight_state_cb(self,msg):
@@ -64,25 +65,19 @@ class teleop_from_mocap():
     self.device_pos = [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z]
     device_orientation_q = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
     self.device_att = tf.euler_from_quaternion(device_orientation_q)
-    if self.device_init_pos == None and self.hovering:
+    if self.device_initialize_flag == False:
       self.device_init_pos = self.device_pos
       self.device_init_att = self.device_att
-    if self.initialize_flag == False:
-      self.device_init_pos = self.device_pos
-      self.device_init_att = self.device_att
-      self.initialize_flag = True
+      self.device_initialize_flag = True
 
   def robot_pos_cb(self,msg):
     self.robot_pos = [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z]
     robot_orientation_q = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
     self.robot_att = tf.euler_from_quaternion(robot_orientation_q)
-    if self.robot_init_pos == None and self.hovering:
+    if self.robot_initialize_flag == False:
       self.robot_init_pos = self.robot_pos
       self.robot_init_att = self.robot_att
-    if self.initialize_flag == False:
-      self.robot_init_pos = self.robot_pos
-      self.robot_init_att = self.robot_att
-      self.initialize_flag = True
+      self.robot_initialize_flag = True
 
   def teleop_mode_cb(self,msg):
     self.initialize_flag = False
@@ -102,7 +97,12 @@ class teleop_from_mocap():
     r = rospy.Rate(40)
     while not rospy.is_shutdown():
 
-      if self.hovering and self.device_pos!=None and self.device_init_pos!=None and self.robot_init_pos!=None:
+      if self.device_init_pos == None or not self.hovering:
+        self.device_initialize_flag == False
+      if self.robot_init_pos == None or not self.hovering:
+        self.robot_initialize_flag == False
+
+      if self.device_initialize_flag and self.robot_initialize_flag:
         for i in range(3):
           target_pos[i] = (self.device_pos[i] - self.device_init_pos[i] + self.robot_init_pos[i]) * self.pos_scale
           target_att[i] = self.device_att[i]
