@@ -44,7 +44,8 @@ a_log = k_log / (math.e*math.log(log_base))
 range_log = math.e
 y_exp_list = []
 y_log_list = []
-x = np.linspace(-20, 20, 1000)
+y_log_v2_list = []
+x = np.linspace(-5, 5, 1000)
 # range_exp, k_exp = find_range_k_exp(exp_base)
 # print("range_exp = ",range_exp)
 # print("k_exp = ", k_exp)
@@ -71,6 +72,12 @@ for i in x:
   else:
     y_log = i * a_log
   y_log_list.append(y_log)
+for i in x:
+  if i >= 0:
+    y_log_v2 = logarithm(i+1,log_base,k_log)
+  if i < 0:
+    y_log_v2 = -logarithm(-(i-1),log_base,k_log)
+  y_log_v2_list.append(y_log_v2)
 
 plt.figure(figsize=(8, 6))
 plt.plot(x, y_exp_list, label="exp", color='orange')
@@ -88,6 +95,17 @@ plt.plot(x, y_log_list, label="log", color='orange')
 plt.axvline(-range_log, color='gray', linestyle='--', alpha=0.7)
 plt.axvline(range_log, color='gray', linestyle='--', alpha=0.7)
 plt.axhline(0, color='black', linewidth=0.5, alpha=0.7)
+plt.xlabel("x")
+plt.ylabel("y")
+plt.legend()
+plt.grid()
+plt.show()
+
+plt.figure(figsize=(8, 6))
+plt.plot(x, y_log_v2_list, label="log_v2", color='orange')
+plt.axvline(-range_log, color='gray', linestyle='--', alpha=0.7)
+plt.axvline(range_log, color='gray', linestyle='--', alpha=0.7)
+# plt.axhline(0, color='black', linewidth=0.5, alpha=0.7)
 plt.xlabel("x")
 plt.ylabel("y")
 plt.legend()
