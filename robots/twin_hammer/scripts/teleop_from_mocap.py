@@ -9,6 +9,12 @@ from spinal.msg import DesireCoord
 from geometry_msgs.msg import PoseStamped, WrenchStamped
 from geometry_msgs.msg import Vector3Stamped
 
+def exponential(x, base, k_exp):
+  return pow(x,base) * k_exp
+
+def logarithm(x, base, k_log):
+  return math.log(x,base) * k_log
+
 class teleop_from_mocap():
 
   def __init__(self):
@@ -34,7 +40,7 @@ class teleop_from_mocap():
     self.flight_nav.pos_xy_nav_mode = FlightNav.POS_VEL_MODE
     self.flight_nav.yaw_nav_mode = FlightNav.POS_VEL_MODE
     self.flight_nav.pos_z_nav_mode = FlightNav.POS_VEL_MODE
-    # for new FlightNav
+    """ for new FlightNav """
     self.flight_nav.roll_nav_mode = FlightNav.POS_VEL_MODE
     self.flight_nav.pitch_nav_mode = FlightNav.POS_VEL_MODE
     self.desire_att_nav = DesireCoord()
@@ -53,7 +59,7 @@ class teleop_from_mocap():
     self.robot_init_att = None
     self.device_initialize_flag = False
     self.robot_initialize_flag = False
-    self.wait_flag = True
+    self.wait_flag = False
 
   def flight_state_cb(self,msg):
     if msg.data == 5:
@@ -81,7 +87,7 @@ class teleop_from_mocap():
 
   def teleop_mode_cb(self,msg):
     self.initialize_flag = False
-    self.wait_flag = True
+    self.wait_flag = False
     if msg.data == "pos":
       self.control_mode = "pos"
     if msg.data == "vel":
@@ -113,6 +119,14 @@ class teleop_from_mocap():
           feedback_wrench[i] = - (self.device_pos[i] - self.device_init_pos[i]) * self.feedback_force_scale
           feedback_wrench[i+3] = (self.device_att[i] - self.device_init_att[i]) * self.feedback_torque_scale
           # feedback_wrench[i+3] = - self.device_att[i]
+
+        k = 1.5
+        log_base = 1.45
+        for i in range(6):
+          if feedback_wrench[i] >= 0
+            feedback_wrench[i] = logarithm(feedback_wrench[i]+1,log_base,k)
+          if feedback_wrench[i] < 0
+            feedback_wrench[i] = -logarithm(-(feedback_wrench[i]-1),log_base,k)
         
         """ limitation of z and att for safety """
         if self.robot_pos[2] > 1.2:
@@ -137,13 +151,14 @@ class teleop_from_mocap():
           self.flight_nav.target_pos_y = target_pos[1]
           self.flight_nav.target_pos_z = target_pos[2]
           self.flight_nav.target_yaw = target_att[2]
-          # for new FlightNav
+          """ for new FlightNav """
           self.flight_nav.target_roll = target_att[0]
           self.flight_nav.target_pitch = target_att[1]
           self.desire_att_nav.roll = target_att[0]
           self.desire_att_nav.pitch = target_att[1]
           self.target_att_nav.vector.x = target_att[0]
           self.target_att_nav.vector.y = target_att[1]
+          
         if self.control_mode == "vel":
           self.flight_nav.target_pos_x = target_vel[0]
           self.flight_nav.target_pos_y = target_vel[1]
@@ -151,7 +166,7 @@ class teleop_from_mocap():
           self.flight_nav.target_pos_z = target_pos[2]
           self.flight_nav.target_yaw = target_ang_vel[2]
           # self.flight_nav.target_yaw = target_att[2]
-          # for new FlightNav
+          """ for new FlightNav """
           self.flight_nav.target_roll = target_att[0]
           self.flight_nav.target_pitch = target_att[1]
           self.desire_att_nav.roll = target_att[0]
@@ -167,9 +182,9 @@ class teleop_from_mocap():
           self.haptics_wrench_msg.wrench.torque.z = feedback_wrench[5]
 
       if self.hovering and not self.landing:
-        if self.wait_flag:
+        if not self.wait_flag:
           rospy.sleep(3.0)
-          self.wait_flag = False
+          self.wait_flag = True
         self.nav_pub.publish(self.flight_nav)
         # self.att_pub.publish(self.desire_att_nav)
         self.att_pub.publish(self.target_att_nav)
