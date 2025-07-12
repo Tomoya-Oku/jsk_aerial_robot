@@ -43,28 +43,36 @@ class teleop_haptics_integration():
     # Messages
     self.flight_nav = FlightNav()
     self.flight_nav.target = FlightNav.COG
+    self.flight_nav.pos_xy_nav_mode = FlightNav.POS_VEL_MODE
+    self.flight_nav.pos_z_nav_mode = FlightNav.POS_VEL_MODE
+    self.flight_nav.yaw_nav_mode = FlightNav.POS_VEL_MODE
+    self.flight_nav.roll_nav_mode = FlightNav.POS_VEL_MODE
+    self.flight_nav.pitch_nav_mode = FlightNav.POS_VEL_MODE
     self.target_att_nav = Vector3Stamped()
     self.haptics_wrench_msg = WrenchStamped()
 
     # States
     self.hovering = False
     self.landing = False
-    self.device_pos = None
-    self.device_att = None
-    self.device_init_pos = None
-    self.device_init_att = None
-    self.robot_pos = None
-    self.robot_att = None
-    self.robot_init_pos = None
-    self.robot_init_att = None
-    self.robot_vel_mode_fix_pos = None
-    self.robot_vel_mode_fix_att = None
+    self.device_pos = [None]*3
+    self.device_att = [None]*3
+    self.robot_pos = [None]*3
+    self.robot_att = [None]*3
+    self.device_init_pos = [None]*3
+    self.device_init_att = [None]*3
     self.device_initialize_flag = False
+    self.robot_init_pos = [None]*3
+    self.robot_init_att = [None]*3
     self.robot_initialize_flag = False
+    self.robot_vel_mode_fix_pos = [None]*3
+    self.robot_vel_mode_fix_att = [None]*3
+    self.device_att_unwrapped = [0.0]*3
+    self.device_att_prev = [0.0]*3
+
     self.wait_flag = False
     self.pos_scale = 1.0
-    self.vel_scale = 0.3
-    self.ang_vel_scale = 0.08
+    self.vel_scale = 0.7
+    self.ang_vel_scale = 0.2
     self.feedback_force_scale = 10.0
     self.feedback_torque_scale = 1.0
     self.robot_wrench = [0.0]*6
@@ -90,6 +98,11 @@ class teleop_haptics_integration():
     q = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
     rot = R.from_quat(q)
     self.device_att = rot.as_euler('xyz')
+    for i in range(3):
+      current_angle = self.device_att[i]
+      delta_angle = (current_angle - self.device_att_prev[i] + np.pi) % (2 * np.pi) - np.pi
+      self.device_att_unwrapped[i] += delta_angle
+      self.device_att_prev[i] = current_angle
     R_mat = rot.as_matrix()
     self.Ad_R_inv_device = np.block([
       [R_mat.T, np.zeros((3,3))],
@@ -158,19 +171,31 @@ class teleop_haptics_integration():
       if self.device_initialize_flag and self.robot_initialize_flag:
 
         """ calc target pos and vel """
+        vel_mode_pos_thre = [0.1,0.1,0.1]
+        vel_mode_att_thre = [0.05,0.05,0.05]
         for i in range(3):
           device_pos_diff = self.device_pos[i] - self.device_init_pos[i]
-          device_att_diff = self.device_att[i] - self.device_init_att[i]
+          device_att_diff = self.device_att_unwrapped[i] - self.device_init_att[i]
           target_pos[i] = (self.robot_init_pos[i] + device_pos_diff) * self.pos_scale
           target_att[i] = self.device_att[i]
           target_vel[i] = self.robot_pos[i] + device_pos_diff * self.vel_scale
           target_ang_vel[i] = self.robot_att[i] + device_att_diff * self.ang_vel_scale
-          # target_vel[i] = device_pos_diff * self.vel_scale
-          # target_ang_vel[i] = device_att_diff * self.ang_vel_scale
+          """ position fix for vel mode """
+          if abs(target_vel[i]-self.robot_pos[i]) < vel_mode_pos_thre[i]:
+            if self.robot_vel_mode_fix_pos[i] == None:
+              self.robot_vel_mode_fix_pos[i] = self.robot_pos[i]
+            target_vel[i] = self.robot_vel_mode_fix_pos[i]
+          else:
+            self.robot_vel_mode_fix_pos[i] = None
+          if abs(target_ang_vel[i]-self.robot_att[i]) < vel_mode_att_thre[i]:
+            if self.robot_vel_mode_fix_att[i] == None:
+              self.robot_vel_mode_fix_att[i] = self.robot_att[i]
+            target_ang_vel[i] = self.robot_vel_mode_fix_att[i]
+          else:
+            self.robot_vel_mode_fix_att[i] = None
           if self.control_mode == "vel":
             feedback_wrench[i] = - device_pos_diff * self.feedback_force_scale
             feedback_wrench[i+3] = - device_att_diff * self.feedback_torque_scale
-        print("yaw_device_diff = ", self.device_att[2] - self.device_init_att[2])
 
         """ convert feedback wrench with log """
         k_force = 1.5
@@ -236,6 +261,9 @@ class teleop_haptics_integration():
         if self.frame == "world":
           haptics_wrench = np.dot(self.Ad_R_inv_device,haptics_wrench)
 
+        for i in range(6):
+          haptics_wrench[i] += feedback_wrench[i]
+
         """ limitation of feedback wrench for safety """
         force_limit = 10
         torque_limit = 1.5
@@ -244,14 +272,9 @@ class teleop_haptics_integration():
           haptics_wrench[i+3] = max(min(haptics_wrench[i+3], torque_limit), -torque_limit)
 
         if self.control_mode == "pos":
-          self.flight_nav.pos_xy_nav_mode = FlightNav.POS_VEL_MODE
-          self.flight_nav.pos_z_nav_mode = FlightNav.POS_VEL_MODE
-          self.flight_nav.yaw_nav_mode = FlightNav.POS_VEL_MODE
-          self.flight_nav.roll_nav_mode = FlightNav.POS_VEL_MODE
-          self.flight_nav.pitch_nav_mode = FlightNav.POS_VEL_MODE
-          # self.flight_nav.target_pos_x = target_pos[0]
-          # self.flight_nav.target_pos_y = target_pos[1]
-          # self.flight_nav.target_pos_z = target_pos[2]
+          self.flight_nav.target_pos_x = target_pos[0]
+          self.flight_nav.target_pos_y = target_pos[1]
+          self.flight_nav.target_pos_z = target_pos[2]
           self.flight_nav.target_yaw = target_att[2]
           self.flight_nav.target_roll = target_att[0]
           self.flight_nav.target_pitch = target_att[1]
@@ -259,29 +282,24 @@ class teleop_haptics_integration():
           self.target_att_nav.vector.y = target_att[1]
 
         if self.control_mode == "vel":
-          self.flight_nav.pos_xy_nav_mode = FlightNav.VEL_MODE
-          # self.flight_nav.pos_z_nav_mode = FlightNav.POS_VEL_MODE
-          # self.flight_nav.yaw_nav_mode = FlightNav.VEL_MODE
-          # self.flight_nav.roll_nav_mode = FlightNav.POS_VEL_MODE
-          # self.flight_nav.pitch_nav_mode = FlightNav.POS_VEL_MODE
-          # # self.flight_nav.target_pos_x = target_vel[0]
-          # # self.flight_nav.target_pos_y = target_vel[1]
-          self.flight_nav.target_vel_x = target_vel[0]
-          self.flight_nav.target_vel_y = target_vel[1]
-          # self.flight_nav.target_pos_z = target_pos[2] # not use vel for safety
-          # # self.flight_nav.target_yaw = target_ang_vel[2]
+          self.flight_nav.target_pos_x = target_vel[0]
+          self.flight_nav.target_pos_y = target_vel[1]
+          # self.flight_nav.target_vel_x = target_vel[0]
+          # self.flight_nav.target_vel_y = target_vel[1]
+          self.flight_nav.target_pos_z = target_pos[2] # not use vel for safety
+          self.flight_nav.target_yaw = target_ang_vel[2]
           # self.flight_nav.target_omega_z = target_ang_vel[2]
-          # self.flight_nav.target_roll = target_att[0] # not use vel for safety
-          # self.flight_nav.target_pitch = target_att[1] # not use vel for safety
-          # self.target_att_nav.vector.x = target_att[0] # not use vel for safety
-          # self.target_att_nav.vector.y = target_att[1] # not use vel for safety
+          self.flight_nav.target_roll = target_att[0] # not use vel for safety
+          self.flight_nav.target_pitch = target_att[1] # not use vel for safety
+          self.target_att_nav.vector.x = target_att[0] # not use vel for safety
+          self.target_att_nav.vector.y = target_att[1] # not use vel for safety
 
-        self.haptics_wrench_msg.wrench.force.x = feedback_wrench[0] + haptics_wrench[0]
-        self.haptics_wrench_msg.wrench.force.y = feedback_wrench[1] + haptics_wrench[1]
-        self.haptics_wrench_msg.wrench.force.z = feedback_wrench[2] + haptics_wrench[2]
-        self.haptics_wrench_msg.wrench.torque.x = feedback_wrench[3] + haptics_wrench[3]
-        self.haptics_wrench_msg.wrench.torque.y = feedback_wrench[4] + haptics_wrench[4]
-        self.haptics_wrench_msg.wrench.torque.z = feedback_wrench[5] + haptics_wrench[5]
+        self.haptics_wrench_msg.wrench.force.x = haptics_wrench[0]
+        self.haptics_wrench_msg.wrench.force.y = haptics_wrench[1]
+        self.haptics_wrench_msg.wrench.force.z = haptics_wrench[2]
+        self.haptics_wrench_msg.wrench.torque.x = haptics_wrench[3]
+        self.haptics_wrench_msg.wrench.torque.y = haptics_wrench[4]
+        self.haptics_wrench_msg.wrench.torque.z = haptics_wrench[5]
 
       if self.hovering and not self.landing:
         if not self.wait_flag:
