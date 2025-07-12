@@ -272,14 +272,9 @@ class teleop_haptics_integration():
           haptics_wrench[i+3] = max(min(haptics_wrench[i+3], torque_limit), -torque_limit)
 
         if self.control_mode == "pos":
-          self.flight_nav.pos_xy_nav_mode = FlightNav.POS_VEL_MODE
-          self.flight_nav.pos_z_nav_mode = FlightNav.POS_VEL_MODE
-          self.flight_nav.yaw_nav_mode = FlightNav.POS_VEL_MODE
-          self.flight_nav.roll_nav_mode = FlightNav.POS_VEL_MODE
-          self.flight_nav.pitch_nav_mode = FlightNav.POS_VEL_MODE
-          # self.flight_nav.target_pos_x = target_pos[0]
-          # self.flight_nav.target_pos_y = target_pos[1]
-          # self.flight_nav.target_pos_z = target_pos[2]
+          self.flight_nav.target_pos_x = target_pos[0]
+          self.flight_nav.target_pos_y = target_pos[1]
+          self.flight_nav.target_pos_z = target_pos[2]
           self.flight_nav.target_yaw = target_att[2]
           self.flight_nav.target_roll = target_att[0]
           self.flight_nav.target_pitch = target_att[1]
