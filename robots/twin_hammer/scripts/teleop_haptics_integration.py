@@ -71,8 +71,8 @@ class teleop_haptics_integration():
 
     self.wait_flag = False
     self.pos_scale = 1.0
-    self.vel_scale = 0.7
-    self.ang_vel_scale = 0.2
+    self.vel_scale = 0.3
+    self.ang_vel_scale = 0.1
     self.feedback_force_scale = 10.0
     self.feedback_torque_scale = 1.0
     self.robot_wrench = [0.0]*6
@@ -175,7 +175,8 @@ class teleop_haptics_integration():
         vel_mode_att_thre = [0.05,0.05,0.05]
         for i in range(3):
           device_pos_diff = self.device_pos[i] - self.device_init_pos[i]
-          device_att_diff = self.device_att_unwrapped[i] - self.device_init_att[i]
+          # device_att_diff = self.device_att_unwrapped[i] - self.device_init_att[i]
+          device_att_diff = self.device_att[i] - self.device_init_att[i]
           target_pos[i] = (self.robot_init_pos[i] + device_pos_diff) * self.pos_scale
           target_att[i] = self.device_att[i]
           target_vel[i] = self.robot_pos[i] + device_pos_diff * self.vel_scale
@@ -206,18 +207,6 @@ class teleop_haptics_integration():
             feedback_wrench[i] = logarithm(feedback_wrench[i]+1, log_base, k_force)
           else:
             feedback_wrench[i] = -logarithm(-(feedback_wrench[i]-1), log_base, k_torque)
-
-        """ limitation of z and att for safety """
-        if self.robot_pos[2] > 1.2:
-          target_pos[2] = 1.2
-          target_vel[2] = 0.0
-        if self.robot_pos[2] < 0.3:
-          target_pos[2] = 0.3
-          target_vel[2] = 0.0
-        limit_angle = 0.35
-        for i in range(2):
-          target_att[i] = max(min(target_att[i], limit_angle), -limit_angle)
-          target_ang_vel[i] = max(min(target_ang_vel[i], limit_angle), -limit_angle)
 
         """ calc feedback wrench from force sensor """
         haptics_wrench = [0.0]*6
@@ -271,6 +260,35 @@ class teleop_haptics_integration():
           haptics_wrench[i] = max(min(haptics_wrench[i], force_limit), -force_limit)
           haptics_wrench[i+3] = max(min(haptics_wrench[i+3], torque_limit), -torque_limit)
 
+        """ limitation of target_pos and att in 0066 """
+        """ x """
+        if self.robot_pos[0] > 2.0:
+          target_pos[0] = 2.0
+          target_vel[0] = 2.0
+        if self.robot_pos[0] < -1.3:
+          target_pos[0] = -1.3
+          target_vel[0] = -1.3
+        """ y """
+        if self.robot_pos[1] > 1.6:
+          target_pos[1] = 1.6
+          target_vel[1] = 1.6
+        if self.robot_pos[1] < -1.6:
+          target_pos[1] = -1.6
+          target_vel[1] = -1.6
+        """ z """
+        if self.robot_pos[2] > 1.2:
+          target_pos[2] = 1.2
+          target_vel[2] = 1.2
+        if self.robot_pos[2] < 0.3:
+          target_pos[2] = 0.3
+          target_vel[2] = 0.3
+        """ roll and pitch """
+        limit_angle = 0.35
+        for i in range(2):
+          target_att[i] = max(min(target_att[i], limit_angle), -limit_angle)
+          target_ang_vel[i] = max(min(target_ang_vel[i], limit_angle), -limit_angle)
+
+
         if self.control_mode == "pos":
           self.flight_nav.target_pos_x = target_pos[0]
           self.flight_nav.target_pos_y = target_pos[1]
@@ -287,7 +305,7 @@ class teleop_haptics_integration():
           # self.flight_nav.target_vel_x = target_vel[0]
           # self.flight_nav.target_vel_y = target_vel[1]
           self.flight_nav.target_pos_z = target_pos[2] # not use vel for safety
-          self.flight_nav.target_yaw = target_ang_vel[2]
+          self.flight_nav.target_yaw = target_att[2]
           # self.flight_nav.target_omega_z = target_ang_vel[2]
           self.flight_nav.target_roll = target_att[0] # not use vel for safety
           self.flight_nav.target_pitch = target_att[1] # not use vel for safety
