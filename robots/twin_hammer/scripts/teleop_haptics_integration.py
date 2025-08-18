@@ -39,6 +39,7 @@ class teleop_haptics_integration():
     self.robot_pos_sub = rospy.Subscriber('/'+self.robot_name+'/mocap/pose', PoseStamped, self.robot_pos_cb)
     self.teleop_mode_sub = rospy.Subscriber('/twin_hammer/teleop_mode', String, self.teleop_mode_cb)
     self.robot_wrench_sub = rospy.Subscriber('/cfs/data', WrenchStamped, self.robot_wrench_cb)
+    self.button_sub = rospy.Subscriber('/twin_hammer/button', UInt8, self.button_cb)
 
     # Messages
     self.flight_nav = FlightNav()
@@ -86,6 +87,8 @@ class teleop_haptics_integration():
     self.k_exp = 0.4
     self.k_log = 1.0
     self.k_att_diff = 1.0
+
+    self.buttonPressed = False
 
   def flight_state_cb(self, msg):
     if msg.data == 5:
@@ -154,6 +157,15 @@ class teleop_haptics_integration():
     else:
       self.robot_wrench = wrench_world
 
+  def button_cb(self, msg):
+    rospy.logdebug("BUTTON CALLBACK CALLED")
+    if msg.data == 0:
+      self.buttonPressed = False
+      #print("BUTTON RELEASED")
+    elif msg.data == 1:
+      self.buttonPressed = True
+      #print("BUTTON PRESSED")
+
   def main(self):
     r = rospy.Rate(40)
     while not rospy.is_shutdown():
@@ -207,6 +219,9 @@ class teleop_haptics_integration():
             feedback_wrench[i] = logarithm(feedback_wrench[i]+1, log_base, k_force)
           else:
             feedback_wrench[i] = -logarithm(-(feedback_wrench[i]-1), log_base, k_torque)
+
+        # feedback_wrench: velocy mode の位置のズレ
+        # haptics_wrench: ロボットの力センサから
 
         """ calc feedback wrench from force sensor """
         haptics_wrench = [0.0]*6
@@ -317,15 +332,18 @@ class teleop_haptics_integration():
         self.haptics_wrench_msg.wrench.force.z = haptics_wrench[2]
         self.haptics_wrench_msg.wrench.torque.x = haptics_wrench[3]
         self.haptics_wrench_msg.wrench.torque.y = haptics_wrench[4]
-        self.haptics_wrench_msg.wrench.torque.z = haptics_wrench[5]
+        self.haptics_wrench_msg.wrench.torque.z = haptics_wrench[5]        
 
       if self.hovering and not self.landing:
         if not self.wait_flag:
           rospy.sleep(3.0)
           self.wait_flag = True
-        self.nav_pub.publish(self.flight_nav)
-        self.att_pub.publish(self.target_att_nav)
-        self.feedback_pub.publish(self.haptics_wrench_msg)
+
+        if self.buttonPressed:
+          print("BUTTON PRESSED -> STARTING TELE-OPERATION")
+          self.nav_pub.publish(self.flight_nav)
+          self.att_pub.publish(self.target_att_nav)
+          self.feedback_pub.publish(self.haptics_wrench_msg) 
 
       r.sleep()
 
