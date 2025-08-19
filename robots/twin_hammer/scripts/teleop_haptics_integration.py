@@ -341,6 +341,12 @@ class teleop_haptics_integration():
 
         if self.buttonPressed:
           print("BUTTON PRESSED -> STARTING TELE-OPERATION")
+
+          if not self.robot_initialize_flag:
+            self.robot_init_pos = self.robot_pos
+            self.robot_init_att = self.robot_att
+            self.robot_initialize_flag = True
+
           self.nav_pub.publish(self.flight_nav)
           self.att_pub.publish(self.target_att_nav)
           self.feedback_pub.publish(self.haptics_wrench_msg) 
