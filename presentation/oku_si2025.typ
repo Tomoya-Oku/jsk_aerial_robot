@@ -10,9 +10,9 @@
   authors-en: [◯ Tomoya OKU (The University of Tokyo)，Kotaro KANEKO (The University of Tokyo)，\ Moju ZHAO (The University of Tokyo)],
   abstract: [#lorem(80)],
   // フォント名 Font family
-  font-heading: "Noto Sans CJK JP",  // サンセリフ体，ゴシック体などの指定を推奨
-  font-main: "Noto Serif CJK JP",  // セリフ体，明朝体などの指定を推奨
-  font-latin: "New Computer Modern",
+  font-heading: "IPAGothic",  // サンセリフ体，ゴシック体などの指定を推奨
+  font-main: "IPAMincho",  // セリフ体，明朝体などの指定を推奨
+  font-latin: "Times New Roman",
   font-math: "New Computer Modern Math",
   // 外観 Appearance
   paper-margin: (top: 20mm, bottom: 27mm, left: 15mm, right: 15mm),
@@ -37,12 +37,12 @@
   font-size-authors-en: 12pt,
   font-size-abstract: 10pt,
   font-size-heading: 12pt,
-  font-size-main: 10pt,
+  font-size-main: 11pt,
   font-size-bibliography: 9pt,
   // 補足語 Supplement
-  supplement-image: [図],
-  supplement-table: [表],
-  supplement-separator: [: ],
+  supplement-image: [Fig.],
+  supplement-table: [Table],
+  supplement-separator: [ ],
   // 番号付け Numbering
   numbering-headings: "1.1. ",
   numbering-equation: "(1)",
@@ -66,7 +66,6 @@
 
 == 制御
 以下は全てデバイスに固定された慣性系で考える．@fig:device に仮想推力を示す．
-
 $
   Q_1 = mat(
     I_3, I_3 ;
@@ -87,11 +86,41 @@ $
 $
   bold(f)_"v" = Q_1^"#" (bold(W)_"des" + bold(g))
 $<eq:virtual_thrust>
-ただし，$bold(g)$は，
+ただし，$bold(g) = mat(0, 0, M g, 0, 0, 0)^top$は重力項である．ただし，$M$はデバイスの質量であり，$g$は重力加速度である．また，$Q_1^"#" in RR^(6 times 5)$は$x$まわりのトルクと一致する第4成分を持った$Q_1$のpseudo-inverseである．
 
+また，ベクトル角は以下のように計算される．
+$
+  theta_i = arctan(-f_("v"i y) / -f_("v"i z)), \
+  phi_i = arctan(f_("v"i x) / (-f_("v"i y) sin(theta_i) +  f_("v"i z) cos(theta_i) ))
+$
+
+$x$軸回りに生じるcounterトルクは次のように表される．
+ここで，$I_i$は$x$軸回りの慣性モーメントである．
+$
+  tau_"counter" = sum(I_i dot.double(theta_i))
+$
+仮想推力と$x$軸回りのトルクから実際の推力へのallocation-matrixは以下のように表現される．
+$
+  Q_2 = mat(
+    1, 0, 1, 0;
+    0, 1, 0, 1;
+    d_1 cos phi_1, d_2 cos phi_2, -d_3 cos phi_1, -d_4 cos phi_2;
+  )
+$
+ここで，$d_1, d_2, d_3, d_4$は各ローターからデバイスの縦方向までの長さである．
+
+また，実際の推力$bold(f)=mat(f_1, f_2, f_3, f_4)^top$は以下のように計算される．
+$
+  bold(f) = Q_2^"#" mat( abs(bold(f)_("v"1)); abs(bold(f)_("v"1)); T_("des"x)+tau_"counter")
+$
+
+ここで，$Q_2^"#" in RR^(4 times 3)$は$Q_2$のpseuso-inverseである．
+
+ローターによって生じる力の範囲には限りがあるため，ここで得られた計算は常に実行可能である訳ではない．
+もし，実行可能範囲の外にある場合，実行可能な値の中で最も近い値で再計算することとなる．
 
 #figure(
-  image("figures/device.png", width: 50%),
+  image("figures/device.png", width: 75%),
   caption: [Device]
 )<fig:device>
 
