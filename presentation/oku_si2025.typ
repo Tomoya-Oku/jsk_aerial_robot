@@ -1,14 +1,18 @@
 #import "@preview/jaconf:0.5.0": jaconf, definition, lemma, theorem, corollary, proof, appendix
 #import "@preview/roremu:0.1.0": roremu
 
+#let abstract = [
+  Aerial manipulations using aerial robots are gain-ing attention for their work in high places and hazardous locations. While autonomous control of robots has advanced teleoperation by human operators is still necessary for tasks in complex and unknown environments. In such teleoperation, haptic feedback that allows the operator to perceive the forces exerted on the robot is important. In many cases, underactuated multirotors are used for teleoperation, but the use of fully actuated multirotors is advancing for more complex tasks. Conventional teleoperation methods cannot achieve both intuitive control corresponding to the increased degrees of freedom and feedback of all 6-dimensional force and torque. Therefore, in this study, we propose an operating device capable of expressing 6-dimensional force and torque, and a teleoperation system that makes it easy to perform work remotely using a fully actuated multi-rotor. The operating device has a floating base with a thrust and vectoring mechanism, enabling independent control of position and attitude and independent presentation of forces and torques. The teleoperation system has Position Mapping Mode and Velocity Mapping Mode settings, enabling both rapid movement in a wide area and precise movement for work. We verified the effectiveness of the proposed method for aerial telemanipulations through experiments cleaning tilted walls. Our new framework contributes to the realization of more complex aerial tasks using aerial robots.
+]
+
 // デフォルト値でよい引数は省略可能
 #show: jaconf.with(
   // 基本 Basic
-  title: [空中マニピュレーションのための6自由度力覚フィードバックを用いたテレオペレーションシステム],
-  title-en: [Teleoperation system with 6-DoF haptic feedback for aerial manipulation],
+  title: [6自由度力覚フィードバックを持つデバイスを用いた \ 空中マニピュレーションのためのジェスチャー認識 (仮)],
+  title-en: [Gesture Recognition system with the 6-DoF haptic feedback device \ for aerial manipulation],
   authors: [◯ 奥　朋哉 (東京大学)，金子　輝太朗 (東京大学)，趙　漠居 (東京大学)],
   authors-en: [◯ Tomoya OKU (The University of Tokyo)，Kotaro KANEKO (The University of Tokyo)，\ Moju ZHAO (The University of Tokyo)],
-  abstract: [#lorem(80)],
+  abstract: abstract,
   // フォント名 Font family
   font-heading: "IPAGothic",  // サンセリフ体，ゴシック体などの指定を推奨
   font-main: "IPAMincho",  // セリフ体，明朝体などの指定を推奨
@@ -26,13 +30,13 @@
   front-matter-spacing: 1.5em,
   front-matter-margin: 2.0em,
   // 見出し Headings
-  heading-abstract: [*Abstract--*],
+  heading-abstract: [*Abstract : *],
   heading-keywords: none,
   heading-bibliography: [参考文献],
   heading-appendix: [付録],
   // フォントサイズ Font size
   font-size-title: 16pt,
-  font-size-title-en: 12pt,
+  font-size-title-en: 16pt,
   font-size-authors: 12pt,
   font-size-authors-en: 12pt,
   font-size-abstract: 10pt,
@@ -52,17 +56,21 @@
 #let skew(arg) = $ s k e w (arg) $
 
 = 緒言
-近年，空中マニピュレーション (aerial manipulation) が注目を集めている．空中ロボットは高い機動性と広い作業空間を持ち，遠隔地や人間が立ち入ることの難しい場所で作業を可能にする．また高所や有害物質が浮遊する環境など，人間にとって危険な場所での接触作業も可能にする．理想的にはロボットが完全自律で作業することだが，自律制御の研究は大きく進展しているものの，空中作業環境は複雑で外乱も多いため，人間のオペレータをループに含める必要がある．人間の判断能力を利用することで，未知の環境や未知の対象物に対してもリアルタイムに最適な対応が可能となる．この理由から，空中ロボットの遠隔操作 (teleoperation) の研究が進められてきた．
+近年，空中マニピュレーション (aerial manipulation) が注目を集めている．空中ロボットは高い機動性と広い作業空間を持ち，遠隔地や人間が立ち入ることの難しい場所で作業を可能にする．また高所や有害物質が浮遊する環境など，人間にとって危険な場所での接触作業も可能にする．ロボットが完全自律で作業することが理想ではあるが，自律制御の研究は大きく進展しているものの，空中作業環境は複雑で外乱も多いため，人間による操縦は現在のところ必要不可欠である．人間の判断能力を利用することで，未知の環境や未知の対象物に対してもリアルタイムに最適な対応が可能となる．この理由から，空中ロボットの遠隔操作 (teleoperation) の研究が進められてきた．
 
-従来の研究の多くはアンダーアクチュエート型マルチロータ (4自由度: 3平行移動+1回転) を対象としており，一般的なジョイスティック型デバイスで操作可能であった．一方で，より複雑な空中作業のためにフルアクチュエート型マルチロータ (6自由度：3平行移動+3回転) の研究も進められている．これらは新しい操作デバイスを必要とする．既存研究では，地面に固定されたロボットアームを操作デバイスとする方法や，手の位置・姿勢を検出するフローティング型デバイスが提案されている．後者はオペレータの手の動きを妨げず，フルアクチュエート型ロボットの遠隔操作に適している．
+従来の研究の多くはアンダーアクチュエート型マルチロータ (4自由度: 3平行移動+1回転) を対象としており，一般的なジョイスティック型デバイスで操作可能であった．一方で，より複雑な空中作業のためにフルアクチュエート型マルチロータ (6自由度：3平行移動+3回転) の研究も進められている．これらは新しい操作デバイスを必要とし，既存研究では地面に固定されたロボットアームを操作デバイスとする方法や，手の位置・姿勢を検出するフローティング型デバイスが提案されている．後者はオペレータの手の動きを妨げず，フルアクチュエート型ロボットの遠隔操作に適している．
 
-遠隔操作では，ロボットからオペレータへのフィードバックが不可欠である．特に環境との接触を伴う作業では力覚フィードバックが重要である．従来研究では振動などの単純なフィードバックが多いが，作業を円滑に行うには，ツールに加わる力を実際の力として提示することが望ましい．過去にはプロペラによる推力で3次元の力を提示する装置や，棒の両端にクアッドロータを取り付けて1方向の力と2方向のトルクを提示する装置が提案されたが，いずれも6次元の力・トルクを独立して提示することはできなかった．
+遠隔操作ではロボットからオペレータへのフィードバックが不可欠であり，特に環境との接触を伴う作業では力覚フィードバックが重要である．従来の研究では6次元の力・トルクを独立して提示することはできなかったが，本研究で用いるフローティング型デバイスは次元の力と3次元のトルクを独立に提示できる．これにより，フルアクチュエート型空中ロボットの全自由度を直感的に操作でき，さらに6次元の力覚フィードバックを得ながら精密作業と広域移動を両立できる．
 
-そこで本研究では，3次元の力と3次元のトルクを独立に提示できるフローティング型デバイスを提案する．これを用いた遠隔操作システムにより，フルアクチュエート型空中ロボットの全自由度を直感的に操作でき，さらに6次元の力覚フィードバックを得ながら精密作業と広域移動を両立できることを示す．
+しかし，現在は空中ロボットの飛行までの起動シーケンスおよび飛行中のモード切り替えをTwin-Hammer単体で行うことはできない．
+Twin-Hammerに対して複数のボタンを取り付けるなどの方法も考えられるが，
+
+そこで本研究では，このデバイスのさらなる機能として，デバイスを用いたジェスチャーによるコマンドを用いて空中ロボットのアーミング，モード切り替えなどの機能を可能にし，
+// TO-DO: 評価できるようなタスク 
 
 = デバイス
 == デザイン
-
+s
 
 == 制御
 以下は全てデバイスに固定された慣性系で考える．@fig:device に仮想推力を示す．
@@ -76,12 +84,12 @@ $
 $bold(p)_("v"i)$ は仮想推力$bold(f)_("v"i)$の点での位置ベクトル，
 $skew(bold(p))$ は $bold(p)$のskew-symmetric matrixである．
 
-仮想推力$bold(f)_"v" = mat( bold(f)_"v1", bold(f)_"v2" ; ) ^ top$ は$x$軸まわりのトルクを除いた所望のレンチ
+仮想推力$bold(f)_"v" = mat( bold(f)_"v1", bold(f)_"v2" ; ) ^ top$ は$x$軸まわりのトルクを除いた所望のレンチ@fig:des_wrench から
 $
   bold(W)_"des" = mat(
     F_("des"x), F_("des"y), F_("des"z), F_("des"y), F_("des"z),  
   )^top
-$
+$<fig:des_wrench>
 から@eq:virtual_thrust のように求められる．
 $
   bold(f)_"v" = Q_1^"#" (bold(W)_"des" + bold(g))
@@ -90,7 +98,7 @@ $<eq:virtual_thrust>
 
 また，ベクトル角は以下のように計算される．
 $
-  theta_i = arctan(-f_("v"i y) / -f_("v"i z)), \
+  theta_i = arctan(-f_("v"i y) / f_("v"i z)), \
   phi_i = arctan(f_("v"i x) / (-f_("v"i y) sin(theta_i) +  f_("v"i z) cos(theta_i) ))
 $
 
@@ -124,9 +132,15 @@ $
   caption: [Device]
 )<fig:device>
 
-
 = システム
-#roremu(1024)
+空中ロボットの位置操作については主に2つの機能が要求される．
+1つは長距離の移動であり，実質的に無限の広さを持つ空間を移動するために高速な移動が必要である．
+もう1つは精密な操作であり，正確に細かい作業を行うための機能である．
+これら2つの機能を達成するため，我々は位置マッピングモードと速度マッピングモードを提案した．
+
+現在，
+
+
 
 = 実験
 #roremu(1024)
