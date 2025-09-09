@@ -1,5 +1,6 @@
 #import "@preview/jaconf:0.5.0": jaconf, definition, lemma, theorem, corollary, proof, appendix
 #import "@preview/roremu:0.1.0": roremu
+#import "@preview/equate:0.3.2": equate
 
 #let abstract = [
   #lorem(80)
@@ -8,8 +9,8 @@
 // デフォルト値でよい引数は省略可能
 #show: jaconf.with(
   // 基本 Basic
-  title: [6自由度の力覚フィードバック搭載デバイスを用いた \ 空中マニピュレーションのためのジェスチャー認識 (仮)],
-  title-en: [Gesture Recognition system with the 6-DoF haptic feedback device \ for aerial manipulation],
+  title: [6自由度の力覚フィードバックによる \ 空中マニピュレーションのための遠隔操作システム],
+  title-en: [Teleoperation system with 6-DoF haptic feedback for aerial manipulation],
   authors: [◯ 奥　朋哉 (東京大学)，金子　輝太朗 (東京大学)，趙　漠居 (東京大学)],
   authors-en: [◯ Tomoya OKU (The University of Tokyo)，Kotaro KANEKO (The University of Tokyo)，\ Moju ZHAO (The University of Tokyo)],
   abstract: abstract,
@@ -54,20 +55,31 @@
 )
 
 #show figure.caption: set text(size: 10pt) // figureのキャプションのフォントサイズを変更
+#show: equate.with(number-mode: "line")
 
 #let skew(arg) = $ s k e w (arg) $
 
 = 緒言 <sec:introduction>
-近年，空中マニピュレーション (aerial manipulation) が注目を集めている．ドローンをはじめとする空中ロボット (aerial robot) は高い機動性と広い作業空間を持ち，遠隔地に加えて高所や有害物質が浮遊する環境など，人間にとって危険な場所での接触作業を可能にする．そこで，ロボットが完全自律で作業することが理想であるが，自律制御の研究は大きく進展しているものの，空中作業環境は複雑で外乱も多いため，人間による操縦は現在のところ必要不可欠である．人間の判断能力を利用することで，未知の環境や対象物に対してもリアルタイムに最適な対応が可能となる．この理由から，空中ロボットの遠隔操作 (teleoperation) の研究が進められてきた．
+近年，空中マニピュレーション~(aerial manipulation)が注目を集めている．ドローンをはじめとする空中ロボット~(aerial robot) は高い機動性と広い作業空間を持ち，遠隔地や人間の立ち入りが困難な場所での作業が可能になる．また，高所や有害物質が漂う環境など，人間にとって危険な場所での接触作業も可能にする．作業はロボットが完全自律で行なうことが理想であり，自律制御の研究は大きく進展している．しかし，空中作業環境は複雑で外乱も多いため，人間による操縦は現在のところ必要不可欠である．人間の判断能力を活用することで，未知の環境や作業対象に対してもリアルタイムに最適な対応が可能となる．この理由から，空中ロボットの遠隔操作~(teleoperation) の研究が進められてきた．
 
-従来の研究の多くはアンダーアクチュエート型マルチロータ (4 DoF: 3 平行移動+1 回転) を対象としており，一般的なジョイスティック型デバイスで操作可能であった．一方で，より複雑な空中作業のためにフルアクチュエート型マルチロータ (6 DoF: 3 平行移動+3 回転) の研究も進められている．これらは新しい操作デバイスを必要とし，既存研究では地面に固定されたロボットアームを操作デバイスとする方法@Allenspach2022 や，手の位置・姿勢を検出するフローティング型デバイスが提案されている．後者は操縦者の手の動きを妨げず，フルアクチュエート型ロボットの遠隔操作に適している．
+従来の研究の多くは，3つの並進運動自由度と1つの回転運動自由度の4自由度を持つ不足駆動型マルチロータを対象としており，一般的なジョイスティック型デバイスで操作可能であった．
 
-遠隔操作ではロボットからオペレータへのフィードバックが不可欠であり，特に環境との接触を伴う作業では力覚フィードバックが重要である．従来の研究では6次元の力・トルクを独立して提示することはできなかったが，本研究で用いるフローティング型デバイスは次元の力と3次元のトルクを独立に提示できる．これにより，フルアクチュエート型空中ロボットの全自由度を直感的に操作でき，さらに6次元の力覚フィードバックを得ながら精密作業と広域移動を両立できる．
+一方で，より複雑な空中作業のために，3つの並進運動自由度と3つの回転運動自由度の6自由度を持つ完全駆動型マルチロータの研究も進められており，操作には新しいデバイスを必要とする．@Allenspach2022 では地面に固定されたロボットアームを操作デバイスとする方法が提案されている．このデバイスは6自由度の独立入力を可能とするが，基部が固定されているため移動が困難であるという欠点がある．
 
-しかし，現在は空中ロボットの飛行までの起動シーケンスおよび飛行中のモード切り替えをTwin-Hammer単体で行うことはできない．Twin-Hammerに対して複数のボタンを取り付けるなどの方法も考えられるが，
+一方，@Macchini2020 では，人間の手の位置と姿勢を感知して操作入力を得る浮遊型操作デバイスが提案されている．この方法ではデバイスの一部を固定する必要がないため，操作者の手の動きを妨げず，完全駆動型空中ロボットの遠隔操作に適している．
 
-そこで本研究では，このデバイスのさらなる機能として，デバイスを用いたジェスチャーによるコマンドを用いて空中ロボットのアーミング，モード切り替えなどの機能を可能にし，
-// TO-DO: 評価できるようなタスク
+遠隔操作ではロボットから操縦者へのフィードバックが不可欠であり，特に外部環境との接触を伴う作業では円滑な操作のために力覚フィードバックが重要である．多くの研究で用いられる力覚フィードバックは振動など単純なものが多い．しかし作業を円滑に行うためには，ツールに加わる力を力として表現することが望ましい．例えば，@Heo2018 では6つのプロペラを用いてハンドルに3次元力を加える装置が提案されている．また，@Sasaki2018 では長い棒の両端に2つのクアッドロータを取り付けることで，1方向の力と2方向のトルクを提供する装置が提案されている．これらの研究は，基部を固定せずに操作者に力とトルクを提示することに成功しているが，6次元の力とトルクを独立して提示することはできない．したがって，本研究では，3次元の力と3次元のトルクで垂直に配置された6次元ベクトルである全レンチを独立して提示できる浮遊型デバイスを提案する．遠隔操作システムの全体図を@fig:system に示す．本研究の貢献は以下の通りである．
+
+- 操縦者に6次元のレンチをすべて独立して提示できる浮遊型遠隔操作デバイスを提案する．
+- 完全駆動型空中ロボットの全自由度を同時に制御可能な6次元レンチフィードバックを備えた遠隔操作システムを提案する．これにより精密かつ長距離操作を実現する．
+- 障害物回避や傾斜壁の清掃を含む実験を通じて，提案システムの有効性を検証した．
+
+#figure(
+  image("figures/system.png", width: 70%),
+  caption: [
+    Diagram of our proposed teleoperation system. $bold(p)_"target"$ and $bold(q)_"target"$ are target position and quaternion of the aerial robot, $bold(f)_"feedback"$ and $bold(tau)_"feedback"$ are feedback forces and torques.
+  ]
+)<fig:system>
 
 = Twin-Hammer
 == デザイン
@@ -76,10 +88,10 @@
 推力偏向機能はZhaoらによって提示されたものの修正版である@Zhao2018 ．@fig:hardware の右側に示すように，この推力偏向機能は2方向に回転させることができる．両端部に推力を生むロータを2つ取り付けることにより，合計で4自由度を持つ．ツールのように設計された長い棒の両端部にこのモジュールを取り付けることで，全体としてこのデバイスは8自由度の操作自由度を獲得する．この自由度は我々が望むレンチの6自由度よりも多いため，すべてのレンチを冗長性を持って扱うことを可能にする．
 
 #figure(
-  image("figures/Hardware design of proposed teleoperation device.png", width: 100%),
-  caption: [Hardware design of proposed teleoperation device. Left:Whole
-view. Right:Thrust vectoring mechanism. The red arrows mean the thrust,
-and blue arrows is the rotational direction.]
+  image("figures/hardware.png", width: 100%),
+  caption: [
+    Hardware design of proposed teleoperation device. Left: Whole view. Right: Thrust vectoring mechanism. The red arrows mean the thrust, and blue arrows is the rotational direction.
+  ]
 )<fig:hardware>
 
 == 制御
@@ -90,17 +102,13 @@ $
     skew(bold(p)_"v1"), skew(bold(p)_"v2");
   )
 $
-ただし，$I_3 in RR^(3 times 3)$はidentity matrix，
-$bold(p)_("v"i)$ は仮想推力$bold(f)_("v"i)$の点での位置ベクトル，
-$skew(bold(p))$ は $bold(p)$のskew-symmetric matrixである．
-
-仮想推力$bold(f)_"v" = mat( bold(f)_"v1", bold(f)_"v2" ; ) ^ top$ は$x$軸まわりのトルクを除いた所望のレンチ@fig:des_wrench から
+ただし，$I_3 in RR^(3 times 3)$はidentity matrix，$bold(p)_("v"i)$ は仮想推力$bold(f)_("v"i)$の点での位置ベクトル，$skew(bold(p))$ は $bold(p)$のskew-symmetric matrixである．仮想推力$bold(f)_"v" = display(mat( bold(f)_"v1", bold(f)_"v2" ; ) ^ top) $ は$x$軸まわりのトルクを除いた所望のレンチである@eq:des_wrench から@eq:virtual_thrust のように求められる．
 $
   bold(W)_"des" = mat(
     F_("des"x), F_("des"y), F_("des"z), F_("des"y), F_("des"z),  
   )^top
-$<fig:des_wrench>
-から@eq:virtual_thrust のように求められる．
+$<eq:des_wrench>
+
 $
   bold(f)_"v" = Q_1^"#" (bold(W)_"des" + bold(g))
 $<eq:virtual_thrust>
@@ -115,7 +123,7 @@ $
 $x$軸回りに生じるcounterトルクは次のように表される．
 ここで，$I_i$は$x$軸回りの慣性モーメントである．
 $
-  tau_"counter" = sum(I_i dot.double(theta_i))
+  tau_"counter" = sum I_i dot.double(theta_i)
 $
 仮想推力と$x$軸回りのトルクから実際の推力へのallocation-matrixは以下のように表現される．
 $
@@ -127,7 +135,7 @@ $
 $
 ここで，$d_1, d_2, d_3, d_4$は各ローターからデバイスの縦方向までの長さである．
 
-また，実際の推力$bold(f)=mat(f_1, f_2, f_3, f_4)^top$は以下のように計算される．
+また，実際の推力$bold(f)=display(mat(f_1, f_2, f_3, f_4)^top) $は以下のように計算される．
 $
   bold(f) = Q_2^"#" mat( abs(bold(f)_("v"1)); abs(bold(f)_("v"1)); T_("des"x)+tau_"counter")
 $
@@ -143,14 +151,50 @@ $
 )<fig:device>
 
 = システム
+本章では，完全作動型空中ロボットを用いて作業を実行する遠隔操作システムについて述べる．このシステムは，操作者からロボットへの位置指令の生成と，ロボットから操作者への力フィードバックの生成から構成される．
+
+== 位置操縦コマンド
+
 空中ロボットの位置操作については主に2つの機能が要求される．
 1つは長距離の移動であり，実質的に無限の広さを持つ空間を移動するために高速な移動が必要である．
 もう1つは精密な操作であり，正確に細かい作業を行うための機能である．
 これら2つの機能を達成するため，我々は位置マッピングモードと速度マッピングモードを提案した．
 
-現在，
+=== 位置マッピングモード
+位置マッピングモードは正確なタスク実行のために用いる．このモードにおいて目標位置$bold(p)_"target"$と目標クオータニオン$bold(q)_"target"$は以下のように計算される．
+$
+  bold(p)_"target" &= bold(p)_"robot" (t_0) + bold(k)_1 dot.circle (bold(p)_"device" (t) - bold(p)_"device" (t_0)), \
+  bold(q)_"target" &= bold(q)_"device" (t)
+$
+ここで，$t_0$はこのモードに入った初期時刻，$dot.circle$はHadamard積であり，ベクトルの各成分の積を表す．$bold(k)_1$はタスクのタイプに応じて調整されるスケーリング係数である．
 
+=== 速度マッピングモード
+一方，速度マッピングモードは広域移動のために用いる．このモードにおいて目標位置$bold(p)_"target"$と目標クオータニオン$bold(q)_"target"$は以下のように計算される．
+$
+  bold(p)_"target" &= bold(p)_"robot" (t) + bold(k)_2 dot.circle (bold(p)_"device" (t) - bold(p)_"device" (t_0)), \
+  bold(q)_"target" &= bold(q)_"robot" (t) + bold(k)_3 dot.circle (bold(q)_"device" (t) - bold(q)_"device" (t_0))
+$
+ここで，$bold(k)_2, bold(k)_3$はスケーリング係数である．各時刻においてロボットの位置とクオータニオンにデバイスの変位量を加えることはロボットの速度を変化させることに等しい．
 
+このモードでは，操作者が装置の原点を認識することが重要であり，ジョイスティック操作時にも同様である．本研究で提案する装置は，装置の原点からの移動量に対応する反力を提供することで，操作者が原点を認識できるようにする．コマンドや制御と同様に，フィードバック力の大きさを装置の移動量に比例させると，原点付近の力が小さくなり，原点を視認しにくくなる．そこで，以下のように対数変換を用いる．
+$
+  bold(f)_"feedback" &= log [ bold(k)_4 dot.circle (bold(p)_"device" (t) - bold(p)_"device" (t_0)) ], \
+  bold(tau)_"feedback" &= log [ bold(k)_5 dot.circle (bold(q)_"device" (t) - bold(q)_"device" (t_0)) ]
+$
+ここで，$bold(k)_4, bold(k)_5$はスケーリング係数である．この変換により原点付近のフィードバック力が大きくなり，原点の認識が容易になる．さらに操作の難易度を低減するため，原点付近にはロボットに指令を送らない停止ゾーンを設定している．これら二つのモードを適切に活用することで，広い作業空間において迅速かつ精密な作業が可能となる．
+
+== 力とトルクのフィードバック
+空中ロボットの作業用エンドエフェクタには6自由度の力とトルクが作用する．作業を円滑に遂行するためには，操作者がこれら6次元の力とトルクを正確に認識しなければならない．Stevensら@Stevens1960 の研究により，人間の知覚における変化の大きさと実際の物理的刺激の大きさの間には，以下に示すような関係があることが示されている．
+$
+  Phi (I) = k I^alpha
+$
+ここで，$Phi (I)$は知覚される刺激の大きさ，$I$は実際の物理的刺激の大きさ，$k$は比例定数，$alpha$は刺激の種類に依存する指数である．腕全体で重力を認識する際の$alpha$は$1.45$であるとされる．本研究で提案した装置は操作者の腕全体に力覚フィードバックを提供するため，物理的刺激は同一であるとみなす．
+
+操作者がレンチの変化を正しく認識できるようにするためには，この指数関数的な関係を打ち消し，知覚を直線的にすることが重要である．したがって，操作者に提示されるレンチは，ロボットマニピュレータに適用されるレンチから以下のように生成される．
+$
+  bold(w)_"feedback" = log_alpha (bold(k)_7 dot.circle bold(w)_"measured")
+$
+ここで，$bold(w)_"feedback"$は操縦者にフィードバックされるレンチであり，$bold(w)_"measured"$はロボットのエンドエフェクタで計測されるレンチである．$bold(k)_7$は大きさを調節するパラメータである．
 
 = 実験
 #roremu(1024)
