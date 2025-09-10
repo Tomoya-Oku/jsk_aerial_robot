@@ -115,3 +115,6 @@ robots/**/mujoco
 # local env
 .history/
 .vscode/
+
+# ignore any 'jaconf' directory (at any depth)
+typst-jp-conf-template/
