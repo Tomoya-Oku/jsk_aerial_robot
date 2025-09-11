@@ -1,14 +1,6 @@
 /*
 ******************************************************************************
-<<<<<<< HEAD
-<<<<<<<< HEAD:aerial_robot_nerve/spinal/mcu_project/lib/Jsk_Lib/configs/STM32H7_v2/config.h
 * File Name          : config.h
-========
-* File Name          : STM32F7_config.h
->>>>>>>> develop/gimbalrotor_rebase:aerial_robot_nerve/spinal/mcu_project/lib/Jsk_Lib/configs/STM32F7/config.h
-=======
-* File Name          : config.h
->>>>>>> develop/gimbalrotor_rebase
 * Description        : Basic configuration for this board(c.f. GPIO Macro, Enable flag for different processes
 ******************************************************************************
 */
@@ -88,7 +80,11 @@
 #define DYNAMIXEL 1
 #define KONDO 0
 //2.1.3.1 Dynamixel Servo Control without external convertor board
+<<<<<<< HEAD
 #define DYNAMIXEL_BOARDLESS_CONTROL 0
+>>>>>>> develop/gimbalrotor_rebase
+=======
+#define DYNAMIXEL_BOARDLESS_CONTROL 1
 >>>>>>> develop/gimbalrotor_rebase
 //2.2 State Estimate
 //2.2.1 Attitude Estimate

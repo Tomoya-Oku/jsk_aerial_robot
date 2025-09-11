@@ -24,12 +24,12 @@
     ## link
     <link name="base_link">
       <inertial>
-        <origin xyz="0.000169 0.002346 0.106123" rpy="0 0 0"/>
-        <mass value="1.37825"/>
+        <origin xyz="0.004 0.001135 0.041962" rpy="0 0 0"/>
+        <mass value="1.20490"/>
         <inertia
-            ixx="0.046756" ixy="0.000586" ixz="0.000055"
-	    iyy="0.063216" iyz="0.000219"
-	    izz="0.058783"/>
+            ixx="0.010610" ixy="-0.000085" ixz="0.000340"
+            iyy="0.020290" iyz="0.000116"
+            izz="0.021260"/>
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -87,10 +87,10 @@
     </xacro:macro>
 
     ## dummy rotor arms
-    <xacro:dummy_rotor_arm id = "${child1}" x = "0.12129" y="0.12150" z = "0.1185" yaw = "${pi/4.0}"/>
-    <xacro:dummy_rotor_arm id = "${child2}" x = "-0.12129" y="0.12150" z = "0.1185" yaw = "${pi*3.0/4.0}"/>
-    <xacro:dummy_rotor_arm id = "${child3}" x = "-0.12129" y="-0.12150" z = "0.1185" yaw = "${pi*5.0/4.0}"/>
-    <xacro:dummy_rotor_arm id = "${child4}" x = "0.12129" y="-0.12150" z = "0.1185" yaw = "${-pi/4.0}"/>
+    <xacro:dummy_rotor_arm id = "${child1}" x = "0.15410" y="0.15424" z = "0.1185" yaw = "${pi/4.0}"/>
+    <xacro:dummy_rotor_arm id = "${child2}" x = "-0.15410" y="0.15424" z = "0.1185" yaw = "${pi*3.0/4.0}"/>
+    <xacro:dummy_rotor_arm id = "${child3}" x = "-0.15410" y="-0.15424" z = "0.1185" yaw = "${pi*5.0/4.0}"/>
+    <xacro:dummy_rotor_arm id = "${child4}" x = "0.15410" y="-0.15424" z = "0.1185" yaw = "${-pi/4.0}"/>
 
     ## dummy link for the contact point coordinate
       <link name="contact_point">
