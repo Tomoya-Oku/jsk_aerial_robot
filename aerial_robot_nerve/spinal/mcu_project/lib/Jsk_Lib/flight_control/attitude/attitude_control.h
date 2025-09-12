@@ -15,6 +15,7 @@
 #ifndef SIMULATION
 #include "config.h"
 #include <ros.h>
+#include <sensor_msgs/JointState.h>
 #else
 #include <ros/ros.h>
 #endif
@@ -33,6 +34,8 @@
 #include "cmsis_os.h"
 /* dshot esc */
 #include "dshot_esc/dshot.h"
+/* servo */
+#include "servo/servo.h"
 #endif
 
 #include "state_estimate/state_estimate.h"
@@ -58,6 +61,7 @@
 /* fail safe */
 #define FLIGHT_COMMAND_TIMEOUT 500 //500ms
 #define MAX_TILT_ANGLE 1.0f // rad
+#define MAX_PWM 1.0f // duty
 
 #define CONTROL_TERM_PUB_INTERVAL 100
 #define CONTROL_FEEDBACK_STATE_PUB_INTERVAL 25
@@ -81,7 +85,7 @@ public:
   void init(ros::NodeHandle* nh, StateEstimate* estimator);
 #else
   void init(TIM_HandleTypeDef* htim1, TIM_HandleTypeDef* htim2, StateEstimate* estimator,
-            DShot* dshot, BatteryStatus* bat, ros::NodeHandle* nh, osMutexId* mutex = NULL);
+            DShot* dshot, DirectServo* servo, BatteryStatus* bat, ros::NodeHandle* nh, osMutexId* mutex = NULL);
 #endif
 
   void baseInit(); // common part in both pc and board
@@ -89,9 +93,13 @@ public:
 
   void setStartControlFlag(bool start_control_flag);
   void setUavModel(int8_t uav_model);
-  inline uint8_t getMotorNumber(){return motor_number_;}
+  inline uint16_t getMotorNumber(){return motor_number_;}
+  inline const ap::Matrix3f getOffsetRotation()  { return offset_rot_; }
 
-  void setMotorNumber(uint8_t motor_number);
+  void setMotorNumber(uint16_t motor_number);
+  void setGimbalDof(uint8_t gimbal_dof){gimbal_dof_ = gimbal_dof; }
+  void setRotorCoef(uint8_t rotor_coef){rotor_coef_ = rotor_coef; }
+  uint16_t getGimbalDof(){return gimbal_dof_; }
   void setPwmTestMode(bool pwm_test_flag){pwm_test_flag_ = pwm_test_flag; }
   bool getIntegrateFlag(){return integrate_flag_; }
   void setIntegrateFlag(bool integrate_flag){integrate_flag_ = integrate_flag; }
@@ -111,7 +119,6 @@ private:
 #endif
 
   ros::NodeHandle* nh_;
-
   ros::Publisher pwms_pub_;
   ros::Publisher control_term_pub_;
   ros::Publisher control_feedback_state_pub_;
@@ -127,7 +134,9 @@ private:
   ros::Subscriber p_matrix_pseudo_inverse_inertia_sub_;
   ros::Subscriber torque_allocation_matrix_inv_sub_;
   ros::Subscriber sim_vol_sub_;
+  ros::Subscriber offset_rot_sub_;
   ros::Publisher anti_gyro_pub_;
+  ros::Publisher gimbal_control_pub_;
   ros::ServiceServer att_control_srv_;
 
   bool setAttitudeControlCallback(std_srvs::SetBool::Request& req, std_srvs::SetBool::Response& res) { att_control_flag_ = req.data; return true;}
@@ -141,6 +150,7 @@ private:
   ros::Subscriber<spinal::PwmTest, AttitudeController> pwm_test_sub_;
   ros::Subscriber<spinal::PMatrixPseudoInverseWithInertia, AttitudeController> p_matrix_pseudo_inverse_inertia_sub_;
   ros::Subscriber<spinal::TorqueAllocationMatrixInv, AttitudeController> torque_allocation_matrix_inv_sub_;
+  ros::Subscriber<spinal::DesireCoord, AttitudeController> offset_rot_sub_;
   ros::ServiceServer<std_srvs::SetBool::Request, std_srvs::SetBool::Response, AttitudeController> att_control_srv_;
 
   ros::Publisher esc_telem_pub_;
@@ -154,12 +164,15 @@ private:
   BatteryStatus* bat_;
   osMutexId* mutex_;
   DShot* dshot_;
+  DirectServo* servo_;
 #endif
 
   StateEstimate* estimator_;
 
   int8_t uav_model_;
-  uint8_t motor_number_;
+  uint16_t motor_number_;
+  uint8_t gimbal_dof_;
+  uint8_t rotor_coef_;
   bool start_control_flag_;
   bool pwm_test_flag_;
   bool integrate_flag_;
@@ -184,6 +197,9 @@ private:
   float extra_yaw_pi_term_[MAX_MOTOR_NUMBER]; //[N]
   int max_yaw_term_index_;
 
+  // Offset Rotation from the control frame to the estimation frame
+  ap::Matrix3f offset_rot_;
+
   // Gyro Moment Compensation
   float p_matrix_pseudo_inverse_[MAX_MOTOR_NUMBER][4];
   ap::Matrix3f inertia_;
@@ -195,6 +211,7 @@ private:
   // Thrust PWM Conversion
   float target_thrust_[MAX_MOTOR_NUMBER];
   float target_pwm_[MAX_MOTOR_NUMBER];
+  float target_gimbal_angles_[MAX_MOTOR_NUMBER];
   float min_duty_;
   float max_duty_;
   float min_thrust_; // max thrust is variant according to the voltage
@@ -214,6 +231,8 @@ private:
   void rpyGainCallback( const spinal::RollPitchYawTerms &gain_msg);
   void pMatrixInertiaCallback(const spinal::PMatrixPseudoInverseWithInertia& msg);
   void torqueAllocationMatrixInvCallback(const spinal::TorqueAllocationMatrixInv& msg);
+  void offsetRotCallback(const spinal::DesireCoord& msg);
+
   void thrustGainMapping();
   void maxYawGainIndex();
   void pwmTestCallback(const spinal::PwmTest& pwm_msg);
@@ -231,15 +250,8 @@ private:
   }
 
 #ifdef SIMULATION
-  bool use_ground_truth_;
   uint32_t HAL_GetTick(){ return ros::Time::now().toSec() * 1000; }
-
 public:
-  void useGroundTruth(bool flag) { use_ground_truth_ = flag; }
-  void setTrueRPY(float r, float p, float y) {true_angles_.x = r; true_angles_.y = p; true_angles_.z = y; }
-  void setTrueAngular(float wx, float wy, float wz) {true_vel_.x = wx; true_vel_.y = wy; true_vel_.z = wz; }
-  ap::Vector3f true_angles_;
-  ap::Vector3f true_vel_;
   float DELTA_T;
   double prev_time_;
 #endif

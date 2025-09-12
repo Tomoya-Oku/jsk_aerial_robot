@@ -42,6 +42,7 @@
 #include <sensor_msgs/JointState.h>
 #include <spinal/ServoControlCmd.h>
 #include <std_msgs/Empty.h>
+#include <tf2_ros/static_transform_broadcaster.h>
 
 namespace sensor_plugin
 {
@@ -66,6 +67,8 @@ namespace sensor_plugin
     }
 
     bool reset();
+
+    const tf::Transform& getRawBaselinkTF() const { return baselink_tf_; }
 
   private:
     /* ros */
@@ -108,6 +111,8 @@ namespace sensor_plugin
 
     double reference_timestamp_;
     aerial_robot_msgs::States vo_state_;
+
+    tf2_ros::StaticTransformBroadcaster static_broadcaster_; // publish the transfrom between the work and vo frame
 
     void rosParamInit();
     void servoControl(const ros::TimerEvent & e);
