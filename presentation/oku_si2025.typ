@@ -9,7 +9,7 @@
 // デフォルト値でよい引数は省略可能
 #show: jaconf.with(
   // 基本 Basic
-  title: [6自由度の力覚フィードバックによる \ 空中マニピュレーションのための遠隔操作システム],
+  title: [6自由度の力覚フィードバックを有する \ 空中マニピュレーションのための遠隔操作システム],
   title-en: [Teleoperation system with 6-DoF haptic feedback for aerial manipulation],
   authors: [◯ 奥　朋哉 (東京大学)，金子　輝太朗 (東京大学)，趙　漠居 (東京大学)],
   authors-en: [◯ Tomoya OKU (The University of Tokyo)，Kotaro KANEKO (The University of Tokyo)，\ Moju ZHAO (The University of Tokyo)],
