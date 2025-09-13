@@ -157,13 +157,21 @@ class teleop_haptics_integration():
       self.robot_wrench = wrench_world
 
   def button_cb(self, msg):
-    rospy.logdebug("BUTTON CALLBACK CALLED")
-    if msg.data == 0:
-      self.buttonPressed = False
-      #print("BUTTON RELEASED")
-    elif msg.data == 1:
-      self.buttonPressed = True
-      #print("BUTTON PRESSED")
+    # 元々ONだったら
+    if self.buttonPressed:
+      if msg.data == 0:
+        self.buttonPressed = False
+        print("BUTTON RELEASED")
+    # 元々OFFだったら
+    else:
+      if msg.data == 1:
+        self.buttonPressed = True
+        print("BUTTON PRESSED")
+
+        self.robot_init_pos = self.robot_pos
+        self.robot_init_att = self.robot_att
+        self.device_init_pos = self.device_pos
+        self.device_init_att = self.device_att
 
   def main(self):
     r = rospy.Rate(40)
@@ -338,24 +346,9 @@ class teleop_haptics_integration():
           self.wait_flag = True
 
         if self.buttonPressed:
-          print("BUTTON PRESSED")
-
-          self.robot_init_pos = self.robot_pos
-          self.robot_init_att = self.robot_att
-          self.device_init_pos = self.device_pos
-          self.device_init_att = self.device_att
-          self.robot_initialize_flag = True
-          self.device_initialize_flag = True
-
           self.nav_pub.publish(self.flight_nav)
           self.att_pub.publish(self.target_att_nav)
           self.feedback_pub.publish(self.haptics_wrench_msg)
-
-        else:
-          print("BUTTON RELEASED")
-
-          self.robot_initialize_flag = False
-          self.device_initialize_flag = False
 
       r.sleep()
 
