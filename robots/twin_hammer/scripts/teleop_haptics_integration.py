@@ -336,19 +336,26 @@ class teleop_haptics_integration():
         if not self.wait_flag:
           rospy.sleep(3.0)
           self.wait_flag = True
-<<<<<<< HEAD
 
         if self.buttonPressed:
-          print("BUTTON PRESSED -> STARTING TELE-OPERATION")
+          print("BUTTON PRESSED")
 
-          if not self.robot_initialize_flag:
-            self.robot_init_pos = self.robot_pos
-            self.robot_init_att = self.robot_att
-            self.robot_initialize_flag = True
+          self.robot_init_pos = self.robot_pos
+          self.robot_init_att = self.robot_att
+          self.device_init_pos = self.device_pos
+          self.device_init_att = self.device_att
+          self.robot_initialize_flag = True
+          self.device_initialize_flag = True
 
           self.nav_pub.publish(self.flight_nav)
           self.att_pub.publish(self.target_att_nav)
-          self.feedback_pub.publish(self.haptics_wrench_msg) 
+          self.feedback_pub.publish(self.haptics_wrench_msg)
+
+        else:
+          print("BUTTON RELEASED")
+
+          self.robot_initialize_flag = False
+          self.device_initialize_flag = False
 
       r.sleep()
 
