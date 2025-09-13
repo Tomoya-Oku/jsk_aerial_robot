@@ -32,7 +32,15 @@
 #define NERVE_COMM 1
 
 //1. Specials board options
+<<<<<<< HEAD
+<<<<<<<< HEAD:aerial_robot_nerve/spinal/mcu_project/lib/Jsk_Lib/configs/STM32H7_v2/config.h
 #define STM32H7_V2 1
+========
+#define STM32H7_V2 0
+>>>>>>>> develop/gimbalrotor_rebase:aerial_robot_nerve/spinal/mcu_project/lib/Jsk_Lib/configs/STM32F7/config.h
+=======
+#define STM32H7_V2 1
+>>>>>>> develop/gimbalrotor_rebase
 
 //2. Enable Flags
 //* Please set/reset follwing flags according to your utility.
@@ -40,16 +48,44 @@
 //2.1 Sensors
 //2.1.1 IMU Sensor
 #define IMU_FLAG 1
+<<<<<<< HEAD
+<<<<<<<< HEAD:aerial_robot_nerve/spinal/mcu_project/lib/Jsk_Lib/configs/STM32H7_v2/config.h
 #define IMU_ICM 1
 #define IMU_MPU 0
+========
+#define IMU_ICM 0
+#define IMU_MPU 1
+>>>>>>>> develop/gimbalrotor_rebase:aerial_robot_nerve/spinal/mcu_project/lib/Jsk_Lib/configs/STM32F7/config.h
 //2.1.2 Barometer Sensor
 #define BARO_FLAG 1
 //2.1.3 GPS Sensor
 #define GPS_FLAG 1
 //2.1.3 Direct Servo Control
+<<<<<<<< HEAD:aerial_robot_nerve/spinal/mcu_project/lib/Jsk_Lib/configs/STM32H7_v2/config.h
 #define SERVO_FLAG 1
+========
+#define SERVO_FLAG 0
+>>>>>>>> develop/gimbalrotor_rebase:aerial_robot_nerve/spinal/mcu_project/lib/Jsk_Lib/configs/STM32F7/config.h
 
 
+=======
+#define IMU_ICM 1
+#define IMU_MPU 0
+//2.1.2 Barometer Sensor
+#define BARO_FLAG 1
+//2.1.3 GPS Sensor
+#define GPS_FLAG 0
+//2.1.3 Direct Servo Control
+#define SERVO_FLAG 1
+#define DYNAMIXEL 1
+#define KONDO 0
+//2.1.3.1 Dynamixel Servo Control without external convertor board
+<<<<<<< HEAD
+#define DYNAMIXEL_BOARDLESS_CONTROL 0
+>>>>>>> develop/gimbalrotor_rebase
+=======
+#define DYNAMIXEL_BOARDLESS_CONTROL 1
+>>>>>>> develop/gimbalrotor_rebase
 //2.2 State Estimate
 //2.2.1 Attitude Estimate
 #define ATTITUDE_ESTIMATE_FLAG 1
@@ -83,7 +119,14 @@
 
 //2.3 Flight Control
 #define FLIGHT_CONTROL_FLAG 1
+<<<<<<< HEAD
+<<<<<<<< HEAD:aerial_robot_nerve/spinal/mcu_project/lib/Jsk_Lib/configs/STM32H7_v2/config.h
 #define DSHOT 0
+========
+>>>>>>>> develop/gimbalrotor_rebase:aerial_robot_nerve/spinal/mcu_project/lib/Jsk_Lib/configs/STM32F7/config.h
+=======
+#define DSHOT 0
+>>>>>>> develop/gimbalrotor_rebase
 //* Do not change following code!!!
 ///////////////////////////////////
 #if !ATTITUDE_ESTIMATE_FLAG
@@ -95,3 +138,10 @@
 
 
 #endif //__CONFIG_H
+<<<<<<< HEAD
+<<<<<<<< HEAD:aerial_robot_nerve/spinal/mcu_project/lib/Jsk_Lib/configs/STM32H7_v2/config.h
+========
+
+>>>>>>>> develop/gimbalrotor_rebase:aerial_robot_nerve/spinal/mcu_project/lib/Jsk_Lib/configs/STM32F7/config.h
+=======
+>>>>>>> develop/gimbalrotor_rebase

@@ -87,7 +87,6 @@ class teleop_haptics_integration():
     self.k_exp = 0.4
     self.k_log = 1.0
     self.k_att_diff = 1.0
-
     self.buttonPressed = False
 
   def flight_state_cb(self, msg):
@@ -219,10 +218,9 @@ class teleop_haptics_integration():
             feedback_wrench[i] = logarithm(feedback_wrench[i]+1, log_base, k_force)
           else:
             feedback_wrench[i] = -logarithm(-(feedback_wrench[i]-1), log_base, k_torque)
-
+            
         # feedback_wrench: velocy mode の位置のズレ
         # haptics_wrench: ロボットの力センサから
-
         """ calc feedback wrench from force sensor """
         haptics_wrench = [0.0]*6
         for i in range(len(self.robot_wrench)):
@@ -332,12 +330,13 @@ class teleop_haptics_integration():
         self.haptics_wrench_msg.wrench.force.z = haptics_wrench[2]
         self.haptics_wrench_msg.wrench.torque.x = haptics_wrench[3]
         self.haptics_wrench_msg.wrench.torque.y = haptics_wrench[4]
-        self.haptics_wrench_msg.wrench.torque.z = haptics_wrench[5]        
+        self.haptics_wrench_msg.wrench.torque.z = haptics_wrench[5]
 
       if self.hovering and not self.landing:
         if not self.wait_flag:
           rospy.sleep(3.0)
           self.wait_flag = True
+<<<<<<< HEAD
 
         if self.buttonPressed:
           print("BUTTON PRESSED -> STARTING TELE-OPERATION")
