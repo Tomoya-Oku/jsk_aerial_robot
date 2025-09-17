@@ -5,7 +5,7 @@ import time
 import math
 import numpy as np
 import tf.transformations as tf
-from std_msgs.msg import UInt8, String, Int8
+from std_msgs.msg import UInt8, String, Int8, Empty
 from aerial_robot_msgs.msg import FlightNav
 from spinal.msg import DesireCoord
 from geometry_msgs.msg import PoseStamped, WrenchStamped, Vector3Stamped
@@ -29,17 +29,27 @@ class teleop_haptics_integration():
     self.feedback_from_ang = rospy.get_param("~feedback_from_ang", "False")
 
     # Publishers
+    self.device_start_pub = rospy.Publisher('/twin_hammer/teleop_command/start', Empty, queue_size=1) # for arming
+    self.device_takeoff_pub = rospy.Publisher('/twin_hammer/teleop_command/takeoff', Empty, queue_size=1) # for takeoff
+    self.device_land_pub = rospy.Publisher('/twin_hammer/teleop_command/land', Empty, queue_size=1) # for landing
+
+    self.robot_start_pub = rospy.Publisher('/' + self.robot_name + '/teleop_command/start', Empty, queue_size=1) # for arming
+    self.robot_takeoff_pub = rospy.Publisher('/' + self.robot_name + '/teleop_command/takeoff', Empty, queue_size=1) # for takeoff
+    self.robot_land_pub = rospy.Publisher('/' + self.robot_name + '/teleop_command/land', Empty, queue_size=1) # for landing
+    
     self.nav_pub = rospy.Publisher('/'+self.robot_name+'/uav/nav', FlightNav, queue_size=1)
     self.att_pub = rospy.Publisher('/'+self.robot_name+'/final_target_baselink_rpy', Vector3Stamped, queue_size=1)
     self.feedback_pub = rospy.Publisher('/twin_hammer/haptics_wrench', WrenchStamped, queue_size=1)
 
     # Subscribers
-    self.flight_state_sub = rospy.Subscriber('/'+self.robot_name+'/flight_state', UInt8, self.flight_state_cb)
+    self.device_flight_state_sub = rospy.Subscriber('/twin_hammer/flight_state', UInt8, self.device_flight_state_cb)
+    self.robot_flight_state_sub = rospy.Subscriber('/'+self.robot_name+'/flight_state', UInt8, self.robot_flight_state_cb)
     self.device_pos_sub = rospy.Subscriber('/twin_hammer/mocap/pose', PoseStamped, self.device_pos_cb)
     self.robot_pos_sub = rospy.Subscriber('/'+self.robot_name+'/mocap/pose', PoseStamped, self.robot_pos_cb)
     self.teleop_mode_sub = rospy.Subscriber('/twin_hammer/teleop_mode', String, self.teleop_mode_cb)
     self.robot_wrench_sub = rospy.Subscriber('/cfs/data', WrenchStamped, self.robot_wrench_cb)
-    self.button_sub = rospy.Subscriber('/twin_hammer/button', UInt8, self.button_cb)
+    self.trigger_sub = rospy.Subscriber('/twin_hammer/trigger', UInt8, self.trigger_cb)
+    self.trigger_event_sub = rospy.Subscriber('/twin_hammer/trigger_event', UInt8, self.trigger_event_cb)
 
     # Messages
     self.flight_nav = FlightNav()
@@ -53,8 +63,20 @@ class teleop_haptics_integration():
     self.haptics_wrench_msg = WrenchStamped()
 
     # States
-    self.hovering = False
-    self.landing = False
+    self.device_arm_off = True
+    self.device_arm_on = False
+    self.device_takeoff = False
+    self.device_hovering = False
+    self.device_landing = False
+    self.device_stop = False
+
+    self.robot_arm_off = True
+    self.robot_arm_on = False
+    self.robot_takeoff = False
+    self.robot_hovering = False
+    self.robot_landing = False
+    self.robot_stop = False
+
     self.device_pos = [None]*3
     self.device_att = [None]*3
     self.robot_pos = [None]*3
@@ -87,13 +109,45 @@ class teleop_haptics_integration():
     self.k_exp = 0.4
     self.k_log = 1.0
     self.k_att_diff = 1.0
-    self.buttonPressed = False
 
-  def flight_state_cb(self, msg):
-    if msg.data == 5:
-      self.hovering = True
-    if msg.data == 4:
-      self.landing = True
+    # トリガー (ボタン) で切り替え
+    self.triggerMode = 0
+  
+  def device_flight_state_cb(self, msg):
+    # aerial_robot_base/flight_navigaton.h 参照
+    if msg.data == 2:
+      self.device_arm_off = False
+      self.device_arm_on = True
+    elif msg.data == 3:
+      self.device_arm_on = False
+      self.device_takeoff = True
+    elif msg.data == 5:
+      self.device_takeoff = False
+      self.device_hovering = True
+    elif msg.data == 4:
+      self.device_hovering = False
+      self.device_landing = True
+    elif msg.data == 6:
+      self.device_landing = False
+      self.device_stop = True
+
+  def robot_flight_state_cb(self, msg):
+    # aerial_robot_base/flight_navigaton.h 参照
+    if msg.data == 2:
+      self.robot_arm_off = False
+      self.robot_arm_on = True
+    elif msg.data == 3:
+      self.robot_arm_on = False
+      self.robot_takeoff = True
+    elif msg.data == 5:
+      self.robot_takeoff = False
+      self.robot_hovering = True
+    elif msg.data == 4:
+      self.robot_hovering = False
+      self.robot_landing = True
+    elif msg.data == 6:
+      self.robot_landing = False
+      self.robot_stop = True
 
   def device_pos_cb(self, msg):
     self.device_pos = [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z]
@@ -156,22 +210,72 @@ class teleop_haptics_integration():
     else:
       self.robot_wrench = wrench_world
 
-  def button_cb(self, msg):
-    # 元々ONだったら
-    if self.buttonPressed:
-      if msg.data == 0:
-        self.buttonPressed = False
-        print("BUTTON RELEASED")
-    # 元々OFFだったら
-    else:
-      if msg.data == 1:
-        self.buttonPressed = True
-        print("BUTTON PRESSED")
+  # トリガーの生データ
+  def trigger_cb(self, msg):
+    pass
 
-        self.robot_init_pos = self.robot_pos
-        self.robot_init_att = self.robot_att
-        self.device_init_pos = self.device_pos
-        self.device_init_att = self.device_att
+  # トリガーのイベント (EV_PUSH, EV_DOUBLE, EV_TRIPLE, EV_LONG)
+  def trigger_event_cb(self, msg):
+    # EV_PUSH: 単押し -> ON/OFF切り替え
+    if msg.data == 0:
+      # triggerMode = 0 -> 1 / 1 -> 0
+      self.triggerMode = 1 - self.triggerMode
+
+      # 現在地を初期位置に
+      self.robot_init_pos = self.robot_pos
+      self.robot_init_att = self.robot_att
+      self.device_init_pos = self.device_pos
+      self.device_init_att = self.device_att
+
+      if self.triggerMode == 0:
+        print("Switch triggerMode: ON")
+      else:
+        print("Switch triggerMode: OFF")
+
+    # EV_DOUBLE: 2回押し -> ロボットの起動シーケンス
+    elif msg.data == 1:
+      # arm_offであればarm_onする
+      if self.robot_arm_off:
+        self.robot_start_pub.publish(Empty())
+        print(f"{self.robot_name}: send motor-arming command")
+      # arm_onであればTakeoffする
+      elif self.arm_on:
+        self.robot_takeoff_pub.publish(Empty())
+        print(f"{self.robot_name}: send takeoff command")
+      # Takeoff/Hovering中であればLandingする
+      elif self.robot_takeoff or self.robot_hovering:
+        self.robot_land_pub.publish(Empty())
+        print(f"{self.robot_name}: send land command")
+      else:
+        pass
+
+    # EV_TRIPLE: 3回押し -> POS/VEL切り替え
+    elif msg.data == 2:
+      if self.control_mode == "pos":
+        self.control_mode = "vel"
+        print("VEL mode")
+      elif self.control_mode == "vel":
+        self.control_mode = "pos"
+        print("POS mode")
+      else:
+        pass
+
+    # EV_LONG: 長押し -> Twin-Hammerの起動シーケンス
+    elif msg.data == 3:
+      # arm_offであればarm_onする
+      if self.device_arm_off:
+        self.device_start_pub.publish(Empty())
+        print("Send motor-arming command")
+      # arm_onであればTakeoffする
+      elif self.device_arm_on:
+        self.device_takeoff_pub.publish(Empty())
+        print("Send takeoff command")
+      # Takeoff/Hovering中であればLandingする
+      elif self.device_takeoff or self.device_hovering:
+        self.device_land_pub.publish(Empty())
+        print("Send land command")
+      else:
+        pass
 
   def main(self):
     r = rospy.Rate(40)
@@ -182,9 +286,9 @@ class teleop_haptics_integration():
       target_ang_vel = [0.0]*3
       feedback_wrench = [0.0]*6
 
-      if self.device_init_pos is None or not self.hovering:
+      if self.device_init_pos is None or not self.robot_hovering:
         self.device_initialize_flag = False
-      if self.robot_init_pos is None or not self.hovering:
+      if self.robot_init_pos is None or not self.robot_hovering:
         self.robot_initialize_flag = False
 
       if self.device_initialize_flag and self.robot_initialize_flag:
@@ -340,12 +444,13 @@ class teleop_haptics_integration():
         self.haptics_wrench_msg.wrench.torque.y = haptics_wrench[4]
         self.haptics_wrench_msg.wrench.torque.z = haptics_wrench[5]        
 
-      if self.hovering and not self.landing:
+      if self.robot_hovering and not self.robot_landing:
         if not self.wait_flag:
           rospy.sleep(3.0)
           self.wait_flag = True
 
-        if self.buttonPressed:
+        # 0 means ON
+        if self.triggerMode == 0:
           self.nav_pub.publish(self.flight_nav)
           self.att_pub.publish(self.target_att_nav)
           self.feedback_pub.publish(self.haptics_wrench_msg) 
