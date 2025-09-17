@@ -47,6 +47,7 @@
   // 補足語 Supplement
   supplement-image: [Fig.],
   supplement-table: [Table],
+  supplement-equation: [式],
   supplement-separator: [~~],
   // 番号付け Numbering
   numbering-headings: "1.1. ",
