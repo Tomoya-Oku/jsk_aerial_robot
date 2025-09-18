@@ -1,9 +1,9 @@
-#import "./typst-jp-conf-template/jaconf/lib.typ": jaconf, definition, lemma, theorem, corollary, proof, appendix
+#import "@local/jaconf:0.5.1": jaconf, definition, lemma, theorem, corollary, proof, appendix, sup_ast
 #import "@preview/roremu:0.1.0": roremu
 #import "@preview/equate:0.3.2": equate
 
 #let abstract = [
-  #lorem(80)
+  #lorem(150)
 ]
 
 // デフォルト値でよい引数は省略可能
@@ -11,52 +11,54 @@
   // 基本 Basic
   title: [6自由度の力覚フィードバックを有する \ 空中マニピュレーションのための遠隔操作システム],
   title-en: [Teleoperation system with 6-DoF haptic feedback for aerial manipulation],
-  authors: [◯ 奥　朋哉 (東京大学)，金子　輝太朗 (東京大学)，趙　漠居 (東京大学)],
-  authors-en: [◯ Tomoya OKU (The University of Tokyo)，Kotaro KANEKO (The University of Tokyo)，\ Moju ZHAO (The University of Tokyo)],
+  authors: [奥 朋哉#sup_ast(1), 金子 輝太朗#sup_ast(1), 杉原 惇一朗#sup_ast(1), 李 謹傑#sup_ast(1), 趙 漠居#sup_ast(1)],
+  authors-en: [Tomoya OKU#sup_ast(1), Kotaro KANEKO#sup_ast(1), Junichiro SUGIHARA#sup_ast(1), Jinjie Li#sup_ast(1) and Moju ZHAO#sup_ast(1)],
+  affiliation: (
+    [Department of Mechanical Engineering, Tokyo University \ 7-3-1 Hongo, Bunkyo-ku, Tokyo 113-8654],
+  ),
   abstract: abstract,
+  keywords: ([Tele-operation], [Aerial Robot], [Haptic Feedback], [Thrust Vectoring]),
   // フォント名 Font family
-  font-heading: "Yu Gothic",  // サンセリフ体，ゴシック体などの指定を推奨
-  font-main: "Yu Mincho",  // セリフ体，明朝体などの指定を推奨
-  font-latin: "TeX Gyre Termes",
+  font-heading: "YuGothic",  // サンセリフ体，ゴシック体などの指定を推奨
+  font-main: "YuMincho",  // セリフ体，明朝体などの指定を推奨
+  font-latin: "Times New Roman",
   font-math: "New Computer Modern Math",
   // 外観 Appearance
-  paper-margin: (top: 20mm, bottom: 27mm, left: 15mm, right: 15mm),
+  paper-margin: (top: 25mm, bottom: 25mm, left: 23mm, right: 23mm),
   paper-columns: 2,  // 1: single column, 2: double column
   page-number: none,  // e.g. "1/1"
   column-gutter: 4%+0pt,
   spacing-heading: 1.2em,
+  front-matter-order: ("title", "authors", "title-en", "authors-en", "affiliation", "abstract", "keywords"),  // 独自コンテンツの追加も可能
   bibliography-style: "sice.csl",  // "sice.csl", "rsj.csl", "ieee", etc.
   abstract-language: "en",  // "ja" or "en"
   keywords-language: "en",  // "ja" or "en"
   front-matter-spacing: 1.5em,
   front-matter-margin: 2.0em,
   // 見出し Headings
-  heading-abstract: [*Abstract : *],
-  heading-keywords: none,
+  heading-abstract: [],
+  heading-keywords: [_*Keywords*_: ],
   heading-bibliography: [参考文献],
   heading-appendix: [付録],
   // フォントサイズ Font size
-  font-size-title: 16pt,
-  font-size-title-en: 16pt,
+  font-size-title: 14pt,
+  font-size-title-en: 12pt,
   font-size-authors: 12pt,
   font-size-authors-en: 12pt,
-  font-size-abstract: 9pt,
-  font-size-heading: 12pt,
+  font-size-affiliation: 10pt,
+  font-size-abstract: 10pt,
+  font-size-heading: 10pt,
   font-size-main: 10pt,
   font-size-bibliography: 10pt,
   // 補足語 Supplement
   supplement-image: [Fig.],
   supplement-table: [Table],
-  supplement-equation: [式],
-  supplement-separator: [~~],
+  supplement-ref-equation: [式],
+  supplement-separator: [~],
   // 番号付け Numbering
   numbering-headings: "1.1. ",
   numbering-equation: "(1)",
   numbering-appendix: "A.1",  // #show: appendix.with(numbering-appendix: "A.1") の呼び出しにも同じ引数を与えてください．
-)
-
-#set math.equation(
-  supplement: [式],                   // 参照の前に「式」を付ける
 )
 
 #show ref.where(form: "normal"): set ref(supplement: auto)
@@ -65,7 +67,7 @@
 
 #let skew = $op("skew")$
 
-= 緒言 <sec:introduction>
+= はじめに <sec:introduction>
 近年，空中マニピュレーション~(aerial manipulation)が注目を集めている．ドローンをはじめとする空中ロボット~(aerial robot) は高い機動性と広い作業空間を持ち，遠隔地や人間の立ち入りが困難な場所での作業が可能になる．また，高所や有害物質が漂う環境など，人間にとって危険な場所での接触作業も可能にする．作業はロボットが完全自律で行なうことが理想であり，自律制御の研究は大きく進展している@Shi2019 ．しかし，空中作業環境は複雑で外乱も多いため，人間による操縦は現在のところ必要不可欠である@Darvish2023．人間の判断能力を活用することで，未知の環境や作業対象に対してもリアルタイムに最適な対応が可能となる．この理由から，空中ロボットの遠隔操作~(teleoperation) の研究が進められてきた．
 
 従来の研究の多くは，3つの並進運動自由度と1つの回転運動自由度の4自由度を持つ不足駆動型マルチロータを対象としており@Nourmohammadi2018 @Aggravi2021 @Yashin2019 @Kim2020，一般的なジョイスティック型デバイスで操作可能であった．
@@ -184,7 +186,6 @@ $
 本章では，完全駆動型空中ロボットを用いて作業を実行する遠隔操作システムについて述べる．このシステムは，操縦者からロボットへの位置指令の生成と，ロボットから操縦者への力フィードバックの生成から構成される．
 
 == 位置操縦コマンド
-
 空中ロボットの位置操作については主に2つの機能が要求される．1つは長距離の移動であり，実質的に無限の広さを持つ空間を移動するために高速な移動が必要である．もう1つは精密な操作であり，正確に細かい作業を行うための機能である．これら2つの機能を達成するため，我々は位置マッピングモードと速度マッピングモードを提案した．
 
 === 位置マッピングモード
