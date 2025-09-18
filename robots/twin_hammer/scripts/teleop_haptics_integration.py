@@ -240,7 +240,7 @@ class teleop_haptics_integration():
         self.robot_start_pub.publish(Empty())
         print(f"{self.robot_name}: send motor-arming command")
       # arm_onであればTakeoffする
-      elif self.arm_on:
+      elif self.robot_arm_on:
         self.robot_takeoff_pub.publish(Empty())
         print(f"{self.robot_name}: send takeoff command")
       # Takeoff/Hovering中であればLandingする
