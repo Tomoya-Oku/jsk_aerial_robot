@@ -28,6 +28,9 @@ class teleop_haptics_integration():
     self.frame = rospy.get_param("~frame", "local") # "local" or "world"
     self.feedback_from_ang = rospy.get_param("~feedback_from_ang", "False")
 
+    self.device_initialize_flag = False
+    self.robot_initialize_flag = False
+
     # Publishers
     self.device_start_pub = rospy.Publisher('/twin_hammer/teleop_command/start', Empty, queue_size=1) # for arming
     self.device_takeoff_pub = rospy.Publisher('/twin_hammer/teleop_command/takeoff', Empty, queue_size=1) # for takeoff
@@ -83,10 +86,8 @@ class teleop_haptics_integration():
     self.robot_att = [None]*3
     self.device_init_pos = [None]*3
     self.device_init_att = [None]*3
-    self.device_initialize_flag = False
     self.robot_init_pos = [None]*3
     self.robot_init_att = [None]*3
-    self.robot_initialize_flag = False
     self.robot_vel_mode_fix_pos = [None]*3
     self.robot_vel_mode_fix_att = [None]*3
     self.device_att_unwrapped = [0.0]*3
