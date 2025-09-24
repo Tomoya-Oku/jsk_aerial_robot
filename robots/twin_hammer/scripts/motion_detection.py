@@ -10,10 +10,10 @@ class motion_detection():
         self.posForDetection = []
 
     def device_pos_cb(self, msg):
-        pos = msg.pose.position
-
         if self.detectionMode:
+            pos = msg.pose.position
             print(f"Device pos: x={pos.x}, y={pos.y}, z={pos.z}")
+            self.posForDetection.append([pos.x, pos.y, pos.z])
 
       # トリガーのイベント (EV_PUSH, EV_DOUBLE, EV_TRIPLE, EV_LONG)
     def trigger_event_cb(self, msg):
@@ -22,12 +22,18 @@ class motion_detection():
             self.detectionMode = not self.detectionMode
             print(f"Detection mode: {'ON' if self.detectionMode else 'OFF'}")
 
-    def classify_shape(points_xy: np.ndarray) -> str:
+            # OFFになったときに図形判定・位置情報クリア
+            if not self.detectionMode:
+                result = self.classify_shape(self.posForDetection)
+                print(f"Detected shape: {result}")
+                self.posForDetection = []
+
+    def classify_shape(points: np.ndarray) -> str:
         """
-        points_xy: shape (N,2) のfloat/int配列。描かれた順でなくてもOK（凸包で外形化）
+        points: shape (N,2) のfloat/int配列。描かれた順でなくてもOK（凸包で外形化）
         返り値: 'triangle' | 'rectangle' | 'square' | 'circle' | 'polygon' | 'unknown'
         """
-        pts = points_xy.astype(np.float32)
+        pts = points.astype(np.float32)
         if len(pts) < 3:
             return 'unknown'
 
