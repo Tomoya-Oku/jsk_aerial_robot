@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import rospy
 from geometry_msgs.msg import PoseStamped
 import numpy as np
@@ -70,5 +72,13 @@ class motion_detection():
             return 'polygon'
         else:
             return 'unknown'
+        
+    def main(self):
+        r = rospy.Rate(40)
+        while not rospy.is_shutdown():
+            r.sleep()
 
-
+if __name__ == "__main__":
+  rospy.init_node("motion_detection")
+  Tracker = motion_detection()
+  Tracker.main()
