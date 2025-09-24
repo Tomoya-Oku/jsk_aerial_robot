@@ -43,10 +43,10 @@ class motion_detection():
         y = poly_yz[:,0]; z = poly_yz[:,1]
         return 0.5 * np.sum(y*np.roll(z,-1) - z*np.roll(y,-1))
 
-    def classify_shape(points: np.ndarray) -> str:
+    def classify_shape(self, points: np.ndarray) -> str:
         pts = np.asarray(points, dtype=np.float32)
         if pts.ndim != 2 or pts.shape[1] != 2 or len(pts) < 3:
-            return "unknown"
+            return "Unknown"
 
         v = np.diff(pts, axis=0)
         d = pts[-1] - pts[0]                       # (dy, dz)
@@ -72,10 +72,10 @@ class motion_detection():
         if line_ratio < LINE_THINNESS:
             ang = abs(np.arctan2(d[1], d[0]))
             if ang <= ANGLE_TOL:
-                return "横の直線（左から右）" if d[0] > 0 else "横の直線（右から左）"
+                return "Horizontal Line (Left to Right)" if d[0] > 0 else "Horizontal Line (Right to Left)"
             if abs(ang - np.pi/2) <= ANGLE_TOL:
-                return "縦の直線（下から上）" if d[1] > 0 else "縦の直線（上から下）"
-            return "unknown"
+                return "Vertical Line (Bottom to Top)" if d[1] > 0 else "Vertical Line (Top to Bottom)"
+            return "Unknown"
 
         # 2) 円
         if circularity > 0.80 and len(pts) >= 6:
@@ -87,8 +87,8 @@ class motion_detection():
                 r = np.sqrt(max(c0 + cy**2 + cz**2, 1e-12))
                 radial = np.sqrt((Y-cy)**2 + (Z-cz)**2)
                 if r > 1e-6 and np.std(radial)/r < 0.15:
-                    if rot_sign < 0:  return "円（右回り）"
-                    if rot_sign > 0:  return "円（左回り）"
+                    if rot_sign < 0:  return "Circle (Clockwise)"
+                    if rot_sign > 0:  return "Circle (Counter-Clockwise)"
             except np.linalg.LinAlgError:
                 pass
 
@@ -98,23 +98,23 @@ class motion_detection():
         K = len(approx)
 
         def by_rot(base):
-            if rot_sign < 0:  return f"{base}（右回り）"
-            if rot_sign > 0:  return f"{base}（左回り）"
-            s = polygon_signed_area(hull[:,0,:])
-            return f"{base}（左回り）" if s > 0 else f"{base}（右回り）"
+            if rot_sign < 0:  return f"{base} (Clockwise)"
+            if rot_sign > 0:  return f"{base} (Counter-Clockwise)"
+            s = self.polygon_signed_area(hull[:,0,:])
+            return f"{base} (Counter-Clockwise)" if s > 0 else f"{base} (Clockwise)"
 
         if K == 3:
             tri = approx[:,0,:].astype(np.float32)
             z = tri[:,1]
             i_top = int(np.argmax(z))
             i_bottom = int(np.argmin(z))
-            base = "三角形" if (i_top != i_bottom and z[i_top]-np.median(z) > np.median(z)-z[i_bottom]) else "逆三角形"
+            base = "Triangle" if (i_top != i_bottom and z[i_top]-np.median(z) > np.median(z)-z[i_bottom]) else "Inverted Triangle"
             return by_rot(base)
 
         if K == 4:
-            return by_rot("四角形: 正方形も含む")
+            return by_rot("Rectangle")
 
-        return "unknown"
+        return "Unknown"
         
     def main(self):
         r = rospy.Rate(40)
