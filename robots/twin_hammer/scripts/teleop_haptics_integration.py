@@ -23,7 +23,7 @@ class teleop_haptics_integration():
 
     # Parameters
     self.robot_name = rospy.get_param("~robot_name", "gimbalrotor")
-    self.control_mode = rospy.get_param("~control_mode", "pos") # "pos" or "vel"
+    self.control_mode = rospy.get_param("~control_mode", "pos") # "pos" or "vel" -> switch with trigger
     self.convert_method = rospy.get_param("~convert_method", "log") # "prop" or "exp" or "log"
     self.frame = rospy.get_param("~frame", "local") # "local" or "world"
     self.feedback_from_ang = rospy.get_param("~feedback_from_ang", "False")
@@ -51,8 +51,9 @@ class teleop_haptics_integration():
     self.robot_pos_sub = rospy.Subscriber('/'+self.robot_name+'/mocap/pose', PoseStamped, self.robot_pos_cb)
     self.teleop_mode_sub = rospy.Subscriber('/twin_hammer/teleop_mode', String, self.teleop_mode_cb)
     self.robot_wrench_sub = rospy.Subscriber('/cfs/data', WrenchStamped, self.robot_wrench_cb)
-    self.trigger_sub = rospy.Subscriber('/twin_hammer/trigger', UInt8, self.trigger_cb)
-    self.trigger_event_sub = rospy.Subscriber('/twin_hammer/trigger_event', UInt8, self.trigger_event_cb)
+    self.trigger_sub = rospy.Subscriber('/twin_hammer/trigger_event', UInt8, self.trigger_event_cb)
+    self.device_button_sub = rospy.Subscriber('/twin_hammer/device_button', Int8, self.device_button_cb)
+    self.robot_button_sub = rospy.Subscriber('/'+self.robot_name+'/robot_button', Int8, self.robot_button_cb)
 
     # Messages
     self.flight_nav = FlightNav()
@@ -81,6 +82,7 @@ class teleop_haptics_integration():
     self.robot_stop = False
 
     self.device_pos = [None]*3
+    self.device_pos_traj = []
     self.device_att = [None]*3
     self.robot_pos = [None]*3
     self.robot_att = [None]*3
@@ -111,9 +113,9 @@ class teleop_haptics_integration():
     self.k_log = 1.0
     self.k_att_diff = 1.0
 
-    # トリガー (ボタン) で切り替え
-    self.triggerMode = 0
-  
+    # トリガー長押しで切り替え
+    self.gestureMode = False
+
   def device_flight_state_cb(self, msg):
     # aerial_robot_base/flight_navigaton.h 参照
     if msg.data == 2:
@@ -152,6 +154,8 @@ class teleop_haptics_integration():
 
   def device_pos_cb(self, msg):
     self.device_pos = [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z]
+    if self.detectionMode:
+      self.posForDetection.append([self.device_pos[1], self.device_pos[2]]) # とりあえずy-zで
     q = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
     rot = R.from_quat(q)
     self.device_att = rot.as_euler('xyz')
@@ -211,70 +215,61 @@ class teleop_haptics_integration():
     else:
       self.robot_wrench = wrench_world
 
-  # トリガーの生データ
-  def trigger_cb(self, msg):
-    pass
-
   # トリガーのイベント (EV_PUSH, EV_DOUBLE, EV_TRIPLE, EV_LONG)
   def trigger_event_cb(self, msg):
-    # EV_PUSH: 単押し -> ON/OFF切り替え
-    if msg.data == 0:
-      # triggerMode = 0 -> 1 / 1 -> 0
-      self.triggerMode = 1 - self.triggerMode
+    # EV_DOUBLE: 2回押し -> POS/VEL切り替え
+    if msg.data == 1:
+      if self.control_mode == "pos" and self.robot_hovering:
+        self.control_mode = "vel"
+      elif self.control_mode == "vel" and self.robot_hovering:
+        self.control_mode = "pos"
 
       # 現在地を初期位置に
       self.robot_init_pos = self.robot_pos
       self.robot_init_att = self.robot_att
       self.device_init_pos = self.device_pos
       self.device_init_att = self.device_att
-
-      if self.triggerMode == 0:
-        print("Switch triggerMode: ON")
-      else:
-        print("Switch triggerMode: OFF")
-
-    # EV_DOUBLE: 2回押し -> ロボットの起動シーケンス
-    elif msg.data == 1:
-      # arm_offであればarm_onする
-      if self.robot_arm_off:
-        self.robot_start_pub.publish(Empty())
-        print(f"{self.robot_name}: send motor-arming command")
-      # arm_onであればTakeoffする
-      elif self.robot_arm_on:
-        self.robot_takeoff_pub.publish(Empty())
-        print(f"{self.robot_name}: send takeoff command")
-      # Takeoff/Hovering中であればLandingする
-      elif self.robot_takeoff or self.robot_hovering:
-        self.robot_land_pub.publish(Empty())
-        print(f"{self.robot_name}: send land command")
-      else:
-        pass
-
-    # EV_TRIPLE: 3回押し -> POS/VEL切り替え
-    elif msg.data == 2:
-      if self.control_mode == "pos":
-        self.control_mode = "vel"
-        print("VEL mode")
-      elif self.control_mode == "vel":
-        self.control_mode = "pos"
-        print("POS mode")
-      else:
-        pass
-
-    # EV_LONG: 長押し -> Twin-Hammerの起動シーケンス
+    
+    # EV_LONG: 長押し -> Gesture認識モードON
     elif msg.data == 3:
+      if self.gestureMode == 0:
+        print("Switch gestureMode: ON")
+      else:
+        print("Switch gestureMode: OFF")
+
+  def device_button_cb(self, msg):
+    # EV_LONG: 長押し -> Twin-Hammerの起動シーケンス
+    if msg.data == 3:
       # arm_offであればarm_onする
       if self.device_arm_off:
         self.device_start_pub.publish(Empty())
-        print("Send motor-arming command")
+        print("[Twin-Hammer] Send motor-arming command")
       # arm_onであればTakeoffする
       elif self.device_arm_on:
         self.device_takeoff_pub.publish(Empty())
-        print("Send takeoff command")
+        print("[Twin-Hammer] Send takeoff command")
       # Takeoff/Hovering中であればLandingする
       elif self.device_takeoff or self.device_hovering:
         self.device_land_pub.publish(Empty())
-        print("Send land command")
+        print("[Twin-Hammer] Send land command")
+      else:
+        pass
+
+  def robot_button_cb(self, msg):
+    # EV_LONG: 長押し -> Robotの起動シーケンス
+    if msg.data == 3:
+      # arm_offであればarm_onする
+      if self.robot_arm_off:
+        self.robot_start_pub.publish(Empty())
+        print(f"[{self.robot_name}] Send motor-arming command")
+      # arm_onであればTakeoffする
+      elif self.robot_arm_on:
+        self.robot_takeoff_pub.publish(Empty())
+        print(f"[{self.robot_name}] Send takeoff command")
+      # Takeoff/Hovering中であればLandingする
+      elif self.robot_takeoff or self.robot_hovering:
+        self.robot_land_pub.publish(Empty())
+        print(f"[{self.robot_name}] Send land command")
       else:
         pass
 
