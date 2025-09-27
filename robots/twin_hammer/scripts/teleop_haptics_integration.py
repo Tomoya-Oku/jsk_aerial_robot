@@ -4,6 +4,7 @@ import rospy
 import time
 import math
 import numpy as np
+import cv2
 import tf.transformations as tf
 from std_msgs.msg import UInt8, String, Int8, Empty
 from aerial_robot_msgs.msg import FlightNav
@@ -51,9 +52,15 @@ class teleop_haptics_integration():
     self.robot_pos_sub = rospy.Subscriber('/'+self.robot_name+'/mocap/pose', PoseStamped, self.robot_pos_cb)
     self.teleop_mode_sub = rospy.Subscriber('/twin_hammer/teleop_mode', String, self.teleop_mode_cb)
     self.robot_wrench_sub = rospy.Subscriber('/cfs/data', WrenchStamped, self.robot_wrench_cb)
-    self.trigger_sub = rospy.Subscriber('/twin_hammer/trigger_event', UInt8, self.trigger_event_cb)
-    self.device_button_sub = rospy.Subscriber('/twin_hammer/device_button', Int8, self.device_button_cb)
-    self.robot_button_sub = rospy.Subscriber('/'+self.robot_name+'/robot_button', Int8, self.robot_button_cb)
+
+    # State -> Raw Data (0/1)
+    # Event -> Judged Data (PUSH / DOUBLE / LONG etc.)
+    self.trigger_state_sub = rospy.Subscriber('/twin_hammer/trigger_state', UInt8, self.trigger_state_cb)
+    self.trigger_event_sub = rospy.Subscriber('/twin_hammer/trigger_event', String, self.trigger_event_cb)
+    self.device_button_state_sub = rospy.Subscriber('/twin_hammer/device_button_state', UInt8, self.device_button_state_cb)
+    self.device_button_event_sub = rospy.Subscriber('/twin_hammer/device_button_event', String, self.device_button_event_cb)
+    self.robot_button_state_sub = rospy.Subscriber('/'+self.robot_name+'/robot_button_state', UInt8, self.robot_button_state_cb)
+    self.robot_button_event_sub = rospy.Subscriber('/'+self.robot_name+'/robot_button_event', String, self.robot_button_event_cb)
 
     # Messages
     self.flight_nav = FlightNav()
@@ -113,8 +120,9 @@ class teleop_haptics_integration():
     self.k_log = 1.0
     self.k_att_diff = 1.0
 
-    # トリガー長押しで切り替え
-    self.gestureMode = False
+    # Trajectory-Based Gesture Recognition
+    self.gestureMode = False # トリガー長押しで切り替え
+    self.trajectory = []
 
   def device_flight_state_cb(self, msg):
     # aerial_robot_base/flight_navigaton.h 参照
@@ -154,8 +162,8 @@ class teleop_haptics_integration():
 
   def device_pos_cb(self, msg):
     self.device_pos = [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z]
-    if self.detectionMode:
-      self.posForDetection.append([self.device_pos[1], self.device_pos[2]]) # とりあえずy-zで
+    if self.gestureMode:
+      self.trajectory.append([self.device_pos[1], self.device_pos[2]]) # とりあえずy-zで
     q = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
     rot = R.from_quat(q)
     self.device_att = rot.as_euler('xyz')
@@ -215,10 +223,27 @@ class teleop_haptics_integration():
     else:
       self.robot_wrench = wrench_world
 
+  # トリガーのON / OFF 生データ
+  def trigger_state_cb(self, msg):
+    # トリガーがOFFになったタイミング
+    if (msg.data == 0) and self.gestureMode == True:
+      pts = np.asarray(self.trajectory, dtype=np.float32)
+      shape, shape_info = self.classify_shape(pts)
+
+      print(f"Detected shape: {shape}")
+
+      if shape == "circle": print(f"Radius of Circle: {shape_info}")
+      else: pass
+      
+      self.doTask(self, shape=shape, shape_info=shape_info)
+      self.trajectory = []  # クリア
+    else:
+      self.gestureMode = (msg.data == 1)
+
   # トリガーのイベント (EV_PUSH, EV_DOUBLE, EV_TRIPLE, EV_LONG)
   def trigger_event_cb(self, msg):
     # EV_DOUBLE: 2回押し -> POS/VEL切り替え
-    if msg.data == 1:
+    if msg.data == "EV_DOUBLE":
       if self.control_mode == "pos" and self.robot_hovering:
         self.control_mode = "vel"
       elif self.control_mode == "vel" and self.robot_hovering:
@@ -229,21 +254,17 @@ class teleop_haptics_integration():
       self.robot_init_att = self.robot_att
       self.device_init_pos = self.device_pos
       self.device_init_att = self.device_att
-    
-    # EV_LONG: 長押し -> Gesture認識モードON
-    elif msg.data == 3:
-      if self.gestureMode == 0:
-        print("Switch gestureMode: ON")
-      else:
-        print("Switch gestureMode: OFF")
 
-  def device_button_cb(self, msg):
+  def device_button_state_cb(self, msg):
+    pass
+
+  def device_button_event_cb(self, msg):
     # EV_LONG: 長押し -> Twin-Hammerの起動シーケンス
-    if msg.data == 3:
+    if msg.data == "EV_LONG":
       # arm_offであればarm_onする
       if self.device_arm_off:
         self.device_start_pub.publish(Empty())
-        print("[Twin-Hammer] Send motor-arming command")
+        print("[Twin-Hammer] Send arming command")
       # arm_onであればTakeoffする
       elif self.device_arm_on:
         self.device_takeoff_pub.publish(Empty())
@@ -255,13 +276,16 @@ class teleop_haptics_integration():
       else:
         pass
 
-  def robot_button_cb(self, msg):
+  def robot_button_state_cb(self, msg):
+    pass
+
+  def robot_button_event_cb(self, msg):
     # EV_LONG: 長押し -> Robotの起動シーケンス
-    if msg.data == 3:
+    if msg.data == "EV_LONG":
       # arm_offであればarm_onする
       if self.robot_arm_off:
         self.robot_start_pub.publish(Empty())
-        print(f"[{self.robot_name}] Send motor-arming command")
+        print(f"[{self.robot_name}] Send arming command")
       # arm_onであればTakeoffする
       elif self.robot_arm_on:
         self.robot_takeoff_pub.publish(Empty())
@@ -272,6 +296,159 @@ class teleop_haptics_integration():
         print(f"[{self.robot_name}] Send land command")
       else:
         pass
+
+  def polygon_signed_area(poly_yz: np.ndarray) -> float:
+    """poly: (M,2) CCW>0, CW<0  （y→x, z→y とみなす）"""
+    y = poly_yz[:,0]; z = poly_yz[:,1]
+    return 0.5 * np.sum(y*np.roll(z,-1) - z*np.roll(y,-1))
+
+  def classify_shape(self, points: np.ndarray) -> str:
+    pts = np.asarray(points, dtype=np.float32)
+    if pts.ndim != 2 or pts.shape[1] != 2 or len(pts) < 3:
+        return "Unknown"
+
+    v = np.diff(pts, axis=0)
+    d = pts[-1] - pts[0]                       # (dy, dz)
+    cross = v[:-1,0]*v[1:,1] - v[:-1,1]*v[1:,0]
+    rot_sign = np.sign(np.sum(cross))          # -1:右回り, +1:左回り
+
+    # 直線性
+    c = pts - pts.mean(axis=0)
+    cov = np.cov(c.T)
+    eigval, _ = np.linalg.eigh(cov)
+    line_ratio = eigval[0] / max(eigval[1], 1e-12)
+
+    # 形状量
+    cnt = pts.reshape(-1,1,2)
+    hull = cv2.convexHull(cnt)
+    peri = cv2.arcLength(hull, True)
+    area = abs(cv2.contourArea(hull))
+    circularity = 4.0*np.pi*area/(peri*peri + 1e-12)
+
+    # 1) 直線
+    LINE_THINNESS = 0.02
+    ANGLE_TOL = 15*np.pi/180
+    if line_ratio < LINE_THINNESS:
+        ang = abs(np.arctan2(d[1], d[0]))
+        if ang <= ANGLE_TOL:
+            return "Horizontal Line (Left to Right)" if d[0] > 0 else "Horizontal Line (Right to Left)"
+        if abs(ang - np.pi/2) <= ANGLE_TOL:
+            return "Vertical Line (Bottom to Top)" if d[1] > 0 else "Vertical Line (Top to Bottom)"
+        return "Unknown"
+
+    # 2) 円
+    if circularity > 0.80 and len(pts) >= 6:
+        Y, Z = pts[:,0], pts[:,1]
+        A = np.c_[2*Y, 2*Z, np.ones_like(Y)]
+        b = Y**2 + Z**2
+        try:
+            cy, cz, c0 = np.linalg.lstsq(A, b, rcond=None)[0]
+            r = np.sqrt(max(c0 + cy**2 + cz**2, 1e-12))
+            radial = np.sqrt((Y-cy)**2 + (Z-cz)**2)
+            if r > 1e-6 and np.std(radial)/r < 0.15:
+                if rot_sign < 0:  return "Circle (Clockwise)"
+                if rot_sign > 0:  return "Circle (Counter-Clockwise)"
+        except np.linalg.LinAlgError:
+            pass
+
+    # 3) 多角形（3 or 4）
+    eps = 0.02 * peri
+    approx = cv2.approxPolyDP(hull, eps, True)
+    K = len(approx)
+
+    def by_rot(base):
+        if rot_sign < 0:  return f"{base} (Clockwise)"
+        if rot_sign > 0:  return f"{base} (Counter-Clockwise)"
+        s = self.polygon_signed_area(hull[:,0,:])
+        return f"{base} (Counter-Clockwise)" if s > 0 else f"{base} (Clockwise)"
+
+    if K == 3:
+        tri = approx[:,0,:].astype(np.float32)
+        z = tri[:,1]
+        i_top = int(np.argmax(z))
+        i_bottom = int(np.argmin(z))
+        base = "Triangle" if (i_top != i_bottom and z[i_top]-np.median(z) > np.median(z)-z[i_bottom]) else "Inverted Triangle"
+        return by_rot(base)
+
+    if K == 4:
+        return by_rot("Rectangle")
+
+    return "Unknown"
+  
+  def circleTask(self, radius=1.0, period=8.0, hz=40):
+    """
+    現在位置(center)を中心に、zは据え置きで半径radiusの円を1周する。
+    period: 1周にかける秒数、hz: 制御周期
+    """
+    # 安全確認
+    if not self.robot_hovering or self.robot_pos is None or self.robot_att is None:
+      rospy.logwarn("circleTask: robot not ready (hovering/pose).")
+      return
+
+    # 中心と高度・初期yawを固定
+    cx, cy, cz = self.robot_pos[0], self.robot_pos[1], self.robot_pos[2]
+    yaw0 = self.robot_att[2]
+
+    # メインループ側の目標計算を一時停止（上書き防止）
+    _dev_init, _rob_init = self.device_initialize_flag, self.robot_initialize_flag
+    self.device_initialize_flag = False
+    self.robot_initialize_flag = False
+
+    # 一時的にposモードへ（復帰用に保存）
+    _mode = self.control_mode
+    self.control_mode = "pos"
+
+    rate = rospy.Rate(hz)
+    total = max(1, int(period * hz))
+
+    try:
+      for k in range(total):
+        if not self.robot_hovering or self.robot_landing or rospy.is_shutdown():
+          break
+
+        theta = 2.0 * math.pi * (float(k) / float(total))
+        x = cx + radius * math.cos(theta)
+        y = cy + radius * math.sin(theta)
+        z = cz  # 高度据え置き
+
+        # 0066環境の安全範囲にクリップ（ファイルの下限上限に合わせる）
+        x = max(min(x, 2.0), -1.3)
+        y = max(min(y, 1.6), -1.6)
+        z = max(min(z, 1.2), 0.3)
+
+        # 目標セット（姿勢は水平・yaw据え置き）
+        self.flight_nav.target_pos_x = x
+        self.flight_nav.target_pos_y = y
+        self.flight_nav.target_pos_z = z
+        self.flight_nav.target_roll  = 0.0
+        self.flight_nav.target_pitch = 0.0
+        self.flight_nav.target_yaw   = yaw0
+
+        self.target_att_nav.vector.x = 0.0
+        self.target_att_nav.vector.y = 0.0
+
+        # 即時送信（メインループと重なっても同値なのでOK）
+        self.nav_pub.publish(self.flight_nav)
+        self.att_pub.publish(self.target_att_nav)
+
+        rate.sleep()
+    finally:
+      # 元の状態に戻す
+      self.control_mode = _mode
+      self.device_initialize_flag = _dev_init
+      self.robot_initialize_flag  = _rob_init
+
+  def lineTask(self):
+    pass
+
+  def doTask(self, shape="unknown", shape_info=None):
+    if shape == "circle":
+      radius = shape_info
+      self.circleTask(radius)
+    elif shape == "line":
+      self.lineTask()
+    else:
+      pass
 
   def main(self):
     r = rospy.Rate(40)
@@ -288,7 +465,6 @@ class teleop_haptics_integration():
         self.robot_initialize_flag = False
 
       if self.device_initialize_flag and self.robot_initialize_flag:
-
         """ calc target pos and vel """
         vel_mode_pos_thre = [0.1,0.1,0.1]
         vel_mode_att_thre = [0.05,0.05,0.05]
@@ -445,8 +621,7 @@ class teleop_haptics_integration():
           rospy.sleep(3.0)
           self.wait_flag = True
 
-        # 0 means ON
-        if self.triggerMode == 0:
+        if not self.gestureMode:
           self.nav_pub.publish(self.flight_nav)
           self.att_pub.publish(self.target_att_nav)
           self.feedback_pub.publish(self.haptics_wrench_msg) 
