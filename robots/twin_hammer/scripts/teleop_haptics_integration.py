@@ -55,8 +55,8 @@ class teleop_haptics_integration():
 
     # State -> Raw Data (0/1)
     # Event -> Judged Data (PUSH / DOUBLE / LONG etc.)
-    self.trigger_state_sub = rospy.Subscriber('/twin_hammer/trigger_state', UInt8, self.trigger_state_cb)
-    self.trigger_event_sub = rospy.Subscriber('/twin_hammer/trigger_event', String, self.trigger_event_cb)
+    self.trigger_state_sub = rospy.Subscriber('/twin_hammer/trigger_button_state', UInt8, self.trigger_button_state_cb)
+    self.trigger_event_sub = rospy.Subscriber('/twin_hammer/trigger_button_event', String, self.trigger_button_event_cb)
     self.device_button_state_sub = rospy.Subscriber('/twin_hammer/device_button_state', UInt8, self.device_button_state_cb)
     self.device_button_event_sub = rospy.Subscriber('/twin_hammer/device_button_event', String, self.device_button_event_cb)
     self.robot_button_state_sub = rospy.Subscriber('/twin_hammer/robot_button_state', UInt8, self.robot_button_state_cb)
@@ -162,8 +162,6 @@ class teleop_haptics_integration():
 
   def device_pos_cb(self, msg):
     self.device_pos = [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z]
-    if self.gestureMode:
-      self.trajectory.append([self.device_pos[1], self.device_pos[2]]) # とりあえずy-zで
     q = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
     rot = R.from_quat(q)
     self.device_att = rot.as_euler('xyz')
@@ -223,30 +221,35 @@ class teleop_haptics_integration():
     else:
       self.robot_wrench = wrench_world
 
-  # トリガーのON / OFF 生データ
-  def trigger_state_cb(self, msg):
-    # トリガーがOFFになったタイミング
-    if (msg.data == 0) and self.gestureMode == True:
-      pts = np.asarray(self.trajectory, dtype=np.float32)
-      shape, shape_info = self.classify_shape(pts)
+  # トリガーのON (1) / OFF (0) 生データ
+  def trigger_button_state_cb(self, msg):
+    if msg.data == 0: # OFF
+      if self.gestureMode:
+        pts = np.asarray(self.trajectory, dtype=np.float32)
+        shape, shape_info = self.classify_shape(pts)
 
-      print(f"Detected shape: {shape}")
+        print(f"Detected shape: {shape}")
 
-      if shape == "circle": print(f"Radius of Circle: {shape_info}")
-      else: pass
-      
-      self.doTask(self, shape=shape, shape_info=shape_info)
+        if shape == "circle": print(f"Radius of Circle: {shape_info}")
+        else: pass
+        
+        self.doTask(self, shape=shape, shape_info=shape_info)
+
       self.trajectory = []  # クリア
-    else:
-      self.gestureMode = (msg.data == 1)
+
+    elif msg.data == 1: # ON
+      self.trajectory.append([self.device_pos[1], self.device_pos[2]]) # とりあえずy-zで
+
+    self.gestureMode = (msg.data == 1)
+    print(self.gestureMode)
 
   # トリガーのイベント (EV_PUSH, EV_DOUBLE, EV_TRIPLE, EV_LONG)
-  def trigger_event_cb(self, msg):
+  def trigger_button_event_cb(self, msg):
     # EV_DOUBLE: 2回押し -> POS/VEL切り替え
     if msg.data == "double":
-      if self.control_mode == "pos" and self.robot_hovering:
+      if self.control_mode == "pos":
         self.control_mode = "vel"
-      elif self.control_mode == "vel" and self.robot_hovering:
+      elif self.control_mode == "vel":
         self.control_mode = "pos"
 
       # 現在地を初期位置に
