@@ -226,14 +226,16 @@ class teleop_haptics_integration():
     if msg.data == 0: # OFF
       if self.gestureMode:
         pts = np.asarray(self.trajectory, dtype=np.float32)
-        shape, shape_info = self.classify_shape(pts)
+        # shape, shape_info = self.classify_shape(pts)
+        shape = self.classify_shape(pts)
 
         print(f"Detected shape: {shape}")
 
-        if shape == "circle": print(f"Radius of Circle: {shape_info}")
-        else: pass
+        # if shape == "circle": print(f"Radius of Circle: {shape_info}")
+        # else: pass
         
-        self.doTask(self, shape=shape, shape_info=shape_info)
+        # self.doTask(self, shape=shape, shape_info=shape_info)
+        self.doTask(shape=shape, shape_info=None)
 
       self.trajectory = []  # クリア
 
@@ -446,7 +448,9 @@ class teleop_haptics_integration():
 
   def doTask(self, shape="unknown", shape_info=None):
     if shape == "circle":
-      radius = shape_info
+      # radius = shape_info
+      radius = 1
+      print("Circle")
       self.circleTask(radius)
     elif shape == "line":
       self.lineTask()
