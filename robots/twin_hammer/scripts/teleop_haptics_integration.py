@@ -243,7 +243,7 @@ class teleop_haptics_integration():
   # トリガーのイベント (EV_PUSH, EV_DOUBLE, EV_TRIPLE, EV_LONG)
   def trigger_event_cb(self, msg):
     # EV_DOUBLE: 2回押し -> POS/VEL切り替え
-    if msg.data == "EV_DOUBLE":
+    if msg.data == "double":
       if self.control_mode == "pos" and self.robot_hovering:
         self.control_mode = "vel"
       elif self.control_mode == "vel" and self.robot_hovering:
@@ -260,7 +260,7 @@ class teleop_haptics_integration():
 
   def device_button_event_cb(self, msg):
     # EV_LONG: 長押し -> Twin-Hammerの起動シーケンス
-    if msg.data == "EV_LONG":
+    if msg.data == "long":
       # arm_offであればarm_onする
       if self.device_arm_off:
         self.device_start_pub.publish(Empty())
@@ -281,7 +281,7 @@ class teleop_haptics_integration():
 
   def robot_button_event_cb(self, msg):
     # EV_LONG: 長押し -> Robotの起動シーケンス
-    if msg.data == "EV_LONG":
+    if msg.data == "long":
       # arm_offであればarm_onする
       if self.robot_arm_off:
         self.robot_start_pub.publish(Empty())
