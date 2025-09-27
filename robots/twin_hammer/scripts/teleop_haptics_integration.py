@@ -59,8 +59,8 @@ class teleop_haptics_integration():
     self.trigger_event_sub = rospy.Subscriber('/twin_hammer/trigger_event', String, self.trigger_event_cb)
     self.device_button_state_sub = rospy.Subscriber('/twin_hammer/device_button_state', UInt8, self.device_button_state_cb)
     self.device_button_event_sub = rospy.Subscriber('/twin_hammer/device_button_event', String, self.device_button_event_cb)
-    self.robot_button_state_sub = rospy.Subscriber('/'+self.robot_name+'/robot_button_state', UInt8, self.robot_button_state_cb)
-    self.robot_button_event_sub = rospy.Subscriber('/'+self.robot_name+'/robot_button_event', String, self.robot_button_event_cb)
+    self.robot_button_state_sub = rospy.Subscriber('/twin_hammer/robot_button_state', UInt8, self.robot_button_state_cb)
+    self.robot_button_event_sub = rospy.Subscriber('/twin_hammer/robot_button_event', String, self.robot_button_event_cb)
 
     # Messages
     self.flight_nav = FlightNav()
