@@ -32,6 +32,14 @@ class teleop_haptics_integration():
     self.device_initialize_flag = False
     self.robot_initialize_flag = False
 
+    # 0066 Room Limitation
+    self.X_MIN = -1.3
+    self.X_MAX = 2.0
+    self.Y_MIN = -1.6
+    self.Y_MAX = 1.6
+    self.Z_MIN = 0.3
+    self.Z_MAX = 1.2
+
     # Publishers
     self.device_start_pub = rospy.Publisher('/twin_hammer/teleop_command/start', Empty, queue_size=1) # for arming
     self.device_takeoff_pub = rospy.Publisher('/twin_hammer/teleop_command/takeoff', Empty, queue_size=1) # for takeoff
@@ -121,7 +129,7 @@ class teleop_haptics_integration():
     self.k_att_diff = 1.0
 
     # Trajectory-Based Gesture Recognition
-    self.gestureMode = False # トリガー長押しで切り替え
+    self.gestureMode = False # トリガー長押し中True
     self.trajectory = []
 
   def device_flight_state_cb(self, msg):
@@ -386,18 +394,13 @@ class teleop_haptics_integration():
     period: 1周にかける秒数、hz: 制御周期
     """
     # 安全確認
-    if not self.robot_hovering or self.robot_pos is None or self.robot_att is None:
+    if not self.robot_hovering:
       rospy.logwarn("circleTask: robot not ready (hovering/pose).")
       return
 
     # 中心と高度・初期yawを固定
     cx, cy, cz = self.robot_pos[0], self.robot_pos[1], self.robot_pos[2]
     yaw0 = self.robot_att[2]
-
-    # メインループ側の目標計算を一時停止（上書き防止）
-    _dev_init, _rob_init = self.device_initialize_flag, self.robot_initialize_flag
-    self.device_initialize_flag = False
-    self.robot_initialize_flag = False
 
     # 一時的にposモードへ（復帰用に保存）
     _mode = self.control_mode
@@ -408,23 +411,20 @@ class teleop_haptics_integration():
 
     try:
       for k in range(total):
-        if not self.robot_hovering or self.robot_landing or rospy.is_shutdown():
-          break
-
         theta = 2.0 * math.pi * (float(k) / float(total))
-        x = cx + radius * math.cos(theta)
-        y = cy + radius * math.sin(theta)
-        z = cz  # 高度据え置き
+        target_x = cx + radius * math.cos(theta)
+        target_y = cy + radius * math.sin(theta)
+        target_z = cz  # 高度据え置き
 
         # 0066環境の安全範囲にクリップ（ファイルの下限上限に合わせる）
-        x = max(min(x, 2.0), -1.3)
-        y = max(min(y, 1.6), -1.6)
-        z = max(min(z, 1.2), 0.3)
+        target_x = max(min(target_x, 2.0), -1.3)
+        target_y = max(min(target_y, 1.6), -1.6)
+        target_z = max(min(target_z, 1.2), 0.3)
 
         # 目標セット（姿勢は水平・yaw据え置き）
-        self.flight_nav.target_pos_x = x
-        self.flight_nav.target_pos_y = y
-        self.flight_nav.target_pos_z = z
+        self.flight_nav.target_pos_x = target_x
+        self.flight_nav.target_pos_y = target_y
+        self.flight_nav.target_pos_z = target_z
         self.flight_nav.target_roll  = 0.0
         self.flight_nav.target_pitch = 0.0
         self.flight_nav.target_yaw   = yaw0
@@ -440,8 +440,6 @@ class teleop_haptics_integration():
     finally:
       # 元の状態に戻す
       self.control_mode = _mode
-      self.device_initialize_flag = _dev_init
-      self.robot_initialize_flag  = _rob_init
 
   def lineTask(self):
     pass
@@ -449,7 +447,7 @@ class teleop_haptics_integration():
   def doTask(self, shape="unknown", shape_info=None):
     if shape == "circle":
       # radius = shape_info
-      radius = 1
+      radius = 1.0
       print("Circle")
       self.circleTask(radius)
     elif shape == "line":
@@ -566,32 +564,31 @@ class teleop_haptics_integration():
 
         """ limitation of target_pos and att in 0066 """
         """ x """
-        if self.robot_pos[0] > 2.0:
-          target_pos[0] = 2.0
-          target_vel[0] = 2.0
-        if self.robot_pos[0] < -1.3:
-          target_pos[0] = -1.3
-          target_vel[0] = -1.3
+        if self.robot_pos[0] > self.X_MAX:
+          target_pos[0] = self.X_MAX
+          target_vel[0] = self.X_MAX
+        if self.robot_pos[0] < self.X_MIN:
+          target_pos[0] = self.X_MIN
+          target_vel[0] = self.X_MIN
         """ y """
-        if self.robot_pos[1] > 1.6:
-          target_pos[1] = 1.6
-          target_vel[1] = 1.6
-        if self.robot_pos[1] < -1.6:
-          target_pos[1] = -1.6
-          target_vel[1] = -1.6
+        if self.robot_pos[1] > self.Y_MAX:
+          target_pos[1] = self.Y_MAX
+          target_vel[1] = self.Y_MAX
+        if self.robot_pos[1] < self.Y_MIN:
+          target_pos[1] = self.Y_MIN
+          target_vel[1] = self.Y_MIN
         """ z """
-        if self.robot_pos[2] > 1.2:
-          target_pos[2] = 1.2
-          target_vel[2] = 1.2
-        if self.robot_pos[2] < 0.3:
-          target_pos[2] = 0.3
-          target_vel[2] = 0.3
+        if self.robot_pos[2] > self.Z_MAX:
+          target_pos[2] = self.Z_MAX
+          target_vel[2] = self.Z_MAX
+        if self.robot_pos[2] < self.Z_MIN:
+          target_pos[2] = self.Z_MIN
+          target_vel[2] = self.Z_MIN
         """ roll and pitch """
         limit_angle = 0.35
         for i in range(2):
           target_att[i] = max(min(target_att[i], limit_angle), -limit_angle)
           target_ang_vel[i] = max(min(target_ang_vel[i], limit_angle), -limit_angle)
-
 
         if self.control_mode == "pos":
           self.flight_nav.target_pos_x = target_pos[0]
