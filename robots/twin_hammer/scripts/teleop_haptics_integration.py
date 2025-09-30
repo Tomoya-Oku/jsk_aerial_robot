@@ -275,7 +275,7 @@ class teleop_haptics_integration():
       self.trajectory.append(self.device_pos)
 
     self.gestureMode = (msg.data == 1)
-    print(self.gestureMode)
+    # print(self.gestureMode)
 
   # トリガーのイベント (EV_PUSH, EV_DOUBLE, EV_TRIPLE, EV_LONG)
   def trigger_button_event_cb(self, msg):
@@ -344,15 +344,10 @@ class teleop_haptics_integration():
     cx, cy, cz = self.robot_pos[0], self.robot_pos[1], self.robot_pos[2]
     yaw0 = self.robot_att[2]
 
-    # 一時的にposモードへ（復帰用に保存）
-    _mode = self.control_mode
-    self.control_mode = "pos"
-
     rate = rospy.Rate(hz)
     total = max(1, int(period * hz))
 
-    try:
-      for k in range(total):
+    for k in range(total):
         theta = 2.0 * math.pi * (float(k) / float(total))
         target_x = cx + radius * math.cos(theta)
         target_y = cy + radius * math.sin(theta)
@@ -379,9 +374,6 @@ class teleop_haptics_integration():
         self.att_pub.publish(self.target_att_nav)
 
         rate.sleep()
-    finally:
-      # 元の状態に戻す
-      self.control_mode = _mode
 
   def lineTask(self):
     pass
