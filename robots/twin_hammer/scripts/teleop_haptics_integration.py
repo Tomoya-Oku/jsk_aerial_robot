@@ -11,7 +11,8 @@ from aerial_robot_msgs.msg import FlightNav
 from spinal.msg import DesireCoord
 from geometry_msgs.msg import PoseStamped, WrenchStamped, Vector3Stamped
 from scipy.spatial.transform import Rotation as R
-import Trajec
+from traj_recognition import Trajectory_Based_Gesture_Recognition
+from traj_recognition import Shape
 
 def exponential(x, base, k_exp):
   return pow(x, base) * k_exp
@@ -130,8 +131,8 @@ class teleop_haptics_integration():
     self.k_att_diff = 1.0
 
     # Trajectory-Based Gesture Recognition
+    self.tbgr = Trajectory_Based_Gesture_Recognition()
     self.gestureMode = False # トリガー長押し中True
-    self.trajectory = []
 
   # 現在地を初期位置に
   def resetInitPos(self):
@@ -241,38 +242,37 @@ class teleop_haptics_integration():
   def trigger_button_state_cb(self, msg):
     if msg.data == 0: # OFF
       if self.gestureMode:
-        pts = np.asarray(self.trajectory, dtype=np.float32)
-        shape = tr.classify_shape(pts)
+        shape = self.tbgr.classify_shape_3d()
         print(f"Detected shape: {shape}")
 
-        if shape == tr.Shape.UNKNOWN:
+        if shape == Shape.UNKNOWN:
           pass
-        elif shape == tr.Shape.LINE_HORIZONTAL_LEFT_TO_RIGHT:
+        elif shape == Shape.LINE_HORIZONTAL_LEFT_TO_RIGHT:
           pass
-        elif shape == tr.Shape.LINE_HORIZONTAL_RIGHT_TO_LEFT:
+        elif shape == Shape.LINE_HORIZONTAL_RIGHT_TO_LEFT:
           pass
-        elif shape == tr.Shape.LINE_VERTICAL_BOTTOM_TO_TOP:
+        elif shape == Shape.LINE_VERTICAL_BOTTOM_TO_TOP:
           pass
-        elif shape == tr.Shape.LINE_VERTICAL_TOP_TO_BOTTOM:
+        elif shape == Shape.LINE_VERTICAL_TOP_TO_BOTTOM:
           pass
-        elif shape == tr.Shape.CIRCLE_CLOCKWISE:
-          self.circleTask(self, radius=1.0, period=8.0, hz=40)
-        elif shape == tr.Shape.CIRCLE_COUNTER_CLOCKWISE:
-          self.circleTask(self, radius=1.0, period=8.0, hz=40)
-        elif shape == tr.Shape.TRIANGLE_CLOCKWISE:
+        elif shape == Shape.CIRCLE_CLOCKWISE:
+          self.circleTask(radius=1.0, period=8.0, hz=40)
+        elif shape == Shape.CIRCLE_COUNTER_CLOCKWISE:
+          self.circleTask(radius=1.0, period=8.0, hz=40)
+        elif shape == Shape.TRIANGLE_CLOCKWISE:
           pass
-        elif shape == tr.Shape.TRIANGLE_COUNTER_CLOCKWISE:
+        elif shape == Shape.TRIANGLE_COUNTER_CLOCKWISE:
           pass
-        elif shape == tr.Shape.RECTANGLE_CLOCKWISE:
+        elif shape == Shape.RECTANGLE_CLOCKWISE:
           pass
-        elif shape == tr.Shape.RECTANGLE_COUNTER_CLOCKWISE:
+        elif shape == Shape.RECTANGLE_COUNTER_CLOCKWISE:
           pass
       
       self.resetInitPos()
-      self.trajectory = []  # クリア
+      self.tbgr.trajectory = []
 
     elif msg.data == 1: # ON
-      self.trajectory.append(self.device_pos)
+      self.tbgr.trajectory.append(self.device_pos)
 
     self.gestureMode = (msg.data == 1)
     # print(self.gestureMode)

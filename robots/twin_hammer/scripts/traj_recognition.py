@@ -22,11 +22,17 @@ class Shape(Enum):
 
 class Trajectory_Based_Gesture_Recognition():
 
-    def polygon_signed_area(poly_uv: np.ndarray) -> float:
+    def __init__(self):
+        self.trajectory = []
+
+    def saveTrajectory(self):
+        pass
+
+    def polygon_signed_area(self, poly_uv: np.ndarray) -> float:
         u, v = poly_uv[:, 0], poly_uv[:, 1]
         return 0.5 * np.sum(u * np.roll(v, -1) - v * np.roll(u, -1))
 
-    def flip_rotation(shape: Shape) -> Shape:
+    def flip_rotation(self, shape: Shape) -> Shape:
         mapping = {
             Shape.CIRCLE_CLOCKWISE: Shape.CIRCLE_COUNTER_CLOCKWISE,
             Shape.CIRCLE_COUNTER_CLOCKWISE: Shape.CIRCLE_CLOCKWISE,
@@ -155,7 +161,7 @@ class Trajectory_Based_Gesture_Recognition():
 
     # --------- 3D → 2Dラッパ（PCA基底） ---------
 
-    def fit_plane_pca(P: np.ndarray):
+    def fit_plane_pca(self, P: np.ndarray):
         assert P.ndim == 2 and P.shape[1] == 3 and len(P) >= 3
         o = P.mean(axis=0)
         X = P - o
@@ -167,20 +173,20 @@ class Trajectory_Based_Gesture_Recognition():
         v = np.cross(w, u); v /= (np.linalg.norm(v) + 1e-12)
         return o, u, v, w, evals
 
-    def project_to_plane(P: np.ndarray, o: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
+    def project_to_plane(self, P: np.ndarray, o: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
         X = P - o
         U = X @ u
         V = X @ v
         return np.c_[U, V].astype(np.float32)
 
-    def rotation_sign_3d(P: np.ndarray, w: np.ndarray) -> int:
+    def rotation_sign_3d(self, P: np.ndarray, w: np.ndarray) -> int:
         if len(P) < 3:
             return 0
         Q = np.roll(P, -1, axis=0)
         A = 0.5 * np.sum(np.cross(P, Q), axis=0)
         return int(np.sign(A @ w))
 
-    def planarity_and_line_checks(P: np.ndarray, evals: np.ndarray, planarity_tau=1e-3, line_tau=1e-3):
+    def planarity_and_line_checks(self, P: np.ndarray, evals: np.ndarray, planarity_tau=1e-3, line_tau=1e-3):
         mu = P.mean(axis=0)
         rms = np.sqrt(np.mean(np.sum((P - mu)**2, axis=1)))
         scale = max(rms, 1e-6)
@@ -191,8 +197,8 @@ class Trajectory_Based_Gesture_Recognition():
             return "line"
         return "ok"
 
-    def classify_shape_3d(self, P_xyz: np.ndarray, angle_tol_rad=np.deg2rad(15)) -> Shape:
-        P = np.asarray(P_xyz, dtype=np.float64)
+    def classify_shape_3d(self, angle_tol_rad=np.deg2rad(15)) -> Shape:
+        P = np.asarray(self.trajectory, dtype=np.float64)
         if P.ndim != 2 or P.shape[1] != 3 or len(P) < 3:
             return Shape.UNKNOWN
 
