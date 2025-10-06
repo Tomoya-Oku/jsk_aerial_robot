@@ -11,6 +11,7 @@ from aerial_robot_msgs.msg import FlightNav
 from spinal.msg import DesireCoord
 from geometry_msgs.msg import PoseStamped, WrenchStamped, Vector3Stamped
 from scipy.spatial.transform import Rotation as R
+import traj_recognition as tr
 
 def exponential(x, base, k_exp):
   return pow(x, base) * k_exp
@@ -132,6 +133,13 @@ class teleop_haptics_integration():
     self.gestureMode = False # トリガー長押し中True
     self.trajectory = []
 
+  # 現在地を初期位置に
+  def resetInitPos(self):
+    self.robot_init_pos = self.robot_pos
+    self.robot_init_att = self.robot_att
+    self.device_init_pos = self.device_pos
+    self.device_init_att = self.device_att
+
   def device_flight_state_cb(self, msg):
     # aerial_robot_base/flight_navigaton.h 参照
     if msg.data == 2:
@@ -234,21 +242,37 @@ class teleop_haptics_integration():
     if msg.data == 0: # OFF
       if self.gestureMode:
         pts = np.asarray(self.trajectory, dtype=np.float32)
-        # shape, shape_info = self.classify_shape(pts)
-        shape = self.classify_shape(pts)
-
+        shape = tr.classify_shape(pts)
         print(f"Detected shape: {shape}")
 
-        # if shape == "circle": print(f"Radius of Circle: {shape_info}")
-        # else: pass
-        
-        # self.doTask(self, shape=shape, shape_info=shape_info)
-        self.doTask(shape=shape, shape_info=None)
-
+        if shape == tr.Shape.UNKNOWN:
+          pass
+        elif shape == tr.Shape.LINE_HORIZONTAL_LEFT_TO_RIGHT:
+          pass
+        elif shape == tr.Shape.LINE_HORIZONTAL_RIGHT_TO_LEFT:
+          pass
+        elif shape == tr.Shape.LINE_VERTICAL_BOTTOM_TO_TOP:
+          pass
+        elif shape == tr.Shape.LINE_VERTICAL_TOP_TO_BOTTOM:
+          pass
+        elif shape == tr.Shape.CIRCLE_CLOCKWISE:
+          self.circleTask(self, radius=1.0, period=8.0, hz=40)
+        elif shape == tr.Shape.CIRCLE_COUNTER_CLOCKWISE:
+          self.circleTask(self, radius=1.0, period=8.0, hz=40)
+        elif shape == tr.Shape.TRIANGLE_CLOCKWISE:
+          pass
+        elif shape == tr.Shape.TRIANGLE_COUNTER_CLOCKWISE:
+          pass
+        elif shape == tr.Shape.RECTANGLE_CLOCKWISE:
+          pass
+        elif shape == tr.Shape.RECTANGLE_COUNTER_CLOCKWISE:
+          pass
+      
+      self.resetInitPos()
       self.trajectory = []  # クリア
 
     elif msg.data == 1: # ON
-      self.trajectory.append([self.device_pos[1], self.device_pos[2]]) # とりあえずy-zで
+      self.trajectory.append(self.device_pos)
 
     self.gestureMode = (msg.data == 1)
     print(self.gestureMode)
@@ -262,11 +286,7 @@ class teleop_haptics_integration():
       elif self.control_mode == "vel":
         self.control_mode = "pos"
 
-      # 現在地を初期位置に
-      self.robot_init_pos = self.robot_pos
-      self.robot_init_att = self.robot_att
-      self.device_init_pos = self.device_pos
-      self.device_init_att = self.device_att
+      self.resetInitPos()
 
   def device_button_state_cb(self, msg):
     pass
@@ -309,84 +329,6 @@ class teleop_haptics_integration():
         print(f"[{self.robot_name}] Send land command")
       else:
         pass
-
-  def polygon_signed_area(poly_yz: np.ndarray) -> float:
-    """poly: (M,2) CCW>0, CW<0  （y→x, z→y とみなす）"""
-    y = poly_yz[:,0]; z = poly_yz[:,1]
-    return 0.5 * np.sum(y*np.roll(z,-1) - z*np.roll(y,-1))
-
-  def classify_shape(self, points: np.ndarray) -> str:
-    pts = np.asarray(points, dtype=np.float32)
-    if pts.ndim != 2 or pts.shape[1] != 2 or len(pts) < 3:
-        return "Unknown"
-
-    v = np.diff(pts, axis=0)
-    d = pts[-1] - pts[0]                       # (dy, dz)
-    cross = v[:-1,0]*v[1:,1] - v[:-1,1]*v[1:,0]
-    rot_sign = np.sign(np.sum(cross))          # -1:右回り, +1:左回り
-
-    # 直線性
-    c = pts - pts.mean(axis=0)
-    cov = np.cov(c.T)
-    eigval, _ = np.linalg.eigh(cov)
-    line_ratio = eigval[0] / max(eigval[1], 1e-12)
-
-    # 形状量
-    cnt = pts.reshape(-1,1,2)
-    hull = cv2.convexHull(cnt)
-    peri = cv2.arcLength(hull, True)
-    area = abs(cv2.contourArea(hull))
-    circularity = 4.0*np.pi*area/(peri*peri + 1e-12)
-
-    # 1) 直線
-    LINE_THINNESS = 0.02
-    ANGLE_TOL = 15*np.pi/180
-    if line_ratio < LINE_THINNESS:
-        ang = abs(np.arctan2(d[1], d[0]))
-        if ang <= ANGLE_TOL:
-            return "Horizontal Line (Left to Right)" if d[0] > 0 else "Horizontal Line (Right to Left)"
-        if abs(ang - np.pi/2) <= ANGLE_TOL:
-            return "Vertical Line (Bottom to Top)" if d[1] > 0 else "Vertical Line (Top to Bottom)"
-        return "Unknown"
-
-    # 2) 円
-    if circularity > 0.80 and len(pts) >= 6:
-        Y, Z = pts[:,0], pts[:,1]
-        A = np.c_[2*Y, 2*Z, np.ones_like(Y)]
-        b = Y**2 + Z**2
-        try:
-            cy, cz, c0 = np.linalg.lstsq(A, b, rcond=None)[0]
-            r = np.sqrt(max(c0 + cy**2 + cz**2, 1e-12))
-            radial = np.sqrt((Y-cy)**2 + (Z-cz)**2)
-            if r > 1e-6 and np.std(radial)/r < 0.15:
-                if rot_sign < 0:  return "Circle (Clockwise)"
-                if rot_sign > 0:  return "Circle (Counter-Clockwise)"
-        except np.linalg.LinAlgError:
-            pass
-
-    # 3) 多角形（3 or 4）
-    eps = 0.02 * peri
-    approx = cv2.approxPolyDP(hull, eps, True)
-    K = len(approx)
-
-    def by_rot(base):
-        if rot_sign < 0:  return f"{base} (Clockwise)"
-        if rot_sign > 0:  return f"{base} (Counter-Clockwise)"
-        s = self.polygon_signed_area(hull[:,0,:])
-        return f"{base} (Counter-Clockwise)" if s > 0 else f"{base} (Clockwise)"
-
-    if K == 3:
-        tri = approx[:,0,:].astype(np.float32)
-        z = tri[:,1]
-        i_top = int(np.argmax(z))
-        i_bottom = int(np.argmin(z))
-        base = "Triangle" if (i_top != i_bottom and z[i_top]-np.median(z) > np.median(z)-z[i_bottom]) else "Inverted Triangle"
-        return by_rot(base)
-
-    if K == 4:
-        return by_rot("Rectangle")
-
-    return "Unknown"
   
   def circleTask(self, radius=1.0, period=8.0, hz=40):
     """
@@ -417,9 +359,9 @@ class teleop_haptics_integration():
         target_z = cz  # 高度据え置き
 
         # 0066環境の安全範囲にクリップ（ファイルの下限上限に合わせる）
-        target_x = max(min(target_x, 2.0), -1.3)
-        target_y = max(min(target_y, 1.6), -1.6)
-        target_z = max(min(target_z, 1.2), 0.3)
+        target_x = max(min(target_x, self.X_MAX), self.X_MIN)
+        target_y = max(min(target_y, self.Y_MAX), self.Y_MIN)
+        target_z = max(min(target_z, self.Z_MAX), self.Z_MIN)
 
         # 目標セット（姿勢は水平・yaw据え置き）
         self.flight_nav.target_pos_x = target_x
@@ -443,17 +385,6 @@ class teleop_haptics_integration():
 
   def lineTask(self):
     pass
-
-  def doTask(self, shape="unknown", shape_info=None):
-    if shape == "circle":
-      # radius = shape_info
-      radius = 1.0
-      print("Circle")
-      self.circleTask(radius)
-    elif shape == "line":
-      self.lineTask()
-    else:
-      pass
 
   def main(self):
     r = rospy.Rate(40)
