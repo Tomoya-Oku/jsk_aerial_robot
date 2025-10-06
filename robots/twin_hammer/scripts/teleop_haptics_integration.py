@@ -11,7 +11,7 @@ from aerial_robot_msgs.msg import FlightNav
 from spinal.msg import DesireCoord
 from geometry_msgs.msg import PoseStamped, WrenchStamped, Vector3Stamped
 from scipy.spatial.transform import Rotation as R
-import traj_recognition as tr
+import Trajec
 
 def exponential(x, base, k_exp):
   return pow(x, base) * k_exp
