@@ -143,39 +143,41 @@ class teleop_haptics_integration():
 
   def device_flight_state_cb(self, msg):
     # aerial_robot_base/flight_navigaton.h 参照
-    if msg.data == 2:
-      self.device_arm_off = False
-      self.device_arm_on = True
-    elif msg.data == 3:
-      self.device_arm_on = False
-      self.device_takeoff = True
-    elif msg.data == 5:
-      self.device_takeoff = False
-      self.device_hovering = True
-    elif msg.data == 4:
-      self.device_hovering = False
-      self.device_landing = True
-    elif msg.data == 6:
-      self.device_landing = False
-      self.device_stop = True
+    # if msg.data == 2:
+    #   self.device_arm_off = False
+    #   self.device_arm_on = True
+    # elif msg.data == 3:
+    #   self.device_arm_on = False
+    #   self.device_takeoff = True
+    # elif msg.data == 5:
+    #   self.device_takeoff = False
+    #   self.device_hovering = True
+    # elif msg.data == 4:
+    #   self.device_hovering = False
+    #   self.device_landing = True
+    # elif msg.data == 6:
+    #   self.device_landing = False
+    #   self.device_stop = True
+    pass
 
   def robot_flight_state_cb(self, msg):
     # aerial_robot_base/flight_navigaton.h 参照
-    if msg.data == 2:
-      self.robot_arm_off = False
-      self.robot_arm_on = True
-    elif msg.data == 3:
-      self.robot_arm_on = False
-      self.robot_takeoff = True
-    elif msg.data == 5:
-      self.robot_takeoff = False
-      self.robot_hovering = True
-    elif msg.data == 4:
-      self.robot_hovering = False
-      self.robot_landing = True
-    elif msg.data == 6:
-      self.robot_landing = False
-      self.robot_stop = True
+    # if msg.data == 2:
+    #   self.robot_arm_off = False
+    #   self.robot_arm_on = True
+    # elif msg.data == 3:
+    #   self.robot_arm_on = False
+    #   self.robot_takeoff = True
+    # elif msg.data == 5:
+    #   self.robot_takeoff = False
+    #   self.robot_hovering = True
+    # elif msg.data == 4:
+    #   self.robot_hovering = False
+    #   self.robot_landing = True
+    # elif msg.data == 6:
+    #   self.robot_landing = False
+    #   self.robot_stop = True
+    pass
 
   def device_pos_cb(self, msg):
     self.device_pos = [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z]
@@ -213,13 +215,14 @@ class teleop_haptics_integration():
       self.robot_initialize_flag = True
 
   def teleop_mode_cb(self, msg):
-    self.wait_flag = False
-    self.device_initialize_flag = False
-    self.robot_initialize_flag = False
-    if msg.data == "pos":
-      self.control_mode = "pos"
-    if msg.data == "vel":
-      self.control_mode = "vel"
+    pass
+    # self.wait_flag = False
+    # self.device_initialize_flag = False
+    # self.robot_initialize_flag = False
+    # if msg.data == "pos":
+    #   self.control_mode = "pos"
+    # if msg.data == "vel":
+    #   self.control_mode = "vel"
 
   def robot_wrench_cb(self, msg):
     fx = msg.wrench.force.z
