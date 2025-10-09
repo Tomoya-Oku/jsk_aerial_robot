@@ -82,48 +82,19 @@ class Trajectory_Based_Gesture_Recognition():
     def lineTask(self):
         pass
 
-def polygon_signed_area(poly_uv: np.ndarray) -> float:
-    u, v = poly_uv[:, 0], poly_uv[:, 1]
-    return 0.5 * np.sum(u * np.roll(v, -1) - v * np.roll(u, -1))
+class Trajectory_Based_Gesture_Recognition():
 
-def flip_rotation(shape: Shape) -> Shape:
-    mapping = {
-        Shape.CIRCLE_CLOCKWISE: Shape.CIRCLE_COUNTER_CLOCKWISE,
-        Shape.CIRCLE_COUNTER_CLOCKWISE: Shape.CIRCLE_CLOCKWISE,
-        Shape.TRIANGLE_CLOCKWISE: Shape.TRIANGLE_COUNTER_CLOCKWISE,
-        Shape.TRIANGLE_COUNTER_CLOCKWISE: Shape.TRIANGLE_CLOCKWISE,
-        Shape.TRIANGLE_INVERTED_CLOCKWISE: Shape.TRIANGLE_INVERTED_COUNTER_CLOCKWISE,
-        Shape.TRIANGLE_INVERTED_COUNTER_CLOCKWISE: Shape.TRIANGLE_INVERTED_CLOCKWISE,
-        Shape.RECTANGLE_CLOCKWISE: Shape.RECTANGLE_COUNTER_CLOCKWISE,
-        Shape.RECTANGLE_COUNTER_CLOCKWISE: Shape.RECTANGLE_CLOCKWISE,
-    }
-    return mapping.get(shape, shape)
+    def __init__(self):
+        self.trajectory = []
 
-def apply_rot_override(shape: Shape, rot_override: int) -> Shape:
-    """rot_override: -1(CW)/0/+1(CCW)。三角（通常/逆）、円、四角で回転だけを上書き。"""
-    if rot_override == 0:
-        return shape
-    rot_targets_ccw = {
-        Shape.CIRCLE_COUNTER_CLOCKWISE,
-        Shape.TRIANGLE_COUNTER_CLOCKWISE,
-        Shape.TRIANGLE_INVERTED_COUNTER_CLOCKWISE,
-        Shape.RECTANGLE_COUNTER_CLOCKWISE,
-    }
-    rot_targets_cw = {
-        Shape.CIRCLE_CLOCKWISE,
-        Shape.TRIANGLE_CLOCKWISE,
-        Shape.TRIANGLE_INVERTED_CLOCKWISE,
-        Shape.RECTANGLE_CLOCKWISE,
-    }
-    # 回転方向付きでない列挙子はそのまま
-    if shape not in rot_targets_ccw | rot_targets_cw:
-        return shape
+    def saveTrajectory(self):
+        pass
 
-    want_ccw = (rot_override > 0)
-    is_ccw = shape in rot_targets_ccw
-    return shape if want_ccw == is_ccw else flip_rotation(shape)
+    def polygon_signed_area(self, poly_uv: np.ndarray) -> float:
+        u, v = poly_uv[:, 0], poly_uv[:, 1]
+        return 0.5 * np.sum(u * np.roll(v, -1) - v * np.roll(u, -1))
 
-def classify_shape_2d(points: np.ndarray) -> Shape:
+def classify_shape_2d(self, points: np.ndarray) -> Shape:
     pts = np.asarray(points, dtype=np.float32)
     if pts.ndim != 2 or pts.shape[1] != 2 or len(pts) < 3:
         return Shape.UNKNOWN
@@ -175,7 +146,7 @@ def classify_shape_2d(points: np.ndarray) -> Shape:
             radial = np.sqrt((U - cu)**2 + (V - cv)**2)
             if r > 1e-6 and np.std(radial) / r < 0.15:
                 if rot_sign == 0:
-                    s = polygon_signed_area(hull[:, 0, :])
+                    s = self.polygon_signed_area(hull[:, 0, :])
                     rot_sign = np.sign(s)
                 if rot_sign < 0:  return Shape.CIRCLE_CLOCKWISE
                 if rot_sign > 0:  return Shape.CIRCLE_COUNTER_CLOCKWISE
@@ -188,7 +159,7 @@ def classify_shape_2d(points: np.ndarray) -> Shape:
     K = len(approx)
 
     if rot_sign == 0:
-        s = polygon_signed_area(hull[:, 0, :])
+        s = self.polygon_signed_area(hull[:, 0, :])
         rot_sign = np.sign(s)
 
     if K == 3:
@@ -211,7 +182,9 @@ def classify_shape_2d(points: np.ndarray) -> Shape:
 
     return Shape.UNKNOWN
 
-def fit_plane_pca(P: np.ndarray):
+# --------- 3D → 2Dラッパ（PCA基底） ---------
+
+def fit_plane_pca(self, P: np.ndarray):
     assert P.ndim == 2 and P.shape[1] == 3 and len(P) >= 3
     o = P.mean(axis=0)
     X = P - o
@@ -223,20 +196,20 @@ def fit_plane_pca(P: np.ndarray):
     v = np.cross(w, u); v /= (np.linalg.norm(v) + 1e-12)
     return o, u, v, w, evals
 
-def project_to_plane(P: np.ndarray, o: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
+def project_to_plane(self, P: np.ndarray, o: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     X = P - o
     U = X @ u
     V = X @ v
     return np.c_[U, V].astype(np.float32)
 
-def rotation_sign_3d(P: np.ndarray, w: np.ndarray) -> int:
+def rotation_sign_3d(self, P: np.ndarray, w: np.ndarray) -> int:
     if len(P) < 3:
         return 0
     Q = np.roll(P, -1, axis=0)
     A = 0.5 * np.sum(np.cross(P, Q), axis=0)
     return int(np.sign(A @ w))
 
-def planarity_and_line_checks(P: np.ndarray, evals: np.ndarray, planarity_tau=1e-3, line_tau=1e-3):
+def planarity_and_line_checks(self, P: np.ndarray, evals: np.ndarray, planarity_tau=1e-3, line_tau=1e-3):
     mu = P.mean(axis=0)
     rms = np.sqrt(np.mean(np.sum((P - mu)**2, axis=1)))
     scale = max(rms, 1e-6)
@@ -247,17 +220,17 @@ def planarity_and_line_checks(P: np.ndarray, evals: np.ndarray, planarity_tau=1e
         return "line"
     return "ok"
 
-def classify_shape_3d(P_xyz: np.ndarray, angle_tol_rad=np.deg2rad(15)) -> Shape:
-    P = np.asarray(P_xyz, dtype=np.float64)
+def classify_shape_3d(self, angle_tol_rad=np.deg2rad(15)) -> Shape:
+    P = np.asarray(self.trajectory, dtype=np.float64)
     if P.ndim != 2 or P.shape[1] != 3 or len(P) < 3:
         return Shape.UNKNOWN
 
-    o, u, v, w, evals = fit_plane_pca(P)
-    status = planarity_and_line_checks(P, evals)
+    o, u, v, w, evals = self.fit_plane_pca(P)
+    status = self.planarity_and_line_checks(P, evals)
     if status == "nonplanar":
         return Shape.UNKNOWN
 
-    UV = project_to_plane(P, o, u, v)
+    UV = self.project_to_plane(P, o, u, v)
 
     if status == "line":
         d = UV[-1] - UV[0]
@@ -269,9 +242,9 @@ def classify_shape_3d(P_xyz: np.ndarray, angle_tol_rad=np.deg2rad(15)) -> Shape:
         return Shape.LINE_DIAGONAL  # ← 斜め直線を返す
 
     # 2D分類 → 3Dの回転符号で最終上書き
-    shape2d = classify_shape_2d(UV)
-    rot3d = rotation_sign_3d(P, w)
-    return apply_rot_override(shape2d, rot3d)
+    shape2d = self.classify_shape_2d(UV)
+    rot3d = self.rotation_sign_3d(P, w)
+    return self.apply_rot_override(shape2d, rot3d)
 
 if __name__ == "__main__":
   rospy.init_node("gesture")
