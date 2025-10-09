@@ -1,17 +1,26 @@
 #!/usr/bin/env python
 
 import rospy
-import time
 import math
 import numpy as np
-import cv2
-import tf.transformations as tf
-from std_msgs.msg import UInt8, String, Int8, Empty
+from std_msgs.msg import UInt8, String, Empty
 from aerial_robot_msgs.msg import FlightNav
-from spinal.msg import DesireCoord
 from geometry_msgs.msg import PoseStamped, WrenchStamped, Vector3Stamped
 from scipy.spatial.transform import Rotation as R
-import traj_recognition as tr
+from enum import Enum
+from gesture import Shape
+
+# Constant Value: 0066 Room Limitation
+X_MIN, X_MAX = -1.3, 2.0
+Y_MIN, Y_MAX = -1.6, 1.6
+Z_MIN, Z_MAX = 0.3, 1.2 
+
+vel_mode_pos_thre = [0.1,0.1,0.1]
+vel_mode_att_thre = [0.05,0.05,0.05]
+
+k_force = 1.5
+k_torque = 1.0
+log_base = 1.45
 
 def exponential(x, base, k_exp):
   return pow(x, base) * k_exp
@@ -19,37 +28,44 @@ def exponential(x, base, k_exp):
 def logarithm(x, base, k_log):
   return math.log(x, base) * k_log
 
-class teleop_haptics_integration():
+# REF: aerial_robot_control/flight_navigation.h
+class FlightState(Enum):
+  ARM_OFF_STATE = 0,
+  START_STATE   = 1,
+  ARM_ON_STATE  = 2,
+  TAKEOFF_STATE = 3,
+  LAND_STATE    = 4,
+  HOVER_STATE   = 5,
+  STOP_STATE    = 6
+
+class ControlMode(Enum):
+  POS = 0,
+  VEL = 1
+
+class Integration():
 
   def __init__(self):
 
-    # Parameters
+    # Args
     self.robot_name = rospy.get_param("~robot_name", "gimbalrotor")
-    self.control_mode = rospy.get_param("~control_mode", "pos") # "pos" or "vel" -> switch with trigger
+    self.control_mode = rospy.get_param("~control_mode", ControlMode.POS) # "pos" or "vel" -> switch with trigger
     self.convert_method = rospy.get_param("~convert_method", "log") # "prop" or "exp" or "log"
     self.frame = rospy.get_param("~frame", "local") # "local" or "world"
     self.feedback_from_ang = rospy.get_param("~feedback_from_ang", "False")
 
+    # Flags
     self.device_initialize_flag = False
     self.robot_initialize_flag = False
-
-    # 0066 Room Limitation
-    self.X_MIN = -1.3
-    self.X_MAX = 2.0
-    self.Y_MIN = -1.6
-    self.Y_MAX = 1.6
-    self.Z_MIN = 0.3
-    self.Z_MAX = 1.2
+    self.wait_flag = False # 起動後待機 -> 待機後True
+    self.gestureMode = False # トリガー長押し中True
 
     # Publishers
     self.device_start_pub = rospy.Publisher('/twin_hammer/teleop_command/start', Empty, queue_size=1) # for arming
     self.device_takeoff_pub = rospy.Publisher('/twin_hammer/teleop_command/takeoff', Empty, queue_size=1) # for takeoff
     self.device_land_pub = rospy.Publisher('/twin_hammer/teleop_command/land', Empty, queue_size=1) # for landing
-
     self.robot_start_pub = rospy.Publisher('/' + self.robot_name + '/teleop_command/start', Empty, queue_size=1) # for arming
     self.robot_takeoff_pub = rospy.Publisher('/' + self.robot_name + '/teleop_command/takeoff', Empty, queue_size=1) # for takeoff
     self.robot_land_pub = rospy.Publisher('/' + self.robot_name + '/teleop_command/land', Empty, queue_size=1) # for landing
-    
     self.nav_pub = rospy.Publisher('/'+self.robot_name+'/uav/nav', FlightNav, queue_size=1)
     self.att_pub = rospy.Publisher('/'+self.robot_name+'/final_target_baselink_rpy', Vector3Stamped, queue_size=1)
     self.feedback_pub = rospy.Publisher('/twin_hammer/haptics_wrench', WrenchStamped, queue_size=1)
@@ -60,16 +76,7 @@ class teleop_haptics_integration():
     self.device_pos_sub = rospy.Subscriber('/twin_hammer/mocap/pose', PoseStamped, self.device_pos_cb)
     self.robot_pos_sub = rospy.Subscriber('/'+self.robot_name+'/mocap/pose', PoseStamped, self.robot_pos_cb)
     self.teleop_mode_sub = rospy.Subscriber('/twin_hammer/teleop_mode', String, self.teleop_mode_cb)
-    self.robot_wrench_sub = rospy.Subscriber('/cfs/data', WrenchStamped, self.robot_wrench_cb)
-
-    # State -> Raw Data (0/1)
-    # Event -> Judged Data (PUSH / DOUBLE / LONG etc.)
-    self.trigger_state_sub = rospy.Subscriber('/twin_hammer/trigger_button_state', UInt8, self.trigger_button_state_cb)
-    self.trigger_event_sub = rospy.Subscriber('/twin_hammer/trigger_button_event', String, self.trigger_button_event_cb)
-    self.device_button_state_sub = rospy.Subscriber('/twin_hammer/device_button_state', UInt8, self.device_button_state_cb)
-    self.device_button_event_sub = rospy.Subscriber('/twin_hammer/device_button_event', String, self.device_button_event_cb)
-    self.robot_button_state_sub = rospy.Subscriber('/twin_hammer/robot_button_state', UInt8, self.robot_button_state_cb)
-    self.robot_button_event_sub = rospy.Subscriber('/twin_hammer/robot_button_event', String, self.robot_button_event_cb)
+    self.gesture_sub = rospy.Subscriber('twin_hammer/gesture', Shape, self.gesture_cb)
 
     # Messages
     self.flight_nav = FlightNav()
@@ -83,22 +90,10 @@ class teleop_haptics_integration():
     self.haptics_wrench_msg = WrenchStamped()
 
     # States
-    self.device_arm_off = True
-    self.device_arm_on = False
-    self.device_takeoff = False
-    self.device_hovering = False
-    self.device_landing = False
-    self.device_stop = False
-
-    self.robot_arm_off = True
-    self.robot_arm_on = False
-    self.robot_takeoff = False
-    self.robot_hovering = False
-    self.robot_landing = False
-    self.robot_stop = False
+    self.robot_flight_state  = FlightState.ARM_OFF_STATE
+    self.device_flight_state = FlightState.ARM_OFF_STATE
 
     self.device_pos = [None]*3
-    self.device_pos_traj = []
     self.device_att = [None]*3
     self.robot_pos = [None]*3
     self.robot_att = [None]*3
@@ -111,14 +106,13 @@ class teleop_haptics_integration():
     self.device_att_unwrapped = [0.0]*3
     self.device_att_prev = [0.0]*3
 
-    self.wait_flag = False
+    # Scalign Parameters
     self.pos_scale = 1.0
     self.vel_scale = 0.3
     self.ang_vel_scale = 0.1
     self.feedback_force_scale = 10.0
     self.feedback_torque_scale = 1.0
-    self.robot_wrench = [0.0]*6
-    self.filtered_robot_wrench_local = [0.0]*6
+    
     self.Ad_R_robot = np.identity(6)
     self.Ad_R_inv_device = np.identity(6)
     self.moment_arm = np.array([-(0.044 + 0.025), 0, 0])
@@ -129,52 +123,19 @@ class teleop_haptics_integration():
     self.k_log = 1.0
     self.k_att_diff = 1.0
 
-    # Trajectory-Based Gesture Recognition
-    self.gestureMode = False # トリガー長押し中True
-    self.trajectory = []
-
-  # 現在地を初期位置に
-  def resetInitPos(self):
+  def init_robot_pose(self):
     self.robot_init_pos = self.robot_pos
     self.robot_init_att = self.robot_att
+
+  def init_device_pose(self):
     self.device_init_pos = self.device_pos
     self.device_init_att = self.device_att
 
   def device_flight_state_cb(self, msg):
-    # aerial_robot_base/flight_navigaton.h 参照
-    if msg.data == 2:
-      self.device_arm_off = False
-      self.device_arm_on = True
-    elif msg.data == 3:
-      self.device_arm_on = False
-      self.device_takeoff = True
-    elif msg.data == 5:
-      self.device_takeoff = False
-      self.device_hovering = True
-    elif msg.data == 4:
-      self.device_hovering = False
-      self.device_landing = True
-    elif msg.data == 6:
-      self.device_landing = False
-      self.device_stop = True
+    self.robot_flight_state = msg.data
 
   def robot_flight_state_cb(self, msg):
-    # aerial_robot_base/flight_navigaton.h 参照
-    if msg.data == 2:
-      self.robot_arm_off = False
-      self.robot_arm_on = True
-    elif msg.data == 3:
-      self.robot_arm_on = False
-      self.robot_takeoff = True
-    elif msg.data == 5:
-      self.robot_takeoff = False
-      self.robot_hovering = True
-    elif msg.data == 4:
-      self.robot_hovering = False
-      self.robot_landing = True
-    elif msg.data == 6:
-      self.robot_landing = False
-      self.robot_stop = True
+    self.device_flight_state = msg.data
 
   def device_pos_cb(self, msg):
     self.device_pos = [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z]
@@ -216,175 +177,12 @@ class teleop_haptics_integration():
     self.device_initialize_flag = False
     self.robot_initialize_flag = False
     if msg.data == "pos":
-      self.control_mode = "pos"
+      self.control_mode = ControlMode.POS
     if msg.data == "vel":
-      self.control_mode = "vel"
+      self.control_mode = ControlMode.VEL
 
-  def robot_wrench_cb(self, msg):
-    fx = msg.wrench.force.z
-    fy = msg.wrench.force.x
-    fz = msg.wrench.force.y
-    tx = msg.wrench.torque.z
-    ty = msg.wrench.torque.x
-    tz = msg.wrench.torque.y
-    wrench_local = [fx, fy, fz, tx, ty, tz]
-    delay_param = 0.05
-    for i in range(6):
-      self.filtered_robot_wrench_local[i] = (1 - delay_param) * self.filtered_robot_wrench_local[i] + delay_param * wrench_local[i]
-    wrench_world = np.dot(self.Ad_R_robot, self.filtered_robot_wrench_local)
-    if self.frame == "local":
-      self.robot_wrench = self.filtered_robot_wrench_local
-    else:
-      self.robot_wrench = wrench_world
-
-  # トリガーのON (1) / OFF (0) 生データ
-  def trigger_button_state_cb(self, msg):
-    if msg.data == 0: # OFF
-      if self.gestureMode:
-        pts = np.asarray(self.trajectory, dtype=np.float32)
-        shape = tr.classify_shape(pts)
-        print(f"Detected shape: {shape}")
-
-        if shape == tr.Shape.UNKNOWN:
-          pass
-        elif shape == tr.Shape.LINE_HORIZONTAL_LEFT_TO_RIGHT:
-          pass
-        elif shape == tr.Shape.LINE_HORIZONTAL_RIGHT_TO_LEFT:
-          pass
-        elif shape == tr.Shape.LINE_VERTICAL_BOTTOM_TO_TOP:
-          pass
-        elif shape == tr.Shape.LINE_VERTICAL_TOP_TO_BOTTOM:
-          pass
-        elif shape == tr.Shape.CIRCLE_CLOCKWISE:
-          self.circleTask(self, radius=1.0, period=8.0, hz=40)
-        elif shape == tr.Shape.CIRCLE_COUNTER_CLOCKWISE:
-          self.circleTask(self, radius=1.0, period=8.0, hz=40)
-        elif shape == tr.Shape.TRIANGLE_CLOCKWISE:
-          pass
-        elif shape == tr.Shape.TRIANGLE_COUNTER_CLOCKWISE:
-          pass
-        elif shape == tr.Shape.RECTANGLE_CLOCKWISE:
-          pass
-        elif shape == tr.Shape.RECTANGLE_COUNTER_CLOCKWISE:
-          pass
-      
-      self.resetInitPos()
-      self.trajectory = []  # クリア
-
-    elif msg.data == 1: # ON
-      self.trajectory.append(self.device_pos)
-
-    self.gestureMode = (msg.data == 1)
-    print(self.gestureMode)
-
-  # トリガーのイベント (EV_PUSH, EV_DOUBLE, EV_TRIPLE, EV_LONG)
-  def trigger_button_event_cb(self, msg):
-    # EV_DOUBLE: 2回押し -> POS/VEL切り替え
-    if msg.data == "double":
-      if self.control_mode == "pos":
-        self.control_mode = "vel"
-      elif self.control_mode == "vel":
-        self.control_mode = "pos"
-
-      self.resetInitPos()
-
-  def device_button_state_cb(self, msg):
-    pass
-
-  def device_button_event_cb(self, msg):
-    # EV_LONG: 長押し -> Twin-Hammerの起動シーケンス
-    if msg.data == "long":
-      # arm_offであればarm_onする
-      if self.device_arm_off:
-        self.device_start_pub.publish(Empty())
-        print("[Twin-Hammer] Send arming command")
-      # arm_onであればTakeoffする
-      elif self.device_arm_on:
-        self.device_takeoff_pub.publish(Empty())
-        print("[Twin-Hammer] Send takeoff command")
-      # Takeoff/Hovering中であればLandingする
-      elif self.device_takeoff or self.device_hovering:
-        self.device_land_pub.publish(Empty())
-        print("[Twin-Hammer] Send land command")
-      else:
-        pass
-
-  def robot_button_state_cb(self, msg):
-    pass
-
-  def robot_button_event_cb(self, msg):
-    # EV_LONG: 長押し -> Robotの起動シーケンス
-    if msg.data == "long":
-      # arm_offであればarm_onする
-      if self.robot_arm_off:
-        self.robot_start_pub.publish(Empty())
-        print(f"[{self.robot_name}] Send arming command")
-      # arm_onであればTakeoffする
-      elif self.robot_arm_on:
-        self.robot_takeoff_pub.publish(Empty())
-        print(f"[{self.robot_name}] Send takeoff command")
-      # Takeoff/Hovering中であればLandingする
-      elif self.robot_takeoff or self.robot_hovering:
-        self.robot_land_pub.publish(Empty())
-        print(f"[{self.robot_name}] Send land command")
-      else:
-        pass
-  
-  def circleTask(self, radius=1.0, period=8.0, hz=40):
-    """
-    現在位置(center)を中心に、zは据え置きで半径radiusの円を1周する。
-    period: 1周にかける秒数、hz: 制御周期
-    """
-    # 安全確認
-    if not self.robot_hovering:
-      rospy.logwarn("circleTask: robot not ready (hovering/pose).")
-      return
-
-    # 中心と高度・初期yawを固定
-    cx, cy, cz = self.robot_pos[0], self.robot_pos[1], self.robot_pos[2]
-    yaw0 = self.robot_att[2]
-
-    # 一時的にposモードへ（復帰用に保存）
-    _mode = self.control_mode
-    self.control_mode = "pos"
-
-    rate = rospy.Rate(hz)
-    total = max(1, int(period * hz))
-
-    try:
-      for k in range(total):
-        theta = 2.0 * math.pi * (float(k) / float(total))
-        target_x = cx + radius * math.cos(theta)
-        target_y = cy + radius * math.sin(theta)
-        target_z = cz  # 高度据え置き
-
-        # 0066環境の安全範囲にクリップ（ファイルの下限上限に合わせる）
-        target_x = max(min(target_x, self.X_MAX), self.X_MIN)
-        target_y = max(min(target_y, self.Y_MAX), self.Y_MIN)
-        target_z = max(min(target_z, self.Z_MAX), self.Z_MIN)
-
-        # 目標セット（姿勢は水平・yaw据え置き）
-        self.flight_nav.target_pos_x = target_x
-        self.flight_nav.target_pos_y = target_y
-        self.flight_nav.target_pos_z = target_z
-        self.flight_nav.target_roll  = 0.0
-        self.flight_nav.target_pitch = 0.0
-        self.flight_nav.target_yaw   = yaw0
-
-        self.target_att_nav.vector.x = 0.0
-        self.target_att_nav.vector.y = 0.0
-
-        # 即時送信（メインループと重なっても同値なのでOK）
-        self.nav_pub.publish(self.flight_nav)
-        self.att_pub.publish(self.target_att_nav)
-
-        rate.sleep()
-    finally:
-      # 元の状態に戻す
-      self.control_mode = _mode
-
-  def lineTask(self):
-    pass
+  def gesture_cb(self, msg):
+    print(Shape(msg.data))
 
   def main(self):
     r = rospy.Rate(40)
@@ -395,15 +193,14 @@ class teleop_haptics_integration():
       target_ang_vel = [0.0]*3
       feedback_wrench = [0.0]*6
 
-      if self.device_init_pos is None or not self.robot_hovering:
+      if self.device_init_pos is None or self.robot_flight_state != FlightState.HOVER_STATE:
         self.device_initialize_flag = False
-      if self.robot_init_pos is None or not self.robot_hovering:
+
+      if self.robot_init_pos is None or self.robot_flight_state != FlightState.HOVER_STATE:
         self.robot_initialize_flag = False
 
       if self.device_initialize_flag and self.robot_initialize_flag:
         """ calc target pos and vel """
-        vel_mode_pos_thre = [0.1,0.1,0.1]
-        vel_mode_att_thre = [0.05,0.05,0.05]
         for i in range(3):
           device_pos_diff = self.device_pos[i] - self.device_init_pos[i]
           # device_att_diff = self.device_att_unwrapped[i] - self.device_init_att[i]
@@ -414,25 +211,22 @@ class teleop_haptics_integration():
           target_ang_vel[i] = self.robot_att[i] + device_att_diff * self.ang_vel_scale
           """ position fix for vel mode """
           if abs(target_vel[i]-self.robot_pos[i]) < vel_mode_pos_thre[i]:
-            if self.robot_vel_mode_fix_pos[i] == None:
+            if self.robot_vel_mode_fix_pos[i] is None:
               self.robot_vel_mode_fix_pos[i] = self.robot_pos[i]
             target_vel[i] = self.robot_vel_mode_fix_pos[i]
           else:
             self.robot_vel_mode_fix_pos[i] = None
           if abs(target_ang_vel[i]-self.robot_att[i]) < vel_mode_att_thre[i]:
-            if self.robot_vel_mode_fix_att[i] == None:
+            if self.robot_vel_mode_fix_att[i] is None:
               self.robot_vel_mode_fix_att[i] = self.robot_att[i]
             target_ang_vel[i] = self.robot_vel_mode_fix_att[i]
           else:
             self.robot_vel_mode_fix_att[i] = None
-          if self.control_mode == "vel":
+          if self.control_mode == ControlMode.VEL:
             feedback_wrench[i] = - device_pos_diff * self.feedback_force_scale
             feedback_wrench[i+3] = - device_att_diff * self.feedback_torque_scale
 
         """ convert feedback wrench with log """
-        k_force = 1.5
-        k_torque = 1.0
-        log_base = 1.45
         for i in range(6):
           if feedback_wrench[i] >= 0:
             feedback_wrench[i] = logarithm(feedback_wrench[i]+1, log_base, k_force)
@@ -495,26 +289,26 @@ class teleop_haptics_integration():
 
         """ limitation of target_pos and att in 0066 """
         """ x """
-        if self.robot_pos[0] > self.X_MAX:
-          target_pos[0] = self.X_MAX
-          target_vel[0] = self.X_MAX
-        if self.robot_pos[0] < self.X_MIN:
-          target_pos[0] = self.X_MIN
-          target_vel[0] = self.X_MIN
+        if self.robot_pos[0] > X_MAX:
+          target_pos[0] = X_MAX
+          target_vel[0] = X_MAX
+        if self.robot_pos[0] < X_MIN:
+          target_pos[0] = X_MIN
+          target_vel[0] = X_MIN
         """ y """
-        if self.robot_pos[1] > self.Y_MAX:
-          target_pos[1] = self.Y_MAX
-          target_vel[1] = self.Y_MAX
-        if self.robot_pos[1] < self.Y_MIN:
-          target_pos[1] = self.Y_MIN
-          target_vel[1] = self.Y_MIN
+        if self.robot_pos[1] > Y_MAX:
+          target_pos[1] = Y_MAX
+          target_vel[1] = Y_MAX
+        if self.robot_pos[1] < Y_MIN:
+          target_pos[1] = Y_MIN
+          target_vel[1] = Y_MIN
         """ z """
-        if self.robot_pos[2] > self.Z_MAX:
-          target_pos[2] = self.Z_MAX
-          target_vel[2] = self.Z_MAX
-        if self.robot_pos[2] < self.Z_MIN:
-          target_pos[2] = self.Z_MIN
-          target_vel[2] = self.Z_MIN
+        if self.robot_pos[2] > Z_MAX:
+          target_pos[2] = Z_MAX
+          target_vel[2] = Z_MAX
+        if self.robot_pos[2] < Z_MIN:
+          target_pos[2] = Z_MIN
+          target_vel[2] = Z_MIN
         """ roll and pitch """
         limit_angle = 0.35
         for i in range(2):
@@ -551,7 +345,7 @@ class teleop_haptics_integration():
         self.haptics_wrench_msg.wrench.torque.y = haptics_wrench[4]
         self.haptics_wrench_msg.wrench.torque.z = haptics_wrench[5]        
 
-      if self.robot_hovering and not self.robot_landing:
+      if self.robot_flight_state == FlightState.HOVER_STATE:
         if not self.wait_flag:
           rospy.sleep(3.0)
           self.wait_flag = True
@@ -564,6 +358,6 @@ class teleop_haptics_integration():
       r.sleep()
 
 if __name__ == "__main__":
-  rospy.init_node("teleop_haptics_integration")
-  Tracker = teleop_haptics_integration()
+  rospy.init_node("integration")
+  Tracker = Integration()
   Tracker.main()

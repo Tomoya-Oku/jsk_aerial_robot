@@ -1,6 +1,11 @@
+import rospy
 import numpy as np
+import math
 import cv2
 from enum import Enum, auto
+from aerial_robot_msgs.msg import FlightNav
+from geometry_msgs.msg import Vector3Stamped
+from integration import X_MIN, X_MAX, Y_MIN, Y_MAX, Z_MIN, Z_MAX
 
 class Shape(Enum):
     UNKNOWN = auto()
@@ -18,7 +23,64 @@ class Shape(Enum):
     RECTANGLE_CLOCKWISE = auto()
     RECTANGLE_COUNTER_CLOCKWISE = auto()
 
-# --------- 共通ユーティリティ ---------
+class Trajectory_Based_Gesture_Recognition():
+
+    def __init__(self):
+        self.robot_name = rospy.get_param("~robot_name", "gimbalrotor")
+
+        # Publisher
+        self.nav_pub = rospy.Publisher('/'+self.robot_name+'/uav/nav', FlightNav, queue_size=1)
+        self.att_pub = rospy.Publisher('/'+self.robot_name+'/final_target_baselink_rpy', Vector3Stamped, queue_size=1)
+
+        # Messages
+        self.flight_nav = FlightNav()
+        self.flight_nav.target = FlightNav.COG
+        self.target_att_nav = Vector3Stamped()
+
+        self.trajectory = []
+
+    def circleTask(self, radius=1.0, period=8.0, hz=40):
+        """
+        現在位置(center)を中心に、zは据え置きで半径radiusの円を1周する。
+        period: 1周にかける秒数、hz: 制御周期
+        """
+        # 中心と高度・初期yawを固定
+        cx, cy, cz = self.robot_pos[0], self.robot_pos[1], self.robot_pos[2]
+        yaw0 = self.robot_att[2]
+
+        rate = rospy.Rate(hz)
+        total = max(1, int(period * hz))
+
+        for k in range(total):
+            theta = 2.0 * math.pi * (float(k) / float(total))
+            target_x = cx + radius * math.cos(theta)
+            target_y = cy + radius * math.sin(theta)
+            target_z = cz  # 高度据え置き
+
+            # 0066環境の安全範囲にクリップ（ファイルの下限上限に合わせる）
+            target_x = max(min(target_x, X_MAX), X_MIN)
+            target_y = max(min(target_y, Y_MAX), Y_MIN)
+            target_z = max(min(target_z, Z_MAX), Z_MIN)
+
+            # 目標セット（姿勢は水平・yaw据え置き）
+            self.flight_nav.target_pos_x = target_x
+            self.flight_nav.target_pos_y = target_y
+            self.flight_nav.target_pos_z = target_z
+            self.flight_nav.target_roll  = 0.0
+            self.flight_nav.target_pitch = 0.0
+            self.flight_nav.target_yaw   = yaw0
+
+            self.target_att_nav.vector.x = 0.0
+            self.target_att_nav.vector.y = 0.0
+
+            # 即時送信（メインループと重なっても同値なのでOK）
+            self.nav_pub.publish(self.flight_nav)
+            self.att_pub.publish(self.target_att_nav)
+
+            rate.sleep()
+
+    def lineTask(self):
+        pass
 
 def polygon_signed_area(poly_uv: np.ndarray) -> float:
     u, v = poly_uv[:, 0], poly_uv[:, 1]
@@ -60,8 +122,6 @@ def apply_rot_override(shape: Shape, rot_override: int) -> Shape:
     want_ccw = (rot_override > 0)
     is_ccw = shape in rot_targets_ccw
     return shape if want_ccw == is_ccw else flip_rotation(shape)
-
-# --------- 2D分類（UV） ---------
 
 def classify_shape_2d(points: np.ndarray) -> Shape:
     pts = np.asarray(points, dtype=np.float32)
@@ -151,8 +211,6 @@ def classify_shape_2d(points: np.ndarray) -> Shape:
 
     return Shape.UNKNOWN
 
-# --------- 3D → 2Dラッパ（PCA基底） ---------
-
 def fit_plane_pca(P: np.ndarray):
     assert P.ndim == 2 and P.shape[1] == 3 and len(P) >= 3
     o = P.mean(axis=0)
@@ -214,3 +272,8 @@ def classify_shape_3d(P_xyz: np.ndarray, angle_tol_rad=np.deg2rad(15)) -> Shape:
     shape2d = classify_shape_2d(UV)
     rot3d = rotation_sign_3d(P, w)
     return apply_rot_override(shape2d, rot3d)
+
+if __name__ == "__main__":
+  rospy.init_node("gesture")
+  Tracker = Trajectory_Based_Gesture_Recognition()
+  Tracker.main()
