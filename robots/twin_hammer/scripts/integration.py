@@ -123,7 +123,12 @@ class Integration():
     self.k_log = 1.0
     self.k_att_diff = 1.0
 
-  def init_robot_pose(self):
+    # Trajectory-Based Gesture Recognition
+    self.gestureMode = False # トリガー長押し中True
+    self.trajectory = []
+
+  # 現在地を初期位置に
+  def resetInitPos(self):
     self.robot_init_pos = self.robot_pos
     self.robot_init_att = self.robot_att
 
@@ -134,40 +139,41 @@ class Integration():
   def device_flight_state_cb(self, msg):
     self.device_flight_state = msg.data
     # aerial_robot_base/flight_navigaton.h 参照
-    # if msg.data == 2:
-    #   self.device_arm_off = False
-    #   self.device_arm_on = True
-    # elif msg.data == 3:
-    #   self.device_arm_on = False
-    #   self.device_takeoff = True
-    # elif msg.data == 5:
-    #   self.device_takeoff = False
-    #   self.device_hovering = True
-    # elif msg.data == 4:
-    #   self.device_hovering = False
-    #   self.device_landing = True
-    # elif msg.data == 6:
-    #   self.device_landing = False
-    #   self.device_stop = True
+    if msg.data == 2:
+      # self.device_arm_off = False
+      self.device_arm_on = True
+    elif msg.data == 3:
+      # self.device_arm_on = False
+      self.device_takeoff = True
+    elif msg.data == 5:
+      # self.device_takeoff = False
+      self.device_hovering = True
+    elif msg.data == 4:
+      # self.device_hovering = False
+      self.device_landing = True
+    elif msg.data == 6:
+      # self.device_landing = False
+      self.device_stop = True
+    pass
 
   def robot_flight_state_cb(self, msg):
     self.robot_flight_state = msg.data
     # aerial_robot_base/flight_navigaton.h 参照
-    # if msg.data == 2:
-    #   self.robot_arm_off = False
-    #   self.robot_arm_on = True
-    # elif msg.data == 3:
-    #   self.robot_arm_on = False
-    #   self.robot_takeoff = True
-    # elif msg.data == 5:
-    #   self.robot_takeoff = False
-    #   self.robot_hovering = True
-    # elif msg.data == 4:
-    #   self.robot_hovering = False
-    #   self.robot_landing = True
-    # elif msg.data == 6:
-    #   self.robot_landing = False
-    #   self.robot_stop = True
+    if msg.data == 2:
+      # self.robot_arm_off = False
+      self.robot_arm_on = True
+    elif msg.data == 3:
+      # self.robot_arm_on = False
+      self.robot_takeoff = True
+    elif msg.data == 5:
+      # self.robot_takeoff = False
+      self.robot_hovering = True
+    elif msg.data == 4:
+      # self.robot_hovering = False
+      self.robot_landing = True
+    elif msg.data == 6:
+      # self.robot_landing = False
+      self.robot_stop = True
 
   def device_pos_cb(self, msg):
     self.device_pos = [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z]
