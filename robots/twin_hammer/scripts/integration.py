@@ -244,7 +244,8 @@ class teleop_haptics_integration():
   def trigger_button_state_cb(self, msg):
     if msg.data == 0: # OFF
       if self.gestureMode:
-        shape = gesture.classify_shape(self.trajectory)
+        traj = np.asarray(self.trajectory, dtype=np.float32)
+        shape = gesture.classify_shape(traj)
         print(f"Detected shape: {shape}")
 
         if shape == Shape.CIRCLE:
@@ -255,7 +256,7 @@ class teleop_haptics_integration():
         self.gestureMode = False
 
     elif msg.data == 1: # ON
-      self.trajectory.append(self.device_pos)
+      self.trajectory.append([self.device_pos[1], self.device_pos[2]])
 
     self.gestureMode = (msg.data == 1)
     # print(self.gestureMode)
@@ -268,6 +269,7 @@ class teleop_haptics_integration():
         self.control_mode = "vel"
       elif self.control_mode == "vel":
         self.control_mode = "pos"
+      print(f"Control Mode has been changed. -> {self.control_mode}")
 
       self.resetInitPos()
 
@@ -278,11 +280,11 @@ class teleop_haptics_integration():
     # EV_LONG: 長押し -> Twin-Hammerの起動シーケンス
     if msg.data == "long":
       # arm_offであればarm_onする
-      if self.device_arm_off:
+      if self.device_arm_off and not self.device_arm_on:
         self.device_start_pub.publish(Empty())
         print("[Twin-Hammer] Send arming command")
       # arm_onであればTakeoffする
-      elif self.device_arm_on:
+      elif self.device_arm_on and not self.device_takeoff:
         self.device_takeoff_pub.publish(Empty())
         print("[Twin-Hammer] Send takeoff command")
       # Takeoff/Hovering中であればLandingする
@@ -299,11 +301,11 @@ class teleop_haptics_integration():
     # EV_LONG: 長押し -> Robotの起動シーケンス
     if msg.data == "long":
       # arm_offであればarm_onする
-      if self.robot_arm_off:
+      if self.robot_arm_off and not self.robot_arm_on:
         self.robot_start_pub.publish(Empty())
         print(f"[{self.robot_name}] Send arming command")
       # arm_onであればTakeoffする
-      elif self.robot_arm_on:
+      elif self.robot_arm_on and not self.robot_takeoff:
         self.robot_takeoff_pub.publish(Empty())
         print(f"[{self.robot_name}] Send takeoff command")
       # Takeoff/Hovering中であればLandingする
@@ -328,10 +330,40 @@ class teleop_haptics_integration():
     yaw0 = self.robot_att[2]
 
     rate = rospy.Rate(hz)
+
+    # 円運動開始位置まで移動
+    while abs(self.robot_pos[0] - (cx + radius)) < 0.05 and abs(self.robot_pos[1] - cy) < 0.05:
+      target_x = cx + radius
+      target_y = cy
+      target_z = cz
+
+      # 0066環境の安全範囲にクリップ（ファイルの下限上限に合わせる）
+      target_x = max(min(target_x, self.X_MAX), self.X_MIN)
+      target_y = max(min(target_y, self.Y_MAX), self.Y_MIN)
+      target_z = max(min(target_z, self.Z_MAX), self.Z_MIN)
+
+      # 目標セット（姿勢は水平・yaw据え置き）
+      self.flight_nav.target_pos_x = target_x
+      self.flight_nav.target_pos_y = target_y
+      self.flight_nav.target_pos_z = target_z
+      self.flight_nav.target_roll  = 0.0
+      self.flight_nav.target_pitch = 0.0
+      self.flight_nav.target_yaw   = yaw0
+
+      self.target_att_nav.vector.x = 0.0
+      self.target_att_nav.vector.y = 0.0
+
+      # 即時送信（メインループと重なっても同値なのでOK）
+      self.nav_pub.publish(self.flight_nav)
+      self.att_pub.publish(self.target_att_nav)
+
+      rate.sleep()
+
     total = max(1, int(period * hz))
 
     for k in range(total):
         theta = 2.0 * math.pi * (float(k) / float(total))
+
         target_x = cx + radius * math.cos(theta)
         target_y = cy + radius * math.sin(theta)
         target_z = cz  # 高度据え置き
