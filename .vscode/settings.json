@@ -1,0 +1,12 @@
+{
+    "ros.distro": "one",
+    "python.autoComplete.extraPaths": [
+        "/home/oku/ros/jsk_aerial_robot_ws/devel/lib/python3/dist-packages",
+        "/opt/ros/one/lib/python3/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/oku/ros/jsk_aerial_robot_ws/devel/lib/python3/dist-packages",
+        "/opt/ros/one/lib/python3/dist-packages"
+    ],
+    "cmake.ignoreCMakeListsMissing": true
+}

@@ -1,0 +1,157 @@
+#ignore the backup file with "~"
+*.~### https://raw.github.com/github/gitignore/cc542de017c606138a87ee4880e5f06b3a306def/Global/OSX.gitignore
+
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Icon must end with two \r
+Icon
+
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+
+### https://raw.github.com/github/gitignore/cc542de017c606138a87ee4880e5f06b3a306def/Global/Linux.gitignore
+
+*~
+
+# temporary files which can be created if a process still has a handle open of a deleted file
+.fuse_hidden*
+
+# KDE directory preferences
+.directory
+
+# Linux trash folder which might appear on any partition or disk
+.Trash-*
+
+
+### https://raw.github.com/github/gitignore/cc542de017c606138a87ee4880e5f06b3a306def/Global/Emacs.gitignore
+
+# -*- mode: gitignore; -*-
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Org-mode
+.org-id-locations
+*_archive
+
+# flymake-mode
+*_flymake.*
+
+# eshell files
+/eshell/history
+/eshell/lastdir
+
+# elpa packages
+/elpa/
+
+# reftex files
+*.rel
+
+# AUCTeX auto folder
+/auto/
+
+# cask packages
+.cask/
+dist/
+
+# Flycheck
+flycheck_*.el
+
+# server auth directory
+/server/
+
+# projectiles files
+.projectile
+
+### https://raw.github.com/github/gitignore/cc542de017c606138a87ee4880e5f06b3a306def/Global/Vim.gitignore
+
+# swap
+[._]*.s[a-w][a-z]
+[._]s[a-w][a-z]
+# session
+Session.vim
+# temporary
+.netrwhist
+*~
+# auto-generated tag files
+tags
+
+
+# python
+*.pyc
+
+# Jetbrains
+.idea/
+*cmake-build-debug/
+
+# mujoco
+MUJOCO_LOG.txt
+robots/**/mujoco
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818181640.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818182646.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818183725.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818183751.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818183814.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818183832.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818183910.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184020.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184052.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184053.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184054.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184134.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184232.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184239.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184251.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184257.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184405.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184513.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184546.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184552.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184554.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184635.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184702.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818184708.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818190323.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818190359.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818190631.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818190653.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818190910.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818191032.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818191129.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818191408.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818191640.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818191642.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818191645.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818191659.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818191833.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818191901.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818191929.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818191950.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818191959.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250818192358.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250819163349.py
+.history/robots/twin_hammer/scripts/teleop_haptics_integration_20250819165215.py
