@@ -13,12 +13,17 @@ from geometry_msgs.msg import PoseStamped, WrenchStamped, Vector3Stamped
 from scipy.spatial.transform import Rotation as R
 import traj_recognition as gesture
 from traj_recognition import Shape
+from enum import Enum
 
 def exponential(x, base, k_exp):
   return pow(x, base) * k_exp
 
 def logarithm(x, base, k_log):
   return math.log(x, base) * k_log
+
+class Control_Mode(Enum):
+    POS = 0
+    VEL = 1
 
 class teleop_haptics_integration():
 
@@ -55,12 +60,14 @@ class teleop_haptics_integration():
     self.att_pub = rospy.Publisher('/'+self.robot_name+'/final_target_baselink_rpy', Vector3Stamped, queue_size=1)
     self.feedback_pub = rospy.Publisher('/twin_hammer/haptics_wrench', WrenchStamped, queue_size=1)
 
+    self.control_mode_pub = rospy.Publisher('/twin_hammer/control_mode', String, queue_size=1)
+
     # Subscribers
     self.device_flight_state_sub = rospy.Subscriber('/twin_hammer/flight_state', UInt8, self.device_flight_state_cb)
     self.robot_flight_state_sub = rospy.Subscriber('/'+self.robot_name+'/flight_state', UInt8, self.robot_flight_state_cb)
     self.device_pos_sub = rospy.Subscriber('/twin_hammer/mocap/pose', PoseStamped, self.device_pos_cb)
     self.robot_pos_sub = rospy.Subscriber('/'+self.robot_name+'/mocap/pose', PoseStamped, self.robot_pos_cb)
-    self.teleop_mode_sub = rospy.Subscriber('/twin_hammer/teleop_mode', String, self.teleop_mode_cb)
+    self.control_mode_sub = rospy.Subscriber('/twin_hammer/teleop_mode', String, self.teleop_mode_cb)
     self.robot_wrench_sub = rospy.Subscriber('/cfs/data', WrenchStamped, self.robot_wrench_cb)
 
     # State -> Raw Data (0/1)
