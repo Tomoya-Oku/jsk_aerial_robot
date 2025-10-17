@@ -37,9 +37,11 @@ class Mocap_Test():
         self.rate = self.params['rospy']['rate']
 
         # Publisher
+        self.pub_shoulder_att = rospy.Publisher('/manica/calculation/shoulder_att', Vector3Stamped, queue_size=1)
         self.pub_shoulder_att_unwraped = rospy.Publisher('/manica/calculation/shoulder_att_unwraped', Vector3Stamped, queue_size=1)
         self.pub_shoulder_att_prev = rospy.Publisher('/manica/calculation/shoulder_att_prev', Vector3Stamped, queue_size=1)
 
+        self.pub_wrist_att = rospy.Publisher('/manica/calculation/wrist_att', Vector3Stamped, queue_size=1)
         self.pub_wrist_att_unwraped = rospy.Publisher('/manica/calculation/wrist_att_unwraped', Vector3Stamped, queue_size=1)
         self.pub_wrist_att_prev = rospy.Publisher('/manica/calculation/wrist_att_prev', Vector3Stamped, queue_size=1)
 
@@ -55,6 +57,7 @@ class Mocap_Test():
         self.shoulder_att = [None]*3
         self.shoulder_att_unwrapped = [0.0]*3
         self.shoulder_att_prev = [0.0]*3
+        
         self.wrist_pos = [None]*3
         self.wrist_att = [None]*3
         self.wrist_att_unwrapped = [0.0]*3
@@ -107,9 +110,11 @@ class Mocap_Test():
             self.elbow_angle = self.calc_angle_from_wrist_and_shoulder_pos()
 
             # Publish
+            self.pub_shoulder_att.publish(self.shoulder_att)
             self.pub_shoulder_att_unwraped.publish(self.shoulder_att_unwraped)
             self.pub_shoulder_att_prev.publish(self.shoulder_att_prev)
 
+            self.pub_wrist_att.publish(self.wrist_att)
             self.pub_wrist_att_unwraped.publish(self.wrist_att_unwraped)
             self.pub_wrist_att_prev.publish(self.wrist_att_prev)
 
