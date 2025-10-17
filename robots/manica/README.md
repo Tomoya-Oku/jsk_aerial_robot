@@ -15,15 +15,16 @@
 
 ## Evaluation
 - High-maneuverability
-- Achieve tasks quicker than joystick-type controller
+  - Achieve tasks quicker than joystick-type controller
 - High-controllability
-- Usability for a person who uses for the first time
-- Half-Automation 
+  - Usability for a person who uses for the first time
+  - Half-Automation 
 
 ## Teleoperation
 - Movement of position and orientation of CoG
 - Angles between links of articulated robots
 - Control of an end-effector
+
 
 
 
