@@ -1,5 +1,7 @@
 # Concept of Device
-## Name: MANICA (Multi-modal Arm-type Nimble and Intuitive Control device for Articulated aerial robot)
+## Name
+**MANICA** (Multi-modal Arm-type Nimble and Intuitive Control device for Articulated aerial robot)
+
 ## Requirements
 - High-maneuverability
 - High-controllability
@@ -23,3 +25,4 @@
 - Movement of position and orientation of CoG
 - Angles between links of articulated robots
 - Control of an end-effector
+
