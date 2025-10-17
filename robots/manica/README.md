@@ -1,5 +1,4 @@
-# Concept of Device
-## MANICA
+# What is MANICA
  **M**ulti-modal **A**rm-type **N**imble and **I**ntuitive **C**ontrol device for **A**rticulated aerial robot
 
 ## Requirements
@@ -25,5 +24,6 @@
 - Movement of position and orientation of CoG
 - Angles between links of articulated robots
 - Control of an end-effector
+
 
 
