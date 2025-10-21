@@ -9,8 +9,8 @@ add_compile_options(-std=c++17)
 # 依存パッケージを解決
 # 以後 ${catkin_LIBRARIES}, ${catkin_INCLUDE_DIRS} が使える
 find_package(catkin REQUIRED COMPONENTS
-  roscpp
-  rospy
+  # roscpp
+  # rospy
   std_msgs
   aerial_robot_control
   aerial_robot_estimation
@@ -30,7 +30,7 @@ find_package(NLopt REQUIRED)
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES manica
-  CATKIN_DEPENDS roscpp rospy std_msgs aerial_robot_control aerial_robot_model aerial_robot_msgs pluginlib diagnostic_msgs geometry_msgs message_runtime
+  CATKIN_DEPENDS roscpp std_msgs aerial_robot_control aerial_robot_model aerial_robot_msgs pluginlib diagnostic_msgs geometry_msgs message_runtime
 )
 
 ###########

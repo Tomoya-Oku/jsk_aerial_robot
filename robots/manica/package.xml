@@ -18,8 +18,8 @@
   <build_depend>diagnostic_msgs</build_depend>
   <build_depend>geometry_msgs</build_depend>
   <build_depend>std_msgs</build_depend>
-  <build_depend>roscpp</build_depend>
-  <build_depend>rospy</build_depend>
+  <!-- <build_depend>roscpp</build_depend>
+  <build_depend>rospy</build_depend> -->
  
   <run_depend>aerial_robot_control</run_depend>
   <run_depend>aerial_robot_model</run_depend>
