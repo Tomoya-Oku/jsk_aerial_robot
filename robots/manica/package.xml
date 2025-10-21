@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<package format="2">
+<package>
   <name>manica</name>
   <version>0.0.0</version>
   <description>Multi-modal Arm-type Nimble and Intuitive Control device for Articulated aerial robot</description>
