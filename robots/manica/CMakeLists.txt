@@ -31,7 +31,6 @@ catkin_package(
   INCLUDE_DIRS include
   LIBRARIES manica
   CATKIN_DEPENDS roscpp rospy std_msgs aerial_robot_control aerial_robot_model aerial_robot_msgs pluginlib diagnostic_msgs geometry_msgs message_runtime
-  DEPENDS system_lib
 )
 
 ###########

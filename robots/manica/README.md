@@ -24,7 +24,3 @@
 - Movement of position and orientation of CoG
 - Angles between links of articulated robots
 - Control of an end-effector
-
-
-
-
