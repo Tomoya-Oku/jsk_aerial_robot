@@ -45,29 +45,18 @@ include_directories(
   ${NLOPT_INCLUDE_DIRS}
 )
 
-# ライブラリ
-add_library(manica_controllib
-  src/manica.cpp
-)
-
 # 依存リンク
-target_link_libraries(manica_controllib
-  ${catkin_LIBRARIES}
-  # ${CERES_LIBRARIES}
-)
+add_library(manica_controllib src/control/manica_controller.cpp src/control/manica_optimizer.cpp)
+target_link_libraries(manica_controllib ${catkin_LIBRARIES} ${NLOPT_LIBRARIES})
 
-# C++17など規格指定
-set_target_properties(manica_controllib PROPERTIES
-  CXX_STANDARD 17
-  CXX_STANDARD_REQUIRED YES
-)
+add_library(manica_model src/model/manica_model.cpp)
+target_link_libraries(manica_model ${catkin_LIBRARIES})
 
 # install（他パッケージから使えるように）
-install(TARGETS manica_controllib manica_node
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+install(TARGETS manica_controllib
+  DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 )
-install(DIRECTORY include/${PROJECT_NAME}/
-  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+install(DIRECTORY config plugins launch scripts
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+  USE_SOURCE_PERMISSIONS
 )
