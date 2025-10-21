@@ -62,13 +62,6 @@ set_target_properties(manica_controllib PROPERTIES
   CXX_STANDARD_REQUIRED YES
 )
 
-# 実行ノードがこのライブラリを使う例
-add_executable(manica_node src/manica_node.cpp)
-target_link_libraries(manica_node
-  manica_controllib
-  ${catkin_LIBRARIES}
-)
-
 # install（他パッケージから使えるように）
 install(TARGETS manica_controllib manica_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
