@@ -3,6 +3,7 @@
 
 import rospy
 import numpy as np
+from math import pi  # ★追加
 
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
@@ -34,6 +35,14 @@ class ME6WaypointsIKControllerTF:
 
         self.tf_timeout     = rospy.get_param("~tf_timeout", 0.5)   # seconds
 
+        # ★IKの許容誤差（TRAC-IK bounds）
+        self.ik_pos_bound = rospy.get_param("~ik_pos_bound", 5e-3)  # [m] 例: 5mm
+        self.ik_rot_bound = rospy.get_param("~ik_rot_bound", pi)    # [rad] piで姿勢ほぼ自由
+
+        # ★TRAC-IK timeout
+        self.ik_timeout = rospy.get_param("~ik_timeout", 0.05)      # [s]
+        self.ik_solve_type = rospy.get_param("~ik_solve_type", "Distance")
+
         self.joint_names = rospy.get_param("~joint_names", [
             "joint1", "joint2", "joint3",
             "joint4", "joint5", "joint6"
@@ -51,7 +60,16 @@ class ME6WaypointsIKControllerTF:
 
         # TRAC-IK
         rospy.loginfo("Initializing TRAC-IK solver (%s -> %s)...", self.base_link, self.ee_link)
-        self.ik_solver = IK(self.base_link, self.ee_link)
+        # ★timeout/solve_type 指定
+        self.ik_solver = IK(self.base_link, self.ee_link, timeout=self.ik_timeout, solve_type=self.ik_solve_type)
+
+        # ★デバッグ（初期化確認）
+        try:
+            rospy.loginfo("TRAC-IK number_of_joints: %d", self.ik_solver.number_of_joints)
+            rospy.loginfo("TRAC-IK joint_names: %s", self.ik_solver.joint_names)
+            rospy.loginfo("TRAC-IK link_names: %s", self.ik_solver.link_names)
+        except Exception:
+            rospy.logwarn("TRAC-IK debug fields not available (ok).")
 
         # TF buffer
         self.tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(10.0))
@@ -111,18 +129,11 @@ class ME6WaypointsIKControllerTF:
             rate.sleep()
 
     def pose_to_base_link(self, pose, src_frame, stamp):
-        """
-        pose: geometry_msgs/Pose
-        src_frame: str (e.g. 'world')
-        stamp: rospy.Time
-        returns: PoseStamped in base_link frame
-        """
         ps = PoseStamped()
         ps.header.frame_id = src_frame
         ps.header.stamp = stamp
         ps.pose = pose
 
-        # base_link へ変換
         trans = self.tf_buffer.lookup_transform(
             self.base_link,
             src_frame,
@@ -149,6 +160,10 @@ class ME6WaypointsIKControllerTF:
 
         seed = np.copy(self.current_joints)
 
+        # ★位置だけ合わせたいので姿勢は固定（単位クォータニオン）
+        #   姿勢拘束を緩めるのでこれでOK
+        qx, qy, qz, qw = 0.0, 0.0, 0.0, 1.0
+
         for i, p in enumerate(poses, start=1):
             if rospy.is_shutdown():
                 break
@@ -164,25 +179,28 @@ class ME6WaypointsIKControllerTF:
             z = p_base.pose.position.z
             target_xyz = np.array([x, y, z], dtype=float)
 
-            # 姿勢も一応 base_link へ（PoseStampedで変換済み）
-            qx = p_base.pose.orientation.x
-            qy = p_base.pose.orientation.y
-            qz = p_base.pose.orientation.z
-            qw = p_base.pose.orientation.w
-            if (qx, qy, qz, qw) == (0.0, 0.0, 0.0, 0.0):
-                qw = 1.0
-
             rospy.loginfo("Waypoint %d/%d (base_link): x=%.3f y=%.3f z=%.3f",
                           i, len(poses), x, y, z)
 
-            sol = self.ik_solver.get_ik(seed, x, y, z, qx, qy, qz, qw)
+            # ★bounds付き（位置は5mm許容、姿勢はほぼ自由）
+            b = float(self.ik_pos_bound)
+            br = float(self.ik_rot_bound)
+
+            sol = self.ik_solver.get_ik(
+                seed,
+                x, y, z,
+                qx, qy, qz, qw,
+                b, b, b,      # bx,by,bz [m]
+                br, br, br    # brx,bry,brz [rad]
+            )
+
             if sol is None:
                 rospy.logwarn("IK failed at waypoint %d (base_link). Skipping.", i)
                 continue
 
             sol_np = np.array(sol, dtype=float)
             self.send_joint_command(sol_np)
-            seed = sol_np  # update seed
+            seed = sol_np  # update seed (次のIKが安定)
 
             reached, err = self.wait_until_reached(target_xyz)
             if reached:
