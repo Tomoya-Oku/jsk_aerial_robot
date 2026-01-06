@@ -18,5 +18,4 @@
      type="spawn_model" 
      respawn="false" output="screen"
      args="-urdf -param robot_description -model $(arg DOBOT_TYPE)_robot"/>
-
 </launch>

@@ -1,0 +1,21 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="marker_sphere">
+    <static>true</static>
+    <link name="link">
+      <!-- collisionは置かない（物理負荷ゼロ） -->
+      <visual name="vis">
+        <geometry>
+          <sphere><radius>0.02</radius></sphere>
+        </geometry>
+        <cast_shadows>false</cast_shadows>
+        <material>
+          <ambient>1 0 0 1</ambient>
+          <diffuse>1 0 0 1</diffuse>
+          <emissive>1 0 0 1</emissive>
+          <specular>0 0 0 1</specular>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>
