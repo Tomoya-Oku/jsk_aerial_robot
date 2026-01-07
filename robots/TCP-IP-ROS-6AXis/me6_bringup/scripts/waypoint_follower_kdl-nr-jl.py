@@ -74,6 +74,7 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
         self.done_topic   = rospy.get_param("~done_topic", "/following_waypoints/done")
         self.wp_index_topic = rospy.get_param("~wp_index_topic", "/following_waypoints/wp_index")
         self.fk_err_topic = rospy.get_param("~fk_err_topic", "/following_waypoints/fk_err")
+        self.fk_err_vec_topic = rospy.get_param("~fk_err_vec_topic", "/following_waypoints/fk_err_vec")
         self.target_point_topic = rospy.get_param("~target_point_topic", "/following_waypoints/target_point")
 
         # -----------------------------
@@ -154,6 +155,7 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
         self.done_pub = rospy.Publisher(self.done_topic, Empty, queue_size=1, latch=True)
         self.wp_index_pub = rospy.Publisher(self.wp_index_topic, Int32, queue_size=10)
         self.fk_err_pub = rospy.Publisher(self.fk_err_topic, Float64, queue_size=50)
+        self.fk_err_vec_pub = rospy.Publisher(self.fk_err_vec_topic, PointStamped, queue_size=50)
         self.target_point_pub = rospy.Publisher(self.target_point_topic, PointStamped, queue_size=10)
 
         rospy.loginfo("Waiting for joint states and %s ...", self.way_topic)
@@ -318,12 +320,21 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
         t0 = rospy.Time.now()
         rate = rospy.Rate(30)
         while not rospy.is_shutdown():
+            self.publish_target_point(target_xyz_base[0], target_xyz_base[1], target_xyz_base[2])
             self.publish_ee_fk()
             ee = self.compute_fk_pos(self.current_joints)
             err = float(np.linalg.norm(ee - target_xyz_base))
 
             # ★ publish error norm
             self.fk_err_pub.publish(Float64(data=err))
+            err_vec = target_xyz_base - ee
+            err_msg = PointStamped()
+            err_msg.header.stamp = rospy.Time.now()
+            err_msg.header.frame_id = self.base_link
+            err_msg.point.x = float(err_vec[0])
+            err_msg.point.y = float(err_vec[1])
+            err_msg.point.z = float(err_vec[2])
+            self.fk_err_vec_pub.publish(err_msg)
 
             if err <= self.pos_tol:
                 return True, err

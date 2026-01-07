@@ -68,6 +68,7 @@ class ME6WaypointsIKControllerTF_KDL_NR:
         self.done_topic = rospy.get_param("~done_topic", "/following_waypoints/done")
         self.wp_index_topic = rospy.get_param("~wp_index_topic", "/following_waypoints/wp_index")
         self.fk_err_topic = rospy.get_param("~fk_err_topic", "/following_waypoints/fk_err")
+        self.fk_err_vec_topic = rospy.get_param("~fk_err_vec_topic", "/following_waypoints/fk_err_vec")
         self.target_point_topic = rospy.get_param("~target_point_topic", "/following_waypoints/target_point")
 
         # debug / retry params（元のまま）
@@ -135,6 +136,7 @@ class ME6WaypointsIKControllerTF_KDL_NR:
         self.done_pub = rospy.Publisher(self.done_topic, Empty, queue_size=1, latch=True)
         self.wp_index_pub = rospy.Publisher(self.wp_index_topic, Int32, queue_size=10)
         self.fk_err_pub = rospy.Publisher(self.fk_err_topic, Float64, queue_size=50)
+        self.fk_err_vec_pub = rospy.Publisher(self.fk_err_vec_topic, PointStamped, queue_size=50)
         self.target_point_pub = rospy.Publisher(self.target_point_topic, PointStamped, queue_size=10)
 
         # ここを改善：busy loopをやめて最初のメッセージを確実に待つ
@@ -366,10 +368,20 @@ class ME6WaypointsIKControllerTF_KDL_NR:
                     return False, float("inf")
                 q = np.copy(self.current_joints)
 
+            self.publish_target_point(target_xyz_base[0], target_xyz_base[1], target_xyz_base[2])
+
             try:
                 ee = self.compute_fk_pos(q)
                 err = float(np.linalg.norm(ee - target_xyz_base))
                 self.fk_err_pub.publish(Float64(data=err))
+                err_vec = target_xyz_base - ee
+                err_msg = PointStamped()
+                err_msg.header.stamp = rospy.Time.now()
+                err_msg.header.frame_id = self.base_link
+                err_msg.point.x = float(err_vec[0])
+                err_msg.point.y = float(err_vec[1])
+                err_msg.point.z = float(err_vec[2])
+                self.fk_err_vec_pub.publish(err_msg)
                 if err <= self.pos_tol:
                     return True, err
             except Exception:
