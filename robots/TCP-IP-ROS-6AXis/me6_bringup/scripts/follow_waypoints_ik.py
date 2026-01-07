@@ -16,7 +16,6 @@ from trac_ik_python.trac_ik import IK
 import tf2_ros
 import tf2_geometry_msgs  # noqa
 
-
 class ME6WaypointsIKControllerTF:
     def __init__(self):
         rospy.init_node("me6_waypoints_ik_controller_tf")

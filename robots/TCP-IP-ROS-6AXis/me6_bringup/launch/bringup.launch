@@ -4,6 +4,8 @@
   <arg name="simulation" default="false" />
   <arg name="moveit" default="false" />
 
+
+
   <include file="$(find me6_bringup)/launch/rviz.launch" unless="$(arg moveit)" >
     <arg name="need_state_publisher" value="false" if="$(eval arg('simulation') and not arg('real_machine'))" />
     <arg name="use_gui" value="true" if="$(eval not arg('simulation') and not arg('real_machine'))" />
@@ -16,6 +18,7 @@
   </group>
 
   <group if="$(eval arg('simulation') and not arg('real_machine'))" >
+    <rosparam file="$(find me6_bringup)/config/gazebo_pid_gains.yaml" command="load" />
     <group if="$(arg moveit)">
       <include file="$(find me6_moveit)/launch/demo_gazebo.launch" />
     </group>
