@@ -9,6 +9,8 @@ from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from geometry_msgs.msg import PoseArray, PoseStamped, PointStamped, TransformStamped
 
+from std_msgs.msg import Empty, Int32, Float64
+
 import PyKDL as kdl
 from kdl_parser_py.urdf import treeFromParam
 from trac_ik_python.trac_ik import IK
@@ -36,11 +38,12 @@ class ME6WaypointsIKControllerTF:
         self.max_wait_fk    = rospy.get_param("~max_wait_fk", 3.0)  # seconds
 
         self.tf_timeout     = rospy.get_param("~tf_timeout", 0.5)   # seconds
+        self.tf_use_latest  = rospy.get_param("~tf_use_latest", True)  # ★ stamp=0 を使ってTFエラー回避しやすく
 
         # IK bounds (TRAC-IK)
-        self.ik_pos_bound = rospy.get_param("~ik_pos_bound", 2e-2)  # [m] e.g. 5mm
-        self.ik_rot_bound = rospy.get_param("~ik_rot_bound", pi)    # [rad] pi -> almost free orientation
-        self.ik_timeout   = rospy.get_param("~ik_timeout", 0.5)    # [s]
+        self.ik_pos_bound = rospy.get_param("~ik_pos_bound", 2e-2)  # [m]
+        self.ik_rot_bound = rospy.get_param("~ik_rot_bound", pi)    # [rad]
+        self.ik_timeout   = rospy.get_param("~ik_timeout", 0.5)     # [s]
         self.ik_solve_type = rospy.get_param("~ik_solve_type", "Distance")
 
         self.joint_names = rospy.get_param("~joint_names", [
@@ -49,7 +52,7 @@ class ME6WaypointsIKControllerTF:
         ])
 
         # -----------------------------
-        # ★ EE pose publisher params
+        # EE pose publisher params
         # -----------------------------
         self.ee_pose_topic  = rospy.get_param("~ee_pose_topic",  "/me6_robot/ee_pose")
         self.ee_point_topic = rospy.get_param("~ee_point_topic", "/me6_robot/ee_point")
@@ -57,11 +60,19 @@ class ME6WaypointsIKControllerTF:
         self.ee_tf_child     = rospy.get_param("~ee_tf_child", "me6_ee")
 
         # -----------------------------
-        # ★ IK debug params（ログ詳細 + リトライ）
+        # ★ progress / done / error topics (NEW)
+        # -----------------------------
+        self.done_topic   = rospy.get_param("~done_topic", "/following_waypoints/done")
+        self.wp_index_topic = rospy.get_param("~wp_index_topic", "/following_waypoints/wp_index")
+        self.fk_err_topic = rospy.get_param("~fk_err_topic", "/following_waypoints/fk_err")
+        self.target_point_topic = rospy.get_param("~target_point_topic", "/following_waypoints/target_point")
+
+        # -----------------------------
+        # IK debug params（ログ詳細 + リトライ）
         # -----------------------------
         self.ik_debug = rospy.get_param("~ik_debug", True)
-        self.ik_retry = rospy.get_param("~ik_retry", 3)                 # 失敗時リトライ回数
-        self.ik_retry_noise = rospy.get_param("~ik_retry_noise", 0.15)  # [rad] seedに足すノイズ
+        self.ik_retry = rospy.get_param("~ik_retry", 3)
+        self.ik_retry_noise = rospy.get_param("~ik_retry_noise", 0.15)  # [rad]
         self.ik_retry_use_current = rospy.get_param("~ik_retry_use_current", True)
 
         # Load URDF
@@ -70,7 +81,7 @@ class ME6WaypointsIKControllerTF:
         if not ok:
             raise RuntimeError("Failed to parse robot_description")
 
-        # ★ Joint limits (from URDF)
+        # Joint limits (from URDF)
         self.urdf = URDF.from_parameter_server("/robot_description")
         self.joint_limits = {}
         for jn in self.joint_names:
@@ -92,7 +103,7 @@ class ME6WaypointsIKControllerTF:
         self.tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(10.0))
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
-        # ★ TF broadcaster (optional)
+        # TF broadcaster (optional)
         self.ee_tf_broadcaster = tf2_ros.TransformBroadcaster() if self.publish_ee_tf else None
 
         # State
@@ -104,9 +115,15 @@ class ME6WaypointsIKControllerTF:
 
         self.cmd_pub = rospy.Publisher(self.cmd_topic, JointTrajectory, queue_size=1)
 
-        # ★ EE publishers
+        # EE publishers
         self.ee_pose_pub  = rospy.Publisher(self.ee_pose_topic, PoseStamped, queue_size=10)
         self.ee_point_pub = rospy.Publisher(self.ee_point_topic, PointStamped, queue_size=10)
+
+        # ★ NEW pubs
+        self.done_pub = rospy.Publisher(self.done_topic, Empty, queue_size=1, latch=True)
+        self.wp_index_pub = rospy.Publisher(self.wp_index_topic, Int32, queue_size=10)
+        self.fk_err_pub = rospy.Publisher(self.fk_err_topic, Float64, queue_size=50)
+        self.target_point_pub = rospy.Publisher(self.target_point_topic, PointStamped, queue_size=10)
 
         rospy.loginfo("Waiting for joint states and %s ...", self.way_topic)
         while not rospy.is_shutdown() and self.current_joints is None:
@@ -122,8 +139,7 @@ class ME6WaypointsIKControllerTF:
     def joint_state_cb(self, msg: JointState):
         joint_map = dict(zip(msg.name, msg.position))
         self.current_joints = np.array([joint_map.get(j, 0.0) for j in self.joint_names], dtype=float)
-
-        # ★ joint_state受信のたびにEEをpublish（軽め）
+        # 軽く可視化
         try:
             self.publish_ee_fk()
         except Exception:
@@ -133,7 +149,7 @@ class ME6WaypointsIKControllerTF:
         self.waypoints_msg = msg
 
     # =========================================================
-    # FK (KDL Frame)
+    # FK
     # =========================================================
     def compute_fk_frame(self, joints_np):
         q = kdl.JntArray(len(joints_np))
@@ -148,7 +164,7 @@ class ME6WaypointsIKControllerTF:
         return np.array([frame.p[0], frame.p[1], frame.p[2]], dtype=float)
 
     # =========================================================
-    # ★ IK failure debug helpers
+    # IK failure debug
     # =========================================================
     def _fmt_joints(self, joints_np):
         deg = joints_np * 180.0 / pi
@@ -172,7 +188,6 @@ class ME6WaypointsIKControllerTF:
         if not self.ik_debug:
             return
 
-        # 現在EE（FK）と距離
         try:
             ee = self.compute_fk_pos(self.current_joints)
             dist = float(np.linalg.norm(ee - target_xyz))
@@ -180,7 +195,6 @@ class ME6WaypointsIKControllerTF:
         except Exception as e:
             ee_str = f"(FK) unavailable: {e}"
 
-        # seedのlimitチェック
         out = self._check_seed_limits(seed)
         out_str = "OK" if len(out) == 0 else ("OUT_OF_LIMIT: " + " | ".join(out))
 
@@ -188,42 +202,25 @@ class ME6WaypointsIKControllerTF:
             "IK FAILED wp=%d src_frame=%s stamp=%.3f -> base_link=%s | "
             "target=[%+.3f,%+.3f,%+.3f] | %s | seed %s | seed_limit=%s | "
             "bounds(pos=%.4g m, rot=%.4g rad) timeout=%.3f solve_type=%s",
-            idx,
-            src_frame,
-            stamp.to_sec(),
-            self.base_link,
+            idx, src_frame, stamp.to_sec(), self.base_link,
             target_xyz[0], target_xyz[1], target_xyz[2],
-            ee_str,
-            self._fmt_joints(seed),
-            out_str,
+            ee_str, self._fmt_joints(seed), out_str,
             float(self.ik_pos_bound), float(self.ik_rot_bound),
             float(self.ik_timeout), str(self.ik_solve_type),
         )
 
-        if p_base_pose is not None:
-            rospy.logdebug(
-                "wp=%d base_pose: pos=[%+.3f,%+.3f,%+.3f] quat=[%+.3f,%+.3f,%+.3f,%+.3f]",
-                idx,
-                p_base_pose.position.x, p_base_pose.position.y, p_base_pose.position.z,
-                p_base_pose.orientation.x, p_base_pose.orientation.y,
-                p_base_pose.orientation.z, p_base_pose.orientation.w
-            )
-
     # =========================================================
-    # ★ EE publish
+    # EE publish
     # =========================================================
     def publish_ee_fk(self):
         if self.current_joints is None:
             return
 
         frame = self.compute_fk_frame(self.current_joints)
-
         now = rospy.Time.now()
-        px, py, pz = frame.p[0], frame.p[1], frame.p[2]
 
-        # 今のEE姿勢を目標姿勢として使う
-        cur_frame = self.compute_fk_frame(self.current_joints)
-        qx, qy, qz, qw = cur_frame.M.GetQuaternion()
+        px, py, pz = frame.p[0], frame.p[1], frame.p[2]
+        qx, qy, qz, qw = frame.M.GetQuaternion()
 
         ps = PoseStamped()
         ps.header.stamp = now
@@ -272,21 +269,24 @@ class ME6WaypointsIKControllerTF:
         self.cmd_pub.publish(traj)
 
     # =========================================================
-    # Wait until reached
+    # Wait until reached (publish FK error continuously)
     # =========================================================
     def wait_until_reached(self, target_xyz_base):
         t0 = rospy.Time.now()
         rate = rospy.Rate(30)
         while not rospy.is_shutdown():
-            # ★待機中も publish して見えるように
             self.publish_ee_fk()
 
-            ee = self.compute_fk_pos(self.current_joints)  # base_link
-            err = np.linalg.norm(ee - target_xyz_base)
+            ee = self.compute_fk_pos(self.current_joints)
+            err = float(np.linalg.norm(ee - target_xyz_base))
+
+            # ★ publish error norm
+            self.fk_err_pub.publish(Float64(data=err))
+
             if err <= self.pos_tol:
-                return True, float(err)
+                return True, err
             if (rospy.Time.now() - t0).to_sec() > self.max_wait_fk:
-                return False, float(err)
+                return False, err
             rate.sleep()
 
     # =========================================================
@@ -295,17 +295,31 @@ class ME6WaypointsIKControllerTF:
     def pose_to_base_link(self, pose, src_frame, stamp):
         ps = PoseStamped()
         ps.header.frame_id = src_frame
-        ps.header.stamp = stamp
+
+        # ★ TFで詰まりやすいなら最新TFに寄せる
+        ps.header.stamp = rospy.Time(0) if self.tf_use_latest else stamp
         ps.pose = pose
 
         trans = self.tf_buffer.lookup_transform(
             self.base_link,
             src_frame,
-            stamp,
+            ps.header.stamp,
             rospy.Duration(self.tf_timeout)
         )
         ps_base = tf2_geometry_msgs.do_transform_pose(ps, trans)
         return ps_base
+
+    # =========================================================
+    # publish current target point (base_link)
+    # =========================================================
+    def publish_target_point(self, x, y, z):
+        msg = PointStamped()
+        msg.header.stamp = rospy.Time.now()
+        msg.header.frame_id = self.base_link
+        msg.point.x = float(x)
+        msg.point.y = float(y)
+        msg.point.z = float(z)
+        self.target_point_pub.publish(msg)
 
     # =========================================================
     # Main
@@ -334,6 +348,9 @@ class ME6WaypointsIKControllerTF:
             if rospy.is_shutdown():
                 break
 
+            # ★ publish progress
+            self.wp_index_pub.publish(Int32(data=i))
+
             try:
                 p_base = self.pose_to_base_link(p, src_frame, stamp)
             except Exception as e:
@@ -345,9 +362,11 @@ class ME6WaypointsIKControllerTF:
             z = p_base.pose.position.z
             target_xyz = np.array([x, y, z], dtype=float)
 
-            reach = np.linalg.norm(target_xyz)
-            rospy.logwarn("target norm=%.3f m", reach)
+            # ★ publish target
+            self.publish_target_point(x, y, z)
 
+            reach = float(np.linalg.norm(target_xyz))
+            rospy.logwarn("target norm=%.3f m", reach)
             rospy.loginfo("Waypoint %d/%d (base_link): x=%.3f y=%.3f z=%.3f",
                           i, len(poses), x, y, z)
 
@@ -363,22 +382,16 @@ class ME6WaypointsIKControllerTF:
             )
 
             if sol is None:
-                # ★詳細ログ（状況証拠）
                 self.log_ik_failure(i, src_frame, stamp, target_xyz, seed, p_base.pose)
 
-                # ★追加リトライ（seed依存で落ちるケースの切り分け＆救済）
                 tried = 0
-
-                cand_seeds = []
-                cand_seeds.append(np.copy(seed))
+                cand_seeds = [np.copy(seed)]
                 if self.ik_retry_use_current and self.current_joints is not None:
                     cand_seeds.append(np.copy(self.current_joints))
 
-                # ノイズseed
                 for _ in range(int(self.ik_retry)):
                     s = np.copy(seed)
                     s += np.random.uniform(-self.ik_retry_noise, self.ik_retry_noise, size=s.shape)
-                    # limitに収める（limitがある関節だけ）
                     for jj, jn in enumerate(self.joint_names):
                         lim = self.joint_limits.get(jn, None)
                         if lim is not None:
@@ -396,10 +409,8 @@ class ME6WaypointsIKControllerTF:
                         br, br, br
                     )
                     if sol2 is not None:
-                        rospy.logwarn(
-                            "IK RECOVERED wp=%d: success on retry #%d (seed=%s)",
-                            i, sidx, self._fmt_joints(s)
-                        )
+                        rospy.logwarn("IK RECOVERED wp=%d: success on retry #%d (seed=%s)",
+                                      i, sidx, self._fmt_joints(s))
                         sol = sol2
                         break
 
@@ -419,7 +430,11 @@ class ME6WaypointsIKControllerTF:
 
             rospy.sleep(self.settle_time)
 
+        # ★ DONE 合図（bag後処理で xlim の終端に使える）
         rospy.loginfo("Done.")
+        self.wp_index_pub.publish(Int32(data=-1))
+        self.done_pub.publish(Empty())
+
         rospy.spin()
 
 

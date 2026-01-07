@@ -9,6 +9,8 @@ from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from geometry_msgs.msg import PoseArray, PoseStamped, PointStamped, TransformStamped
 
+from std_msgs.msg import Empty, Int32, Float64
+
 import PyKDL as kdl
 from kdl_parser_py.urdf import treeFromParam
 
@@ -42,15 +44,16 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
         self.max_wait_fk    = float(rospy.get_param("~max_wait_fk", 3.0))  # seconds
 
         self.tf_timeout     = float(rospy.get_param("~tf_timeout", 0.5))   # seconds
+        self.tf_use_latest  = bool(rospy.get_param("~tf_use_latest", True))  # ★ NEW
 
         # -----------------------------
         # KDL-NR(JL) params
         # -----------------------------
-        self.kdl_eps = float(rospy.get_param("~kdl_eps", 1e-4))         # convergence threshold (pose error norm)
+        self.kdl_eps = float(rospy.get_param("~kdl_eps", 1e-4))         # convergence threshold
         self.kdl_maxiter = int(rospy.get_param("~kdl_maxiter", 80))     # max NR iterations
         self.kdl_use_current_orientation = bool(
             rospy.get_param("~kdl_use_current_orientation", True)
-        )  # position-onlyっぽくしたいなら True 推奨
+        )
 
         self.joint_names = rospy.get_param("~joint_names", [
             "joint1", "joint2", "joint3",
@@ -58,7 +61,7 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
         ])
 
         # -----------------------------
-        # ★ EE pose publisher params
+        # EE pose publisher params
         # -----------------------------
         self.ee_pose_topic  = rospy.get_param("~ee_pose_topic",  "/me6_robot/ee_pose")
         self.ee_point_topic = rospy.get_param("~ee_point_topic", "/me6_robot/ee_point")
@@ -66,10 +69,18 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
         self.ee_tf_child     = rospy.get_param("~ee_tf_child", "me6_ee")
 
         # -----------------------------
-        # ★ debug / retry params
+        # ★ progress / done / error topics (NEW)
+        # -----------------------------
+        self.done_topic   = rospy.get_param("~done_topic", "/following_waypoints/done")
+        self.wp_index_topic = rospy.get_param("~wp_index_topic", "/following_waypoints/wp_index")
+        self.fk_err_topic = rospy.get_param("~fk_err_topic", "/following_waypoints/fk_err")
+        self.target_point_topic = rospy.get_param("~target_point_topic", "/following_waypoints/target_point")
+
+        # -----------------------------
+        # debug / retry params
         # -----------------------------
         self.ik_debug = bool(rospy.get_param("~ik_debug", True))
-        self.ik_retry = int(rospy.get_param("~ik_retry", 3))                 # 失敗時リトライ回数（ノイズseed生成数）
+        self.ik_retry = int(rospy.get_param("~ik_retry", 3))
         self.ik_retry_noise = float(rospy.get_param("~ik_retry_noise", 0.15))  # [rad]
         self.ik_retry_use_current = bool(rospy.get_param("~ik_retry_use_current", True))
 
@@ -100,7 +111,6 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
         q_max = kdl.JntArray(len(self.joint_names))
         for i, jn in enumerate(self.joint_names):
             lim = self.joint_limits.get(jn, None)
-            # URDFにlimitが無い場合は広めに置く（危険ならURDF側にlimit入れるの推奨）
             if lim is None:
                 q_min[i] = -1e9
                 q_max[i] = +1e9
@@ -139,6 +149,12 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
         # EE publishers
         self.ee_pose_pub  = rospy.Publisher(self.ee_pose_topic, PoseStamped, queue_size=10)
         self.ee_point_pub = rospy.Publisher(self.ee_point_topic, PointStamped, queue_size=10)
+
+        # ★ NEW pubs
+        self.done_pub = rospy.Publisher(self.done_topic, Empty, queue_size=1, latch=True)
+        self.wp_index_pub = rospy.Publisher(self.wp_index_topic, Int32, queue_size=10)
+        self.fk_err_pub = rospy.Publisher(self.fk_err_topic, Float64, queue_size=50)
+        self.target_point_pub = rospy.Publisher(self.target_point_topic, PointStamped, queue_size=10)
 
         rospy.loginfo("Waiting for joint states and %s ...", self.way_topic)
         while not rospy.is_shutdown() and self.current_joints is None:
@@ -224,15 +240,6 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
             sc, int(self.kdl_maxiter), float(self.kdl_eps)
         )
 
-        if p_base_pose is not None:
-            rospy.logdebug(
-                "wp=%d base_pose: pos=[%+.3f,%+.3f,%+.3f] quat=[%+.3f,%+.3f,%+.3f,%+.3f]",
-                idx,
-                p_base_pose.position.x, p_base_pose.position.y, p_base_pose.position.z,
-                p_base_pose.orientation.x, p_base_pose.orientation.y,
-                p_base_pose.orientation.z, p_base_pose.orientation.w
-            )
-
     # =========================================================
     # EE publish
     # =========================================================
@@ -293,7 +300,19 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
         self.cmd_pub.publish(traj)
 
     # =========================================================
-    # Wait until reached
+    # publish current target point (base_link)
+    # =========================================================
+    def publish_target_point(self, x, y, z):
+        msg = PointStamped()
+        msg.header.stamp = rospy.Time.now()
+        msg.header.frame_id = self.base_link
+        msg.point.x = float(x)
+        msg.point.y = float(y)
+        msg.point.z = float(z)
+        self.target_point_pub.publish(msg)
+
+    # =========================================================
+    # Wait until reached (publish FK error continuously)
     # =========================================================
     def wait_until_reached(self, target_xyz_base):
         t0 = rospy.Time.now()
@@ -302,6 +321,10 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
             self.publish_ee_fk()
             ee = self.compute_fk_pos(self.current_joints)
             err = float(np.linalg.norm(ee - target_xyz_base))
+
+            # ★ publish error norm
+            self.fk_err_pub.publish(Float64(data=err))
+
             if err <= self.pos_tol:
                 return True, err
             if (rospy.Time.now() - t0).to_sec() > self.max_wait_fk:
@@ -314,13 +337,13 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
     def pose_to_base_link(self, pose, src_frame, stamp):
         ps = PoseStamped()
         ps.header.frame_id = src_frame
-        ps.header.stamp = stamp
+        ps.header.stamp = rospy.Time(0) if self.tf_use_latest else stamp
         ps.pose = pose
 
         trans = self.tf_buffer.lookup_transform(
             self.base_link,
             src_frame,
-            stamp,
+            ps.header.stamp,
             rospy.Duration(self.tf_timeout)
         )
         ps_base = tf2_geometry_msgs.do_transform_pose(ps, trans)
@@ -330,12 +353,6 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
     # KDL IK solve
     # =========================================================
     def solve_kdl_ik(self, seed_np, target_xyz):
-        """
-        seed_np: np.array(6,)
-        target_xyz: np.array([x,y,z])
-        return: (sol_np, status_code) or (None, status_code)
-        """
-        # seed -> KDL
         q_seed = kdl.JntArray(len(seed_np))
         for i, v in enumerate(seed_np):
             q_seed[i] = float(v)
@@ -347,12 +364,14 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
         else:
             R = kdl.Rotation.Identity()
 
-        target_frame = kdl.Frame(R, kdl.Vector(float(target_xyz[0]), float(target_xyz[1]), float(target_xyz[2])))
+        target_frame = kdl.Frame(
+            R,
+            kdl.Vector(float(target_xyz[0]), float(target_xyz[1]), float(target_xyz[2]))
+        )
 
         q_out = kdl.JntArray(len(seed_np))
         status = self.ik_solver.CartToJnt(q_seed, target_frame, q_out)
 
-        # KDLは 0 が成功、それ以外は失敗（負値）扱いが一般的
         if status == 0:
             sol = np.array([q_out[i] for i in range(len(seed_np))], dtype=float)
             return sol, status
@@ -382,6 +401,9 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
             if rospy.is_shutdown():
                 break
 
+            # ★ publish progress
+            self.wp_index_pub.publish(Int32(data=i))
+
             try:
                 p_base = self.pose_to_base_link(p, src_frame, stamp)
             except Exception as e:
@@ -393,9 +415,11 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
             z = p_base.pose.position.z
             target_xyz = np.array([x, y, z], dtype=float)
 
+            # ★ publish target
+            self.publish_target_point(x, y, z)
+
             reach = float(np.linalg.norm(target_xyz))
             rospy.logwarn("target norm=%.3f m", reach)
-
             rospy.loginfo("Waypoint %d/%d (base_link): x=%.3f y=%.3f z=%.3f",
                           i, len(poses), x, y, z)
 
@@ -404,7 +428,7 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
             if sol is None:
                 self.log_ik_failure(i, src_frame, stamp, target_xyz, seed, status_code=status, p_base_pose=p_base.pose)
 
-                # ---- retries (seed variations) ----
+                # retries (seed variations)
                 tried = 0
                 cand_seeds = [np.copy(seed)]
                 if self.ik_retry_use_current and self.current_joints is not None:
@@ -413,7 +437,6 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
                 for _ in range(int(self.ik_retry)):
                     s = np.copy(seed)
                     s += np.random.uniform(-self.ik_retry_noise, self.ik_retry_noise, size=s.shape)
-                    # clamp to limits
                     for jj, jn in enumerate(self.joint_names):
                         lim = self.joint_limits.get(jn, None)
                         if lim is not None:
@@ -448,7 +471,11 @@ class ME6WaypointsIKControllerTF_KDL_NRJL:
 
             rospy.sleep(self.settle_time)
 
+        # ★ DONE 合図（bag後処理で xlim 終端に使える）
         rospy.loginfo("Done.")
+        self.wp_index_pub.publish(Int32(data=-1))
+        self.done_pub.publish(Empty())
+
         rospy.spin()
 
 
