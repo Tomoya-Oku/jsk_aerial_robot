@@ -5,6 +5,7 @@ import argparse
 import numpy as np
 import rosbag
 import matplotlib.pyplot as plt
+import tf.transformations as tft
 
 
 def get_stamp_sec(msg, bag_t):
@@ -26,15 +27,18 @@ def main():
 
     ap.add_argument(
         "--ord",
-        choices=["x", "y", "z"],
+        choices=["x", "y", "z", "roll", "pitch", "yaw"],
         default="x",
-        help="axis to plot: x -> way_points_x vs ee_pose.x, y -> way_points_y vs ee_pose.y, z -> way_points_z vs ee_pose.z",
+        help=(
+            "axis to plot: x/y/z -> way_points.poses[].position.*; "
+            "roll/pitch/yaw -> way_points.poses[].orientation (rpy) vs ee_pose"
+        ),
     )
 
     ap.add_argument(
         "--wp_topic",
-        default="",
-        help="override waypoint topic (Float64MultiArray). If empty, auto: /way_points_{ord}",
+        default="/way_points",
+        help="waypoint topic (PoseArray) (default: /way_points)",
     )
     ap.add_argument(
         "--ee_topic",
@@ -46,7 +50,7 @@ def main():
         "--n",
         type=int,
         default=20,
-        help="way_points_*/data[0..n-1] を描く (default: 20)",
+        help="way_points.poses[0..n-1] を描く (default: 20)",
     )
     ap.add_argument(
         "--use_relative_time",
@@ -71,16 +75,19 @@ def main():
 
     args = ap.parse_args()
 
-    # auto topic selection
-    wp_topic = args.wp_topic if args.wp_topic else f"/way_points_{args.ord}"
+    # topics
+    wp_topic = args.wp_topic
     ee_topic = args.ee_topic
 
     # attribute name for ee_pose
-    coord_attr = args.ord  # "x" | "y" | "z"
+    coord_attr = args.ord  # "x" | "y" | "z" | "roll" | "pitch" | "yaw"
 
     # default title
     if not args.title:
-        args.title = f"{wp_topic}.data[0..{args.n-1}] vs {ee_topic}.position.{coord_attr}"
+        if coord_attr in ["roll", "pitch", "yaw"]:
+            args.title = f"{wp_topic}.poses[0..{args.n-1}].orientation.{coord_attr} vs {ee_topic}.orientation.{coord_attr}"
+        else:
+            args.title = f"{wp_topic}.poses[0..{args.n-1}].position.{coord_attr} vs {ee_topic}.position.{coord_attr}"
 
     done_t = None
 
@@ -109,22 +116,35 @@ def main():
             ts = get_stamp_sec(msg, t)
 
             if topic == wp_topic:
-                data = list(getattr(msg, "data", []))
-                if len(data) < args.n:
+                poses = list(getattr(msg, "poses", []))
+                if len(poses) < args.n:
                     continue
                 wp_t.append(ts)
-                wp_mat.append([float(v) for v in data[:args.n]])
+                if coord_attr in ["roll", "pitch", "yaw"]:
+                    row = []
+                    for p in poses[:args.n]:
+                        q = p.orientation
+                        r, pch, y = tft.euler_from_quaternion([q.x, q.y, q.z, q.w])
+                        row.append({"roll": r, "pitch": pch, "yaw": y}[coord_attr])
+                else:
+                    row = [float(getattr(p.position, coord_attr)) for p in poses[:args.n]]
+                wp_mat.append(row)
 
             elif topic == ee_topic:
                 try:
-                    v = getattr(msg.pose.position, coord_attr)
+                    if coord_attr in ["roll", "pitch", "yaw"]:
+                        q = msg.pose.orientation
+                        r, p, y = tft.euler_from_quaternion([q.x, q.y, q.z, q.w])
+                        v = {"roll": r, "pitch": p, "yaw": y}[coord_attr]
+                    else:
+                        v = getattr(msg.pose.position, coord_attr)
                     ee_t.append(ts)
                     ee_v.append(float(v))
                 except Exception:
                     continue
 
     if len(wp_t) == 0:
-        raise SystemExit(f"No data found on {wp_topic} with length >= {args.n}.")
+        raise SystemExit(f"No data found on {wp_topic} with poses length >= {args.n}.")
     if len(ee_t) == 0:
         raise SystemExit(f"No data found on {ee_topic}.")
 
@@ -166,7 +186,10 @@ def main():
     plt.xlim(0, t_end)
 
     plt.xlabel("time [s]")
-    plt.ylabel(f"{coord_attr} [m]")
+    if coord_attr in ["roll", "pitch", "yaw"]:
+        plt.ylabel(f"{coord_attr} [rad]")
+    else:
+        plt.ylabel(f"{coord_attr} [m]")
     plt.title(args.title)
     plt.grid(True)
 
