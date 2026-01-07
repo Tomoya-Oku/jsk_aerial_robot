@@ -1,3 +1,4 @@
+# Not used
 me6_robot:
   gazebo_ros_control:
     pid_gains:
