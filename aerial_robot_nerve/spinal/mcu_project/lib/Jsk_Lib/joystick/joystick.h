@@ -1,142 +1,134 @@
-#pragma once
+#include "joystick.h"
 
 #ifdef __cplusplus
-extern "C" {
-#endif
-
-#include "cmsis_os.h"
-#include "main.h"  // ADC_HandleTypeDef, ADC_CHANNEL_x, ADC_SAMPLETIME_x など
-#ifdef __cplusplus
-}
-#endif
-
-#ifdef __cplusplus
-
-#include <ros.h>
 #include <std_msgs/UInt16MultiArray.h>
+#endif
 
-/**
- * Joystick module (header-only)
- * - ADC CHx, CHy を ReadAdcOnce で読む
- * - Battery 用 ADC CH15 に戻すためのコールバックを呼ぶ（任意）
- * - rosserial publish を周期実行する task を提供
- */
+#ifdef __cplusplus
+
 namespace joystick
 {
-// ----- 内部状態（ヘッダオンリーなので inline/static で ODR 回避） -----
-inline ros::NodeHandle* nh = nullptr;
-inline ADC_HandleTypeDef* hadc = nullptr;
 
-inline uint32_t ch_x = ADC_CHANNEL_18;
-inline uint32_t ch_y = ADC_CHANNEL_19;
-inline uint32_t sampling_time = ADC_SAMPLETIME_64CYCLES_5;
+// ====== 内部状態（C++11なのでここに実体を置く） ======
+static ros::NodeHandle* nh_ = NULL;
+static ADC_HandleTypeDef* hadc_ = NULL;
 
-inline uint32_t period_ms = 20;                  // publish周期（20ms=50Hz）
-inline void (*restore_battery_adc)() = nullptr;  // CH15へ戻す用（任意）
+static uint32_t ch_x_ = ADC_CHANNEL_18;
+static uint32_t ch_y_ = ADC_CHANNEL_19;
+static uint32_t sampling_time_ = ADC_SAMPLETIME_64CYCLES_5;
+static uint32_t period_ms_ = 20;
 
-inline volatile bool ready = false;
+static volatile bool ready_ = false;
 
-inline std_msgs::UInt16MultiArray msg;
-inline uint16_t buf[2] = { 0, 0 };
+static std_msgs::UInt16MultiArray msg_;
+static uint16_t buf_[2] = { 0, 0 };
+static ros::Publisher pub_("joystick_adc", &msg_);
 
-// Topic は固定（Publisher ctor が topic 文字列を必要とするため）
-inline ros::Publisher pub("joystick_adc", &msg);
-
-// ----- 内部ユーティリティ -----
-inline uint16_t ReadAdcOnce(uint32_t channel, uint32_t samp_time)
+// ====== Battery側に戻す（CH15に戻す）を joystick 内に吸収 ======
+// ここは「あなたの元の実装」に合わせて調整が必要。
+// まずは一般形で CH15/Rank1/SamplingTime を設定する関数を用意。
+static void RestoreBatteryAdcChannel15_()
 {
-  if (!hadc)
+  if (!hadc_)
+    return;
+
+  ADC_ChannelConfTypeDef sConfig = { 0 };
+  HAL_ADC_Stop(hadc_);
+
+  sConfig.Channel = ADC_CHANNEL_15;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+
+  // battery_status 側の想定 sampling に合わせたいならここを適切な値へ
+  // 例: ADC_SAMPLETIME_64CYCLES_5 / 810.5 / etc
+  sConfig.SamplingTime = sampling_time_;
+
+#if defined(ADC_SINGLE_ENDED)
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
+  sConfig.OffsetNumber = ADC_OFFSET_NONE;
+  sConfig.Offset = 0;
+#if defined(DISABLE)
+  sConfig.OffsetSignedSaturation = DISABLE;
+#endif
+#endif
+
+  (void)HAL_ADC_ConfigChannel(hadc_, &sConfig);
+}
+
+// ====== ADC 1回読み ======
+static uint16_t ReadAdcOnce(uint32_t channel)
+{
+  if (!hadc_)
     return 0;
 
   ADC_ChannelConfTypeDef sConfig = { 0 };
 
-  // 念のため停止（すでに動いていてもOK）
-  HAL_ADC_Stop(hadc);
+  HAL_ADC_Stop(hadc_);
 
   sConfig.Channel = channel;
   sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = samp_time;
+  sConfig.SamplingTime = sampling_time_;
+
+#if defined(ADC_SINGLE_ENDED)
   sConfig.SingleDiff = ADC_SINGLE_ENDED;
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
+#if defined(DISABLE)
   sConfig.OffsetSignedSaturation = DISABLE;
+#endif
+#endif
 
-  if (HAL_ADC_ConfigChannel(hadc, &sConfig) != HAL_OK)
+  if (HAL_ADC_ConfigChannel(hadc_, &sConfig) != HAL_OK)
     return 0;
-  if (HAL_ADC_Start(hadc) != HAL_OK)
+  if (HAL_ADC_Start(hadc_) != HAL_OK)
     return 0;
-  if (HAL_ADC_PollForConversion(hadc, 10) != HAL_OK)
+  if (HAL_ADC_PollForConversion(hadc_, 10) != HAL_OK)
     return 0;
 
-  uint16_t v = (uint16_t)HAL_ADC_GetValue(hadc);
-  HAL_ADC_Stop(hadc);
+  uint16_t v = (uint16_t)HAL_ADC_GetValue(hadc_);
+  HAL_ADC_Stop(hadc_);
   return v;
 }
 
-// ----- 公開API -----
-
-/**
- * setup: coreTask内で nh_.initNode() の後に1回だけ呼ぶ
- * @param nh_in ros::NodeHandle*
- * @param hadc_in ADC_HandleTypeDef*（例: &hadc1）
- * @param restore_cb BatteryStatus側が前提にしている ADC設定へ戻す関数（任意）
- * @param adc_ch_x joystick X の ADC チャンネル（デフォルト CH18）
- * @param adc_ch_y joystick Y の ADC チャンネル（デフォルト CH19）
- * @param samp_time ADC sampling time（デフォルト 64cycles）
- * @param pub_period_ms publish周期（デフォルト 20ms）
- */
-inline void setup(ros::NodeHandle* nh_in, ADC_HandleTypeDef* hadc_in, void (*restore_cb)() = nullptr,
-                  uint32_t adc_ch_x = ADC_CHANNEL_18, uint32_t adc_ch_y = ADC_CHANNEL_19,
-                  uint32_t samp_time = ADC_SAMPLETIME_64CYCLES_5, uint32_t pub_period_ms = 20)
+// ====== 公開API ======
+void setup(ros::NodeHandle* nh, ADC_HandleTypeDef* hadc, uint32_t adc_ch_x, uint32_t adc_ch_y, uint32_t samp_time,
+           uint32_t pub_period_ms)
 {
-  nh = nh_in;
-  hadc = hadc_in;
-  restore_battery_adc = restore_cb;
-  ch_x = adc_ch_x;
-  ch_y = adc_ch_y;
-  sampling_time = samp_time;
-  period_ms = pub_period_ms;
+  nh_ = nh;
+  hadc_ = hadc;
+  ch_x_ = adc_ch_x;
+  ch_y_ = adc_ch_y;
+  sampling_time_ = samp_time;
+  period_ms_ = pub_period_ms;
 
-  msg.data_length = 2;
-  msg.data = buf;
+  msg_.data_length = 2;
+  msg_.data = buf_;
 
-  // advertise は initNode 後に呼ぶ必要がある
-  if (nh)
+  if (nh_)
   {
-    nh->advertise(pub);
-    ready = true;
+    nh_->advertise(pub_);
+    ready_ = true;
   }
 }
 
-/**
- * FreeRTOS/CMSIS-OS task entry
- * osThreadDef(..., joystick::task, ...)
- */
-inline void task(void const* /*argument*/)
+void task(void const* /*argument*/)
 {
-  // setup 完了待ち
-  while (!ready)
+  while (!ready_)
   {
     osDelay(1);
   }
 
   for (;;)
   {
-    buf[0] = ReadAdcOnce(ch_x, sampling_time);
-    buf[1] = ReadAdcOnce(ch_y, sampling_time);
+    buf_[0] = ReadAdcOnce(ch_x_);
+    buf_[1] = ReadAdcOnce(ch_y_);
 
-    // Battery 側のADC前提に戻す（必要なら）
-    if (restore_battery_adc)
-      restore_battery_adc();
+    // battery 側が ADC CH15 を使う想定なら戻す
+    RestoreBatteryAdcChannel15_();
 
-    pub.publish(&msg);
-
-    // 送信は別スレッド rosPublishTask が捌く設計なので、ここで spinOnce は基本不要
-    // （必要なら呼んでもいいが、publish専用なら呼ばない方がスッキリ）
-    osDelay(period_ms);
+    pub_.publish(&msg_);
+    osDelay(period_ms_);
   }
 }
 
 }  // namespace joystick
-
-#endif  // __cplusplus
+#endif
