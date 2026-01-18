@@ -1193,8 +1193,7 @@ void coreTaskFunc(void const* argument)
 
   osSemaphoreWait(coreTaskSemHandle, osWaitForever);
 
-  joystick::setup(&nh_, &hadc1, RestoreBatteryAdcChannel15, ADC_CHANNEL_18, ADC_CHANNEL_19, ADC_SAMPLETIME_64CYCLES_5,
-                  20 /*ms*/);
+  joystick::setup(&nh_, &hadc1, ADC_CHANNEL_18, ADC_CHANNEL_18, ADC_SAMPLETIME_64CYCLES_5, 20);
 
   for (;;)
   {
