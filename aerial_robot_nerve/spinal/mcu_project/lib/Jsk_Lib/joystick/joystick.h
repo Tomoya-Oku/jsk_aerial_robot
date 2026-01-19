@@ -1,4 +1,3 @@
-#include "joystick.h"
 
 #ifdef __cplusplus
 #include <std_msgs/UInt16MultiArray.h>
