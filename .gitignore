@@ -116,3 +116,6 @@ robots/**/mujoco
 build/
 devel/
 logs/
+
+.vscode
+.history

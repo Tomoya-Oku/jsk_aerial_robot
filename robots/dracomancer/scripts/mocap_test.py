@@ -37,20 +37,20 @@ class Mocap_Test():
         self.rate = self.params['rospy']['rate']
 
         # Publisher
-        self.pub_shoulder_att = rospy.Publisher('/manica/calculation/shoulder_att', Vector3Stamped, queue_size=1)
-        self.pub_shoulder_att_unwraped = rospy.Publisher('/manica/calculation/shoulder_att_unwraped', Vector3Stamped, queue_size=1)
-        self.pub_shoulder_att_prev = rospy.Publisher('/manica/calculation/shoulder_att_prev', Vector3Stamped, queue_size=1)
+        self.pub_shoulder_att = rospy.Publisher('/dracomancer/calculation/shoulder_att', Vector3Stamped, queue_size=1)
+        self.pub_shoulder_att_unwraped = rospy.Publisher('/dracomancer/calculation/shoulder_att_unwraped', Vector3Stamped, queue_size=1)
+        self.pub_shoulder_att_prev = rospy.Publisher('/dracomancer/calculation/shoulder_att_prev', Vector3Stamped, queue_size=1)
 
-        self.pub_wrist_att = rospy.Publisher('/manica/calculation/wrist_att', Vector3Stamped, queue_size=1)
-        self.pub_wrist_att_unwraped = rospy.Publisher('/manica/calculation/wrist_att_unwraped', Vector3Stamped, queue_size=1)
-        self.pub_wrist_att_prev = rospy.Publisher('/manica/calculation/wrist_att_prev', Vector3Stamped, queue_size=1)
+        self.pub_wrist_att = rospy.Publisher('/dracomancer/calculation/wrist_att', Vector3Stamped, queue_size=1)
+        self.pub_wrist_att_unwraped = rospy.Publisher('/dracomancer/calculation/wrist_att_unwraped', Vector3Stamped, queue_size=1)
+        self.pub_wrist_att_prev = rospy.Publisher('/dracomancer/calculation/wrist_att_prev', Vector3Stamped, queue_size=1)
 
-        self.pub_shoulder_wrist_dist = rospy.Publisher('/manica/calculation/shoulder_wrist_dist', float, queue_size=1) # Distance between shoulder and wrist
-        self.pub_elbow_angle = rospy.Publisher('/manica/calculation/elbow_angle', float, queue_size=1) # Angle of elbow calculated from positions of shoulder and wrist [deg]
+        self.pub_shoulder_wrist_dist = rospy.Publisher('/dracomancer/calculation/shoulder_wrist_dist', float, queue_size=1) # Distance between shoulder and wrist
+        self.pub_elbow_angle = rospy.Publisher('/dracomancer/calculation/elbow_angle', float, queue_size=1) # Angle of elbow calculated from positions of shoulder and wrist [deg]
 
         # Subscriber
-        self.sub_shoulder_pose = rospy.Subscriber('/manica/mocap/shoulder/pose', PoseStamped, self.shoulder_pos_cb)
-        self.sub_wrist_pose = rospy.Subscriber('/manica/mocap/wrist/pose', PoseStamped, self.wrist_pos_cb)
+        self.sub_shoulder_pose = rospy.Subscriber('/dracomancer/mocap/shoulder/pose', PoseStamped, self.shoulder_pos_cb)
+        self.sub_wrist_pose = rospy.Subscriber('/dracomancer/mocap/wrist/pose', PoseStamped, self.wrist_pos_cb)
 
         # Variables
         self.shoulder_pos = [None]*3

@@ -1,0 +1,10 @@
+<library path="lib/libdracomancer_controllib">
+
+  <class name="aerial_robot_control/dracomancer_controller" type="aerial_robot_control::DracomancerController" base_class_type="aerial_robot_control::ControlBase">
+    <description>plugin for dracomancer</description>
+  </class>
+  <class name="aerial_robot_control/dracomancer_optimizer" type="aerial_robot_control::DracomancerOptimizer" base_class_type="aerial_robot_control::ControlBase">
+    <description>plugin for dracomancer</description>
+  </class>
+  
+</library>

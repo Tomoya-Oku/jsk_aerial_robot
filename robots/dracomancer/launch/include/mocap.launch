@@ -1,7 +1,7 @@
 <launch>
 
   <arg name="robot_id" default="1"/>
-  <arg name="manica_id" default="99"/>
+  <arg name="dracomancer_id" default="99"/>
 
   <node pkg="mocap_optitrack"
     type="mocap_node"
@@ -23,9 +23,9 @@
          data_port: 1511 -->
 
       rigid_bodies:
-         '$(arg manica_id)':
-               pose: /manica/mocap/pose
-               pose2d: /manica/mocap/ground_pose
+         '$(arg dracomancer_id)':
+               pose: /dracomancer_id/mocap/pose
+               pose2d: /dracomancer_id/mocap/ground_pose
                child_frame_id: baselink
                parent_frame_id: world
       optitrack_config:

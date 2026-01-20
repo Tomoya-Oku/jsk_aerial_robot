@@ -19,8 +19,8 @@
   <arg name="spawn_y" default="0.0"/>
   <arg name="spawn_z" default="0.0"/>
   <arg name="spawn_yaw" default="0.0"/>
-  <arg name="robot_ns" value="manica" />
-  <arg name="config_dir" default="$(find manica)/config" />
+  <arg name="robot_ns" value="dracomancer" />
+  <arg name="config_dir" default="$(find dracomancer)/config" />
   <arg name="mujoco" default="False" />
 
   ###########  Parameters  ###########
@@ -34,17 +34,17 @@
     <param name="estimation/mode" value= "$(arg estimate_mode)" if="$(arg real_machine)"/>
 
     <param name="uav_model" value= "0" />
-    <rosparam file="$(arg config_dir)/model/TwinHammerModel.yaml" command="load" />
+    <rosparam file="$(arg config_dir)/model/dracomancer_model.yaml" command="load" />
 
     ###########  Battery Config  ###########
-    <rosparam file="$(arg config_dir)/Battery.yaml" command="load" />
+    <rosparam file="$(arg config_dir)/battery.yaml" command="load" />
 
     ###########  Sensor Fusion  ###########
-    <rosparam file="$(arg config_dir)/StateEstimation.yaml" command="load" />
-    <rosparam file="$(arg config_dir)/Simulation.yaml" command="load" if="$(eval arg('simulation') and not arg('real_machine'))"/>
+    <rosparam file="$(arg config_dir)/state_estimation.yaml" command="load" />
+    <rosparam file="$(arg config_dir)/simulation.yaml" command="load" if="$(eval arg('simulation') and not arg('real_machine'))"/>
     
     ###########  Navigation  ###########
-    <rosparam file="$(arg config_dir)/NavigationConfig.yaml" command="load" />
+    <rosparam file="$(arg config_dir)/navigation.yaml" command="load" />
    
   </group>
 
@@ -60,8 +60,8 @@
   <arg name="description_mode" value="gazebo" if="$(arg simulation)" />
   <include file="$(find aerial_robot_model)/launch/aerial_robot_model.launch" >
     <arg name="headless" value="$(arg headless)" />
-    <arg name="robot_model" value="$(find manica)/urdf/device_with_dummy_weight.$(arg description_mode).xacro" if="$(eval not arg('direct_model') and arg('dummy_weight'))"/>
-    <arg name="robot_model" value="$(find manica)/urdf/device.$(arg description_mode).xacro" if="$(eval not arg('direct_model') and not arg('dummy_weight'))"/>
+    <arg name="robot_model" value="$(find dracomancer)/urdf/device_with_dummy_weight.$(arg description_mode).xacro" if="$(eval not arg('direct_model') and arg('dummy_weight'))"/>
+    <arg name="robot_model" value="$(find dracomancer)/urdf/device.$(arg description_mode).xacro" if="$(eval not arg('direct_model') and not arg('dummy_weight'))"/>
     <arg name="robot_model" value="$(arg direct_model_name)" if="$(arg direct_model)"/>
     <arg name="robot_ns" value="$(arg robot_ns)" />
     <arg name="rviz_config" value="$(arg config_dir)/rviz_config_dummy_weight" if="$(arg dummy_weight)"/>
@@ -71,7 +71,7 @@
   </include>
 
   ###########  Sensors ###########
-  <include file="$(find manica)/launch/include/sensors.launch.xml" >
+  <include file="$(find dracomancer)/launch/include/sensors.launch.xml" >
     <arg name="real_machine" value="$(arg real_machine)" />
     <arg name="simulation" value="$(arg simulation)" />
     <arg name="robot_ns" value="$(arg robot_ns)" />

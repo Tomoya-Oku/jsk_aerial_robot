@@ -1,12 +1,12 @@
 <?xml version="1.0"?>
 <package>
-  <name>manica</name>
+  <name>dracomancer</name>
   <version>0.0.0</version>
-  <description>Multi-modal Arm-type Nimble and Intuitive Control device for Articulated aerial robot</description>
+  <description>Uplimb-Exoskeleton Type Teleoperation System</description>
 
   <maintainer email="oku@dragon.t.u-tokyo.ac.jp">Tomoya Oku</maintainer>
   <license>BSD</license>
-  <url type="website">https://github.com/jsk-ros-pkg/jsk_aerial_robot</url>
+  <url type="website">https://github.com/Tomoya-Oku/jsk_aerial_robot</url>
   <author email="oku@dragon.t.u-tokyo.ac.jp">Tomoya Oku</author>
 
   <buildtool_depend>catkin</buildtool_depend>
