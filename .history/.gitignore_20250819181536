@@ -112,7 +112,6 @@ tags
 MUJOCO_LOG.txt
 robots/**/mujoco
 
-.catkin_tools/
-build/
-devel/
-logs/
+# local-env in oku
+.history/
+.vscode/

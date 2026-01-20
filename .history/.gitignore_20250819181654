@@ -111,8 +111,4 @@ tags
 # mujoco
 MUJOCO_LOG.txt
 robots/**/mujoco
-
-.catkin_tools/
-build/
-devel/
-logs/
+.history
