@@ -41,6 +41,7 @@
 #include "sensors/baro/baro_ms5611.h"
 #include "sensors/gps/gps_ublox.h"
 #include "sensors/encoder/mag_encoder.h"
+#include "sensors/joystick/i2c_joystick.h"
 
 #include "battery_status/battery_status.h"
 
@@ -123,6 +124,7 @@ ICM20948 imu_;
 Baro baro_;
 GPS gps_;
 BatteryStatus battery_status_;
+I2CJoystick i2c_joy_;
 
 /* servo instance */
 DirectServo servo_;
@@ -261,6 +263,7 @@ int main(void)
   IMU_ROS_CMD::addImu(&imu_);
   baro_.init(&hi2c1, &nh_, BAROCS_GPIO_Port, BAROCS_Pin);
   gps_.init(&huart3, &nh_, LED2_GPIO_Port, LED2_Pin);
+  i2c_joy_.init(&hi2c1, &nh_);
 
   DShot* dshotptr = nullptr;
 #if DSHOT
@@ -278,7 +281,8 @@ int main(void)
 
   DirectServo* servoptr = nullptr;
   bool servo_connect = servo_.init(&huart2, &nh_, NULL);
-  if(servo_connect) servoptr = &servo_;
+  if (servo_connect)
+    servoptr = &servo_;
 
   controller_.init(&htim1, &htim4, &estimator_, dshotptr, servoptr, &battery_status_, &nh_, &flightControlMutexHandle);
 
@@ -1215,36 +1219,42 @@ void coreTaskFunc(void const * argument)
 
   osSemaphoreWait(coreTaskSemHandle, osWaitForever);
 
-  for(;;)
-    {
-      osSemaphoreWait(coreTaskSemHandle, osWaitForever);
+  for (;;)
+  {
+    osSemaphoreWait(coreTaskSemHandle, osWaitForever);
 
-      Spine::send();
+    Spine::send();
 
-      imu_.update();
-      baro_.update();
-      gps_.update();
-      estimator_.update();
-      controller_.update();
+    imu_.update();
+    baro_.update();
+    gps_.update();
+    estimator_.update();
+    controller_.update();
 
-      Spine::update();
-
-      // Workaround to handle the BUSY->TIMEOUT Error problem of ETH handler in STM32H7
-      // We observe this is occasionally occur, but the ETH DMA is valid.
-      if (heth.ErrorCode & HAL_ETH_ERROR_TIMEOUT)
-        {
-          // force to restart ETH transmit
-          heth.gState = HAL_ETH_STATE_READY;
-          ETH_TxDescListTypeDef *dmatxdesclist = &(heth.TxDescList);
-          for (uint32_t i = 0; i < (uint32_t)ETH_TX_DESC_CNT; i++)
-            {
-              ETH_DMADescTypeDef *dmatxdesc = (ETH_DMADescTypeDef *)dmatxdesclist->TxDesc[i];
-              CLEAR_BIT(dmatxdesc->DESC3, ETH_DMATXNDESCRF_OWN);
-            }
-        }
+    static uint32_t joy_div = 0;
+    if ((++joy_div % 10) == 0)
+    {  // 1kHz / 10 = 100Hz
+      i2c_joy_.update();
     }
 
-  /* USER CODE END 5 */
+    Spine::update();
+
+    // Workaround to handle the BUSY->TIMEOUT Error problem of ETH handler in STM32H7
+    // We observe this is occasionally occur, but the ETH DMA is valid.
+    if (heth.ErrorCode & HAL_ETH_ERROR_TIMEOUT)
+    {
+      // force to restart ETH transmit
+      heth.gState = HAL_ETH_STATE_READY;
+      ETH_TxDescListTypeDef *dmatxdesclist = &(heth.TxDescList);
+      for (uint32_t i = 0; i < (uint32_t)ETH_TX_DESC_CNT; i++)
+        {
+          ETH_DMADescTypeDef *dmatxdesc = (ETH_DMADescTypeDef *)dmatxdesclist->TxDesc[i];
+          CLEAR_BIT(dmatxdesc->DESC3, ETH_DMATXNDESCRF_OWN);
+        }
+    }
+  }
+
+    /* USER CODE END 5 */
 }
 
 /* USER CODE BEGIN Header_rosSpinTaskFunc */
