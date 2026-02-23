@@ -12,7 +12,7 @@
 #endif
 
 #ifndef M5JS2_TOPIC
-#define M5JS2_TOPIC "joy_i2c"
+#define M5JS2_TOPIC "joystick_m5stack"
 #endif
 
 #ifndef M5JS2_I2C_TIMEOUT_MS
@@ -21,7 +21,7 @@
 
 #ifndef M5JS2_CALIB_SAMPLES
 // 起動時にこの回数だけサンプルして平均をオフセットにする
-#define M5JS2_CALIB_SAMPLES 128
+#define M5JS2_CALIB_SAMPLES 64
 #endif
 
 #ifndef M5JS2_CALIB_DELAY_MS
