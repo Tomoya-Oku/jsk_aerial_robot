@@ -21,7 +21,7 @@
 
 #ifndef M5JS2_CALIB_SAMPLES
 // 起動時にこの回数だけサンプルして平均をオフセットにする
-#define M5JS2_CALIB_SAMPLES 16
+#define M5JS2_CALIB_SAMPLES 128
 #endif
 
 #ifndef M5JS2_CALIB_DELAY_MS
