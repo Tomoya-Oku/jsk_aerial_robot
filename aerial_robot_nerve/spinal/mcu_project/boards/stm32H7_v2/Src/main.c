@@ -283,12 +283,17 @@ int main(void)
 
   DirectServo* servoptr = nullptr;
   bool servo_connect = servo_.init(&huart2, &nh_, NULL);
-  if (servo_connect) servoptr = &servo_;
+  if(servo_connect) servoptr = &servo_;
+
   controller_.init(&htim1, &htim4, &estimator_, dshotptr, servoptr, &battery_status_, &nh_, &flightControlMutexHandle);
 
   bool nerve_connect = Spine::init(&hfdcan1, &nh_, &estimator_, &controller_, LED1_GPIO_Port, LED1_Pin);
+<<<<<<< HEAD
 
   if (nerve_connect) Spine::useRTOS(&canMsgMailHandle);  // use RTOS for CAN in spianl
+=======
+  if(nerve_connect) Spine::useRTOS(&canMsgMailHandle); // use RTOS for CAN in spianl
+>>>>>>> c977b9ff ([Spinal] 最新masterをrestoreの後，joystick要素を追加)
 
   /* USER CODE END 2 */
 
@@ -1200,31 +1205,9 @@ void coreTaskFunc(void const* argument)
 
   osSemaphoreWait(coreTaskSemHandle, osWaitForever);
 
-  for (;;)
-  {
-    osSemaphoreWait(coreTaskSemHandle, osWaitForever);
-
-    Spine::send();
-
-    imu_.update();
-    baro_.update();
-    gps_.update();
-    estimator_.update();
-    controller_.update();
-
-    static uint32_t joy_div = 0;
-    if ((++joy_div % 10) == 0)
-    {  // 1kHz / 10 = 100Hz
-      i2c_joy_.update();
-    }
-  }
-
-    Spine::update();
-
-    // Workaround to handle the BUSY->TIMEOUT Error problem of ETH handler in STM32H7
-    // We observe this is occasionally occur, but the ETH DMA is valid.
-    if (heth.ErrorCode & HAL_ETH_ERROR_TIMEOUT)
+  for(;;)
     {
+<<<<<<< HEAD
       // force to restart ETH transmit
       heth.gState = HAL_ETH_STATE_READY;
       ETH_TxDescListTypeDef *dmatxdesclist = &(heth.TxDescList);
@@ -1232,9 +1215,40 @@ void coreTaskFunc(void const* argument)
         {
           ETH_DMADescTypeDef *dmatxdesc = (ETH_DMADescTypeDef *)dmatxdesclist->TxDesc[i];
           CLEAR_BIT(dmatxdesc->DESC3, ETH_DMATXNDESCRF_OWN);
+=======
+      osSemaphoreWait(coreTaskSemHandle, osWaitForever);
+
+      Spine::send();
+
+      imu_.update();
+      baro_.update();
+      gps_.update();
+      estimator_.update();
+      controller_.update();
+
+      static uint32_t joy_div = 0;
+      if ((++joy_div % 10) == 0)
+      {  // 1kHz / 10 = 100Hz
+        i2c_joy_.update();
+      }
+
+      Spine::update();
+
+      // Workaround to handle the BUSY->TIMEOUT Error problem of ETH handler in STM32H7
+      // We observe this is occasionally occur, but the ETH DMA is valid.
+      if (heth.ErrorCode & HAL_ETH_ERROR_TIMEOUT)
+        {
+          // force to restart ETH transmit
+          heth.gState = HAL_ETH_STATE_READY;
+          ETH_TxDescListTypeDef *dmatxdesclist = &(heth.TxDescList);
+          for (uint32_t i = 0; i < (uint32_t)ETH_TX_DESC_CNT; i++)
+            {
+              ETH_DMADescTypeDef *dmatxdesc = (ETH_DMADescTypeDef *)dmatxdesclist->TxDesc[i];
+              CLEAR_BIT(dmatxdesc->DESC3, ETH_DMATXNDESCRF_OWN);
+            }
+>>>>>>> c977b9ff ([Spinal] 最新masterをrestoreの後，joystick要素を追加)
         }
     }
-  }
 
     /* USER CODE END 5 */
 }
