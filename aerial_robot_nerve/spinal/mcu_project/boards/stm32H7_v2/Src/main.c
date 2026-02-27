@@ -286,12 +286,8 @@ int main(void)
   controller_.init(&htim1, &htim4, &estimator_, dshotptr, servoptr, &battery_status_, &nh_, &flightControlMutexHandle);
 
   bool nerve_connect = Spine::init(&hfdcan1, &nh_, &estimator_, &controller_, LED1_GPIO_Port, LED1_Pin);
-<<<<<<< HEAD
 
   if (nerve_connect) Spine::useRTOS(&canMsgMailHandle);  // use RTOS for CAN in spianl
-=======
-  if(nerve_connect) Spine::useRTOS(&canMsgMailHandle); // use RTOS for CAN in spianl
->>>>>>> c977b9ff ([Spinal] 最新masterをrestoreの後，joystick要素を追加)
 
   /* USER CODE END 2 */
 
@@ -1225,7 +1221,6 @@ void coreTaskFunc(void const * argument)
 
   for(;;)
     {
-<<<<<<< HEAD
       // force to restart ETH transmit
       heth.gState = HAL_ETH_STATE_READY;
       ETH_TxDescListTypeDef *dmatxdesclist = &(heth.TxDescList);
@@ -1233,7 +1228,7 @@ void coreTaskFunc(void const * argument)
         {
           ETH_DMADescTypeDef *dmatxdesc = (ETH_DMADescTypeDef *)dmatxdesclist->TxDesc[i];
           CLEAR_BIT(dmatxdesc->DESC3, ETH_DMATXNDESCRF_OWN);
-=======
+
       osSemaphoreWait(coreTaskSemHandle, osWaitForever);
 
       Spine::send();
@@ -1264,7 +1259,6 @@ void coreTaskFunc(void const * argument)
               ETH_DMADescTypeDef *dmatxdesc = (ETH_DMADescTypeDef *)dmatxdesclist->TxDesc[i];
               CLEAR_BIT(dmatxdesc->DESC3, ETH_DMATXNDESCRF_OWN);
             }
->>>>>>> c977b9ff ([Spinal] 最新masterをrestoreの後，joystick要素を追加)
         }
     }
 
