@@ -38,7 +38,7 @@ class teleop_haptics_integration():
     self.device_pos_sub = rospy.Subscriber('/twin_hammer/mocap/pose', PoseStamped, self.device_pos_cb)
     self.robot_pos_sub = rospy.Subscriber('/'+self.robot_name+'/mocap/pose', PoseStamped, self.robot_pos_cb)
     self.teleop_mode_sub = rospy.Subscriber('/twin_hammer/teleop_mode', String, self.teleop_mode_cb)
-    self.robot_wrench_sub = rospy.Subscriber('/cfs/data', WrenchStamped, self.robot_wrench_cb)
+    self.robot_wrench_sub = rospy.Subscriber('/filtered_ftsensor', WrenchStamped, self.robot_wrench_cb)
 
     # Messages
     self.flight_nav = FlightNav()
