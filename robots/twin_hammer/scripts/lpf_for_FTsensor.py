@@ -14,7 +14,7 @@ class lpf_for_FTsensor():
     
     self.ft_sensor_sub = rospy.Subscriber('/cfs/data', WrenchStamped, self.ft_sensor_Cb)
     self.delay_param_sub = rospy.Subscriber('/delay_param_topic', Float32, self.delay_param_Cb)
-    self.filterd_val_pub = rospy.Publisher('/filterd_ftsensor', WrenchStamped, queue_size=10)
+    self.filterd_val_pub = rospy.Publisher('/filtered_ftsensor', WrenchStamped, queue_size=10)
 
     self.raw_val = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     self.filterd_val = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -57,11 +57,11 @@ class lpf_for_FTsensor():
         self.filterd_val[i] = (1-self.delay_param) * self.filterd_val[i] + self.delay_param * self.raw_val[i]
 
       self.filterd_val_msg.wrench.force.x = self.filterd_val[0]
-      self.filterd_val_msg.wrench.force.y = -self.filterd_val[1]
-      self.filterd_val_msg.wrench.force.z = -self.filterd_val[2]
+      self.filterd_val_msg.wrench.force.y = self.filterd_val[1]
+      self.filterd_val_msg.wrench.force.z = self.filterd_val[2]
       self.filterd_val_msg.wrench.torque.x = self.filterd_val[3]
-      self.filterd_val_msg.wrench.torque.y = -self.filterd_val[4]
-      self.filterd_val_msg.wrench.torque.z = -self.filterd_val[5]
+      self.filterd_val_msg.wrench.torque.y = self.filterd_val[4]
+      self.filterd_val_msg.wrench.torque.z = self.filterd_val[5]
 
       self.filterd_val_pub.publish(self.filterd_val_msg)
 
