@@ -41,7 +41,7 @@
 #include "sensors/baro/baro_ms5611.h"
 #include "sensors/gps/gps_ublox.h"
 #include "sensors/encoder/mag_encoder.h"
-#include "sensors/joystick/i2c_joystick.h"
+#include "sensors/joystick/joystick.h"
 
 #include "battery_status/battery_status.h"
 
