@@ -1,0 +1,70 @@
+<launch>
+  <!-- robot namespace -->
+  <arg name="device_ns" default="dracomancer"/>
+
+  <!-- serial settings -->
+  <arg name="port" default="/dev/ttyUSB0"/>
+  <arg name="baud" default="921600"/>
+
+  <!-- topic names -->
+  <arg name="joy_raw_topic" default="/$(arg device_ns)/joystick/raw"/>
+  <arg name="joy_calib_topic" default="/$(arg device_ns)/joystick/calib"/>
+
+  <!-- raw joystick publisher side -->
+  <!-- spinal/bridge.launch の中で rosserial_server を起動しているなら include でも可 -->
+  <node pkg="rosserial_server"
+        type="serial_node"
+        name="$(arg device_ns)_rosserial_server"
+        output="screen">
+    <param name="port" value="$(arg port)"/>
+    <param name="baud" value="$(arg baud)"/>
+    <remap from="joystick_m5stack" to="$(arg joy_raw_topic)"/>
+  </node>
+
+  <!-- joystick calibration -->
+  <node pkg="dracomancer"
+        type="joystick_calibration.py"
+        name="$(arg device_ns)_joystick_calibration"
+        output="screen">
+    <param name="in_topic" value="$(arg joy_raw_topic)"/>
+    <param name="out_topic" value="$(arg joy_calib_topic)"/>
+
+    <!-- calibration parameters -->
+    <rosparam param="axis_indices">[0, 1]</rosparam>
+    <param name="sample_rate" value="100"/>
+    <param name="center_duration" value="2.0"/>
+    <param name="range_duration" value="5.0"/>
+    <param name="deadzone" value="0.05"/>
+    <rosparam param="invert_axes">[1]</rosparam>
+
+    <!-- 必要なら -->
+    <param name="save_yaml" value="true"/>
+    <param name="yaml_path" value="$(env HOME)/$(arg device_ns)_joystick_calibration.yaml"/>
+  </node>
+
+  <!-- joystick command -->
+  <node pkg="dracomancer"
+        type="joystick_command.py"
+        name="$(arg device_ns)_joystick_command"
+        output="screen">
+    <param name="device_ns" value="/$(arg device_ns)"/>
+    <param name="joy_topic" value="$(arg joy_calib_topic)"/>
+
+    <!-- 軸割り当て -->
+    <param name="axis_x" value="1"/>
+    <param name="axis_y" value="0"/>
+    <param name="axis_z" value="2"/>
+
+    <!-- 符号 -->
+    <param name="invert_x" value="true"/>
+    <param name="invert_y" value="false"/>
+    <param name="invert_z" value="false"/>
+
+    <!-- 速度 -->
+    <param name="xy_vel" value="0.20"/>
+    <param name="z_vel" value="0.15"/>
+
+    <param name="deadzone" value="0.05"/>
+    <param name="publish_rate" value="30.0"/>
+  </node>
+</launch>

@@ -13,8 +13,8 @@ class JoystickCalibPublisher:
     def __init__(self):
         rospy.init_node("joystick_calib_publisher")
 
-        self.in_topic = rospy.get_param("~in_topic", "/joystick/raw")
-        self.out_topic = rospy.get_param("~out_topic", "/joystick/calib")
+        self.in_topic = rospy.get_param("~in_topic", "dracomancer/joystick/raw")
+        self.out_topic = rospy.get_param("~out_topic", "dracomancer/joystick/calib")
         self.axis_indices = rospy.get_param("~axis_indices", [0, 1])
         self.sample_rate = rospy.get_param("~sample_rate", 100)
         self.center_duration = rospy.get_param("~center_duration", 2.0)
@@ -22,7 +22,7 @@ class JoystickCalibPublisher:
         self.deadzone = rospy.get_param("~deadzone", 0.05)
         self.invert_axes = rospy.get_param("~invert_axes", [])   # 例: [1]
         self.save_yaml = rospy.get_param("~save_yaml", True)
-        self.yaml_path = rospy.get_param("~yaml_path", "joystick_calibration.yaml")
+        self.yaml_path = rospy.get_param("~yaml_path", "../config/joystick_calibration.yaml")
 
         self.latest_raw = None
         self.center = None

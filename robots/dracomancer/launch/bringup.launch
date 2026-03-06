@@ -36,9 +36,6 @@
     <param name="uav_model" value= "0" />
     <rosparam file="$(arg config_dir)/model/dracomancer_model.yaml" command="load" />
 
-    ###########  Battery Config  ###########
-    <rosparam file="$(arg config_dir)/battery.yaml" command="load" />
-
     ###########  Sensor Fusion  ###########
     <rosparam file="$(arg config_dir)/state_estimation.yaml" command="load" />
     <rosparam file="$(arg config_dir)/simulation.yaml" command="load" if="$(eval arg('simulation') and not arg('real_machine'))"/>
