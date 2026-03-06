@@ -12,7 +12,7 @@
 #endif
 
 #ifndef M5JS2_TOPIC
-#define M5JS2_TOPIC "joystick_m5stack"
+#define M5JS2_TOPIC "joystick/raw"
 #endif
 
 #ifndef M5JS2_I2C_TIMEOUT_MS
