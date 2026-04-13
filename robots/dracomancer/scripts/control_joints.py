@@ -2,47 +2,59 @@
 # -*- coding: utf-8 -*-
 
 import rospy
+import numpy as np
 from sensor_msgs.msg import JointState
 from spinal.msg import ServoStates
 
-
-class ServoStateToDragonJointsCtrl:
+class ControlJoints:
     def __init__(self):
-        rospy.init_node("servo_state_to_dragon_joints_ctrl")
+        rospy.init_node("control_joints")
 
-        self.servo_topic = rospy.get_param("~servo_topic", "dracomancer/servo/states")
-        self.cmd_topic = rospy.get_param("~cmd_topic", "/dragon/joints_ctrl")
-        self.rate_hz = rospy.get_param("~rate", 30.0)
+        # Parameters
+        self.robot_name = rospy.get_param("~robot_name", "dragon")
+        self.frame = rospy.get_param("~frame", "local") 
+        self.rate_hz = rospy.get_param("~rate", 40.0)
 
-        # servo ID 0..5 -> DRAGON joint index
+        # Flags
+        self.device_initialize_flag = False
+        self.robot_initialize_flag = False
+
+        # DRAGONの尾頭のどちらを手首側にするか
+        self.reverse_head = rospy.get_param("~reverse_head", False)
+
+        # Servo
+        ## 関節角制限
+        self.device_joint_limit = rospy.get_param("~joint_limit", np.pi/2)
+        ## サーボ起動時の角度を初期値として使う
+        self.capture_initial_on_first_msg = rospy.get_param("~capture_initial_on_first_msg", True)
+        ## servo ID 0..5 -> DRAGON joint index
         self.id_to_joint_index = rospy.get_param("~id_to_joint_index", [0, 1, 2, 3, 4, 5])
 
-        # 符号・スケール
+        # Signs and Scalings
         self.signs = rospy.get_param("~signs", [1, 1, 1, 1, 1, 1])
         self.angle_scale = rospy.get_param("~angle_scale", 0.01)
 
         # DRAGON初期姿勢
-        # 参考スクリプトの reset 姿勢
+        ## 参考スクリプトの reset 姿勢
         self.dragon_init_pose = rospy.get_param(
             "~dragon_init_pose",
             [0.0, 1.56, 0.0, 1.56, 0.0, 1.56]
         )
 
-        # サーボ起動時の角度を初期値として使う
-        self.capture_initial_on_first_msg = rospy.get_param("~capture_initial_on_first_msg", True)
-
-        self.joint_limit = rospy.get_param("~joint_limit", 1.56)
-
         self.latest_servo_pos = {}
         self.initial_servo_pos = {}
         self.initialized = False
 
-        self.pub = rospy.Publisher(self.cmd_topic, JointState, queue_size=10)
-        self.sub = rospy.Subscriber(self.servo_topic, ServoStates, self.servo_cb, queue_size=10)
+        # Publishers
+        self.joints_ctrl_pub = rospy.Publisher("/dragon/joints_ctrl", JointState, queue_size=10)
 
-        rospy.loginfo("servo_topic: %s", self.servo_topic)
-        rospy.loginfo("cmd_topic: %s", self.cmd_topic)
-        rospy.loginfo("dragon_init_pose: %s", self.dragon_init_pose)
+        # Subscribers
+        self.servo_states_sub = rospy.Subscriber("dracomancer/servo/states", ServoStates, self.servo_cb, queue_size=10)
+
+        # Logger
+        # rospy.loginfo("servo_topic: %s", "dracomancer/servo/states")
+        # rospy.loginfo("cmd_topic: %s", "/dragon/joints_ctrl")
+        # rospy.loginfo("dragon_init_pose: %s", self.dragon_init_pose)
 
     def clamp(self, x):
         return max(-self.joint_limit, min(self.joint_limit, x))
@@ -94,17 +106,17 @@ class ServoStateToDragonJointsCtrl:
         msg.position = target
         return msg
 
-    def run(self):
+    def main(self):
         rate = rospy.Rate(self.rate_hz)
         while not rospy.is_shutdown():
-            self.pub.publish(self.make_joint_msg())
-            rate.sleep()
 
+            self.joints_ctrl_pub.publish(self.make_joint_msg())
+            rate.sleep()
 
 if __name__ == "__main__":
     try:
-        node = ServoStateToDragonJointsCtrl()
-        node.run()
+        node = ControlJoints()
+        node.main()
     except rospy.ROSInterruptException:
         pass
     except Exception as e:

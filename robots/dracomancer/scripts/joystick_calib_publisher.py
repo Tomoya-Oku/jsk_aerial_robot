@@ -5,40 +5,42 @@ import os
 import sys
 import yaml
 import rospy
-
 from std_msgs.msg import Int16MultiArray, Float32MultiArray
-
 
 class JoystickCalibPublisher:
     def __init__(self):
         rospy.init_node("joystick_calib_publisher")
+        self.rate_hz = rospy.get_param("~rate", 40)
 
-        self.in_topic = rospy.get_param("~in_topic", "dracomancer/joystick/raw")
-        self.out_topic = rospy.get_param("~out_topic", "dracomancer/joystick/calib")
+        # Topic names
+        self.js_raw_topic = rospy.get_param("~js_raw_topic", "dracomancer/joystick/raw")
+        self.js_calibrated_topic = rospy.get_param("~js_calibrated_topic", "dracomancer/joystick/calibrated")
+
+        # Calibration parameters
         self.axis_indices = rospy.get_param("~axis_indices", [0, 1])
-        self.sample_rate = rospy.get_param("~sample_rate", 100)
+        self.invert_axes = rospy.get_param("~invert_axes", [])   # 例: [1]
         self.center_duration = rospy.get_param("~center_duration", 2.0)
         self.range_duration = rospy.get_param("~range_duration", 5.0)
         self.deadzone = rospy.get_param("~deadzone", 0.05)
-        self.invert_axes = rospy.get_param("~invert_axes", [])   # 例: [1]
         self.save_yaml = rospy.get_param("~save_yaml", True)
         self.yaml_path = rospy.get_param("~yaml_path", "../config/joystick_calibration.yaml")
-
+        ## Buffers
         self.latest_raw = None
         self.center = None
         self.min_vals = None
         self.max_vals = None
 
-        self.sub = rospy.Subscriber(self.in_topic, Int16MultiArray, self.cb_raw, queue_size=10)
-        self.pub = rospy.Publisher(self.out_topic, Float32MultiArray, queue_size=10)
+        # Publishers and Subscribers
+        self.js_calibrated_pub = rospy.Publisher(self.js_calibrated_topic, Float32MultiArray, queue_size=10)
+        self.js_raw_sub = rospy.Subscriber(self.js_raw_topic, Int16MultiArray, self.cb_raw, queue_size=10)
 
     def cb_raw(self, msg):
         self.latest_raw = list(msg.data)
 
     def wait_for_first_message(self, timeout_sec=5.0):
-        rospy.loginfo("Waiting for joystick message on %s ...", self.in_topic)
+        rospy.loginfo("Waiting for joystick message on %s ...", self.js_raw_topic)
         start = rospy.Time.now()
-        rate = rospy.Rate(50)
+        rate = rospy.Rate(self.rate_hz)
 
         while not rospy.is_shutdown():
             if self.latest_raw is not None:
@@ -57,8 +59,8 @@ class JoystickCalibPublisher:
             return None
 
     def sample_average(self, duration_sec):
-        rate = rospy.Rate(self.sample_rate)
-        n = max(1, int(duration_sec * self.sample_rate))
+        rate = rospy.Rate(self.rate_hz)
+        n = max(1, int(duration_sec * self.rate_hz))
 
         sums = [0.0 for _ in self.axis_indices]
         count = 0
@@ -80,8 +82,8 @@ class JoystickCalibPublisher:
         return [s / count for s in sums]
 
     def sample_minmax(self, duration_sec):
-        rate = rospy.Rate(self.sample_rate)
-        n = max(1, int(duration_sec * self.sample_rate))
+        rate = rospy.Rate(self.rate_hz)
+        n = max(1, int(duration_sec * self.rate_hz))
 
         mins = [float("inf") for _ in self.axis_indices]
         maxs = [float("-inf") for _ in self.axis_indices]
@@ -148,16 +150,16 @@ class JoystickCalibPublisher:
 
         print("")
         print("=== Joystick Calibration ===")
-        print("1) スティックに触らず中立位置にしてください。")
-        input("   準備ができたら Enter を押してください: ")
+        print("1) Don't touch the joystick and keep it in the neutral position for {} seconds.".format(self.center_duration))
+        input("   Press enter after preparing: ")
 
         self.center = self.sample_average(self.center_duration)
         print("center =", self.center)
 
         print("")
-        print("2) 次は可動範囲を測ります。")
-        print("   Enter を押したら {} 秒間、各軸を端まで大きく動かしてください。".format(self.range_duration))
-        input("   準備ができたら Enter を押してください: ")
+        print("2) Next, we will measure the range of motion.")
+        print("   Press enter and then move each axis to its extreme positions for {} seconds.".format(self.range_duration))
+        input("   Press enter after preparing: ")
 
         self.min_vals, self.max_vals = self.sample_minmax(self.range_duration)
         print("min =", self.min_vals)
@@ -176,7 +178,7 @@ class JoystickCalibPublisher:
 
         rospy.loginfo("Publishing calibrated joystick to %s", self.out_topic)
 
-        rate = rospy.Rate(self.sample_rate)
+        rate = rospy.Rate(self.rate_hz)
         while not rospy.is_shutdown():
             if self.latest_raw is None:
                 rate.sleep()
@@ -208,17 +210,16 @@ class JoystickCalibPublisher:
 
             rate.sleep()
 
-    def run(self):
+    def main(self):
         self.run_calibration()
         print("")
-        print("Calibration finished. Publishing started. Ctrl+C で終了します.")
+        print("Calibration finished. Publishing started.")
         self.publish_loop()
-
 
 if __name__ == "__main__":
     try:
         node = JoystickCalibPublisher()
-        node.run()
+        node.main()
     except rospy.ROSInterruptException:
         pass
     except Exception as e:
