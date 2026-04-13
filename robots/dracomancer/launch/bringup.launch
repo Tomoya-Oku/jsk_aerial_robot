@@ -34,13 +34,13 @@
     <param name="estimation/mode" value= "$(arg estimate_mode)" if="$(arg real_machine)"/>
 
     <param name="uav_model" value= "0" />
-    <rosparam file="$(arg config_dir)/model/dracomancer_model.yaml" command="load" />
+    <rosparam file="$(arg config_dir)/dracomancer_model.yaml" command="load" />
 
     ###########  Motor Config  ###########
     <rosparam file="$(arg config_dir)/MotorInfo.yaml" command="load" />
 
     ###########  Control  ###########
-    <rosparam file="$(arg config_dir)/control/optimizer.yaml" command="load" if="$(arg optimize)" />
+    <!-- <rosparam file="$(arg config_dir)/control/optimizer.yaml" command="load" if="$(arg optimize)" /> -->
     <rosparam file="$(arg config_dir)/control/control.yaml" command="load" unless="$(arg optimize)" />
 
     ###########  Sensor Fusion  ###########

@@ -50,7 +50,7 @@
         output="screen">
     <param name="device_ns" value="/$(arg device_ns)"/>
     <param name="publish_rate" value="40.0"/>
-    <param name="joy_topic" value="$(arg joy_calibrated_topic)"/>
+    <param name="joy_topic" value="$(arg js_calibrated_topic)"/>
 
     <!-- Scaling and Threshold -->
     <param name="scale_x" value="1.0"/>
