@@ -15,14 +15,14 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://dracomancer/mesh/base.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://dracomancer/urdf/mesh/base.STL" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="gray"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://dracomancer/mesh/base.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://dracomancer/urdf/mesh/base.STL" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
     <inertial>
@@ -39,14 +39,14 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://dracomancer/mesh/shoulder.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://dracomancer/urdf/mesh/shoulder.STL" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="gray"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://dracomancer/mesh/shoulder.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://dracomancer/urdf/mesh/shoulder.STL" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
     <inertial>
@@ -73,14 +73,14 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://dracomancer/mesh/upper_arm_upper.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://dracomancer/urdf/mesh/upper_arm_upper.STL" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="gray"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://dracomancer/mesh/upper_arm_upper.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://dracomancer/urdf/mesh/upper_arm_upper.STL" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
     <inertial>
@@ -104,14 +104,14 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://dracomancer/mesh/upper_arm_lower.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://dracomancer/urdf/mesh/upper_arm_lower.STL" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="gray"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://dracomancer/mesh/upper_arm_lower.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://dracomancer/urdf/mesh/upper_arm_lower.STL" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
     <inertial>
@@ -134,14 +134,14 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://dracomancer/mesh/lower_arm_upper.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://dracomancer/urdf/mesh/lower_arm_upper.STL" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="gray"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://dracomancer/mesh/lower_arm_upper.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://dracomancer/urdf/mesh/lower_arm_upper.STL" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
     <inertial>
@@ -168,14 +168,14 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://dracomancer/mesh/lower_arm_lower.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://dracomancer/urdf/mesh/lower_arm_lower.STL" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="gray"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://dracomancer/mesh/lower_arm_lower.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://dracomancer/urdf/mesh/lower_arm_lower.STL" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
     <inertial>
@@ -198,14 +198,14 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://dracomancer/mesh/wrist.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://dracomancer/urdf/mesh/wrist.STL" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="gray"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://dracomancer/mesh/wrist.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://dracomancer/urdf/mesh/wrist.STL" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
     <inertial>
@@ -232,14 +232,14 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://dracomancer/mesh/hand.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://dracomancer/urdf/mesh/hand.STL" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="gray"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://dracomancer/mesh/hand.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://dracomancer/urdf/mesh/hand.STL" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
     <inertial>
