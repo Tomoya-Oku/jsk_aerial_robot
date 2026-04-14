@@ -1,16 +1,9 @@
 <?xml version="1.0"?>
 <robot name="dracomancer">
-
-  <!-- ===================== -->
-  <!-- Materials            -->
-  <!-- ===================== -->
   <material name="gray">
     <color rgba="0.7 0.7 0.7 1.0"/>
   </material>
 
-  <!-- ===================== -->
-  <!-- base -->
-  <!-- ===================== -->
   <link name="base_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -93,7 +86,7 @@
   <joint name="upper_arm_external_internal_rotation_joint" type="revolute">
     <parent link="upper_arm_upper_link"/>
     <child link="upper_arm_lower_link"/>
-    <origin xyz="0.03 0.00 0.00" rpy="0 0 0"/>
+    <origin xyz="0.00 0.00 0.00" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
     <limit lower="-1.57" upper="1.57" effort="30" velocity="2.0"/>
   </joint>
@@ -122,7 +115,7 @@
   <joint name="elbow_flexion_extension_joint" type="revolute">
     <parent link="upper_arm_lower_link"/>
     <child link="lower_arm_upper_link"/>
-    <origin xyz="0.20 0.00 0.00" rpy="0 0 0"/>
+    <origin xyz="0.00 0.00 0.00" rpy="0 0 0"/>
     <axis xyz="1 0 0"/>
     <limit lower="0.0" upper="2.4" effort="20" velocity="2.0"/>
   </joint>
@@ -151,7 +144,7 @@
   <joint name="wrist_supination_joint" type="revolute">
     <parent link="lower_arm_upper_link"/>
     <child link="lower_arm_lower_link"/>
-    <origin xyz="0.20 0.00 0.00" rpy="0 0 0"/>
+    <origin xyz="0.00 0.00 0.00" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
     <limit lower="0.0" upper="2.4" effort="20" velocity="2.0"/>
   </joint>
@@ -180,7 +173,7 @@
   <joint name="wrist_flexion_extension_joint" type="revolute">
     <parent link="lower_arm_lower_link"/>
     <child link="wrist_link"/>
-    <origin xyz="0.18 0.00 0.00" rpy="0 0 0"/>
+    <origin xyz="0.00 0.00 0.00" rpy="0 0 0"/>
     <axis xyz="1 0 0"/>
     <limit lower="-1.57" upper="1.57" effort="10" velocity="2.0"/>
   </joint>
@@ -209,7 +202,7 @@
   <joint name="wrist_abduction_adduction_joint" type="revolute">
     <parent link="wrist_link"/>
     <child link="hand_link"/>
-    <origin xyz="0.18 0.00 0.00" rpy="0 0 0"/>
+    <origin xyz="0.00 0.00 0.00" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
     <limit lower="-1.0" upper="1.0" effort="10" velocity="2.0"/>
   </joint>
