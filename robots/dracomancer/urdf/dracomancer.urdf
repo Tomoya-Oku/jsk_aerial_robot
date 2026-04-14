@@ -32,9 +32,14 @@
     </inertial>
   </link>
 
-  <!-- ===================== -->
-  <!-- shoulder -->
-  <!-- ===================== -->
+  <joint name="shoulder_abduction_adduction_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="shoulder_link"/>
+    <origin xyz="0.00 0.00 0.00" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.57" upper="1.57" effort="30" velocity="2.0"/>
+  </joint>
+
   <link name="shoulder_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -56,19 +61,14 @@
     </inertial>
   </link>
 
-  <joint name="shoulder_joint" type="revolute">
-    <parent link="base_link"/>
-    <child link="shoulder_link"/>
-    <!-- 肩関節位置に合わせて調整 -->
-    <origin xyz="0.00 0.15 0.20" rpy="0 0 0"/>
-    <!-- 仮: 肩ピッチ -->
-    <axis xyz="0 1 0"/>
+  <joint name="shoulder_flexion_extension_joint" type="revolute">
+    <parent link="shoulder_link"/>
+    <child link="upper_arm_upper_link"/>
+    <origin xyz="0.00 0.00 0.00" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
     <limit lower="-1.57" upper="1.57" effort="30" velocity="2.0"/>
   </joint>
 
-  <!-- ===================== -->
-  <!-- upper arm upper -->
-  <!-- ===================== -->
   <link name="upper_arm_upper_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -90,16 +90,14 @@
     </inertial>
   </link>
 
-  <joint name="upper_arm_upper_joint" type="fixed">
-    <parent link="shoulder_link"/>
-    <child link="upper_arm_upper_link"/>
-    <!-- まずは固定でつなぐ -->
+  <joint name="upper_arm_external_internal_rotation_joint" type="revolute">
+    <parent link="upper_arm_upper_link"/>
+    <child link="upper_arm_lower_link"/>
     <origin xyz="0.03 0.00 0.00" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.57" upper="1.57" effort="30" velocity="2.0"/>
   </joint>
 
-  <!-- ===================== -->
-  <!-- upper arm lower -->
-  <!-- ===================== -->
   <link name="upper_arm_lower_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -121,15 +119,14 @@
     </inertial>
   </link>
 
-  <joint name="upper_arm_lower_joint" type="fixed">
-    <parent link="upper_arm_upper_link"/>
-    <child link="upper_arm_lower_link"/>
+  <joint name="elbow_flexion_extension_joint" type="revolute">
+    <parent link="upper_arm_lower_link"/>
+    <child link="lower_arm_upper_link"/>
     <origin xyz="0.20 0.00 0.00" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0.0" upper="2.4" effort="20" velocity="2.0"/>
   </joint>
 
-  <!-- ===================== -->
-  <!-- lower arm upper -->
-  <!-- ===================== -->
   <link name="lower_arm_upper_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -151,19 +148,14 @@
     </inertial>
   </link>
 
-  <joint name="elbow_joint" type="revolute">
-    <parent link="upper_arm_lower_link"/>
-    <child link="lower_arm_upper_link"/>
-    <!-- 肘関節位置に合わせて調整 -->
+  <joint name="wrist_supination_joint" type="revolute">
+    <parent link="lower_arm_upper_link"/>
+    <child link="lower_arm_lower_link"/>
     <origin xyz="0.20 0.00 0.00" rpy="0 0 0"/>
-    <!-- 仮: 肘屈曲 -->
-    <axis xyz="0 1 0"/>
+    <axis xyz="0 0 1"/>
     <limit lower="0.0" upper="2.4" effort="20" velocity="2.0"/>
   </joint>
 
-  <!-- ===================== -->
-  <!-- lower arm lower -->
-  <!-- ===================== -->
   <link name="lower_arm_lower_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -185,15 +177,14 @@
     </inertial>
   </link>
 
-  <joint name="lower_arm_lower_joint" type="fixed">
-    <parent link="lower_arm_upper_link"/>
-    <child link="lower_arm_lower_link"/>
+  <joint name="wrist_flexion_extension_joint" type="revolute">
+    <parent link="lower_arm_lower_link"/>
+    <child link="wrist_link"/>
     <origin xyz="0.18 0.00 0.00" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-1.57" upper="1.57" effort="10" velocity="2.0"/>
   </joint>
 
-  <!-- ===================== -->
-  <!-- wrist -->
-  <!-- ===================== -->
   <link name="wrist_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -215,19 +206,14 @@
     </inertial>
   </link>
 
-  <joint name="wrist_joint" type="revolute">
-    <parent link="lower_arm_lower_link"/>
-    <child link="wrist_link"/>
-    <!-- 手首関節位置に合わせて調整 -->
+  <joint name="wrist_abduction_adduction_joint" type="revolute">
+    <parent link="wrist_link"/>
+    <child link="hand_link"/>
     <origin xyz="0.18 0.00 0.00" rpy="0 0 0"/>
-    <!-- 仮: 手首ピッチ -->
     <axis xyz="0 1 0"/>
     <limit lower="-1.0" upper="1.0" effort="10" velocity="2.0"/>
   </joint>
 
-  <!-- ===================== -->
-  <!-- hand -->
-  <!-- ===================== -->
   <link name="hand_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -248,11 +234,5 @@
       <inertia ixx="0.0005" ixy="0" ixz="0" iyy="0.0005" iyz="0" izz="0.0005"/>
     </inertial>
   </link>
-
-  <joint name="hand_joint" type="fixed">
-    <parent link="wrist_link"/>
-    <child link="hand_link"/>
-    <origin xyz="0.08 0.00 0.00" rpy="0 0 0"/>
-  </joint>
 
 </robot>
