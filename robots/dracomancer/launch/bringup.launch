@@ -16,13 +16,6 @@
   <arg name="robot_ns" value="dracomancer" />
   <arg name="headless" default="False" />
 
-  ###########  Base Platform  ###########
-  <node pkg="aerial_robot_base" type="aerial_robot_base_node" name="aerial_robot_base_node" ns="$(arg robot_ns)" output="screen">
-    <param name="tf_prefix" value="$(arg robot_ns)"/>
-    <param name="param_verbose" value="false"/>
-    <param name="main_rate" value="40"/>
-  </node>
-
   ###########  Robot Model  ###########
   <arg name="description_mode" value="urdf" unless="$(arg simulation)" />
   <arg name="description_mode" value="gazebo" if="$(arg simulation)" />
