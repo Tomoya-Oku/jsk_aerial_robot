@@ -36,7 +36,7 @@
   </include >
 
   ###########  Sensors  ###########
-  <include file="$(find dracomancer)/launch/includes/$(arg model_name)/sensors.launch.xml" >
+  <include file="$(find dracomancer)/launch/include/sensors.launch.xml" >
     <arg name="real_machine" value="$(arg real_machine)" />
     <arg name="simulation" value="$(arg simulation)" />
     <arg name="robot_ns" value="$(arg robot_ns)" />
