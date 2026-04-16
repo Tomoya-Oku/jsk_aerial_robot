@@ -91,7 +91,7 @@ Visualization Manager:
   Global Options:
     Background Color: 48; 48; 48
     Default Light: true
-    Fixed Frame: base_link
+    Fixed Frame: dracomancer/base_link
     Frame Rate: 30
 
   Name: root
