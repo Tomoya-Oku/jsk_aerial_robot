@@ -4,7 +4,7 @@
     <color rgba="0.7 0.7 0.7 1.0"/>
   </material>
 
-  <link name="world">
+  <link name="world"/>
   
   <joint name="world_to_base" type="fixed">
     <parent link="world"/>
