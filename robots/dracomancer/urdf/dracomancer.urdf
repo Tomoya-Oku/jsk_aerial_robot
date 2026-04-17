@@ -26,10 +26,18 @@
         <mesh filename="package://dracomancer/urdf/mesh/base.STL" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
+    
+    <!-- ワールドに固定しているので意味はない -->
     <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="0.1"/>
-      <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
+      <origin xyz="-0.11912 -0.09759 -0.17415" rpy="0 0 0"/>
+      <mass value="0.92761"/>
+      <inertia
+          ixx="0.01935515021"
+          ixy="0.00048520291"
+          ixz="0.00655940035"
+          iyy="0.02465042157"
+          iyz="-0.00006693076"
+          izz="0.00737440034"/>
     </inertial>
   </link>
 
@@ -284,5 +292,4 @@
         izz="0.00066538840"/>
     </inertial>
   </link>
-
 </robot>

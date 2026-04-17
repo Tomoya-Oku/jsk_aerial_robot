@@ -27,11 +27,11 @@ class ControlJoints:
         self.device_joint_limit = rospy.get_param("~joint_limit", np.pi/2)
         ## サーボ起動時の角度を初期値として使う
         self.capture_initial_on_first_msg = rospy.get_param("~capture_initial_on_first_msg", True)
-        ## servo ID 0..5 -> DRAGON joint index
-        self.id_to_joint_index = rospy.get_param("~id_to_joint_index", [0, 1, 2, 3, 4, 5])
+        ## servo ID
+        self.id_to_joint_index = rospy.get_param("~id_to_joint_index", [1, 2, 3, 4, 5, 6, 7])
 
         # Signs and Scalings
-        self.signs = rospy.get_param("~signs", [1, 1, 1, 1, 1, 1])
+        self.signs = rospy.get_param("~signs", [1, 1, 1, 1, 1, 1, 1])
         self.angle_scale = rospy.get_param("~angle_scale", 0.01)
 
         # DRAGON初期姿勢
