@@ -65,7 +65,7 @@ Visualization Manager:
         Link Tree Style: Links in Alphabetic Order
       Name: RobotModel
       Robot Description: robot_description
-      TF Prefix: ""
+      TF Prefix: "dracomancer"
       Update Interval: 0
       Value: true
       Visual Enabled: true
