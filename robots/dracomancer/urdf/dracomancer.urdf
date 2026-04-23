@@ -41,6 +41,7 @@
     </inertial>
   </link>
 
+  <!-- Servo ID: 1 -->
   <joint name="shoulder_abduction_adduction_joint" type="revolute">
     <parent link="base_link"/>
     <child link="shoulder_link"/>
@@ -77,11 +78,12 @@
       </inertial>
   </link>
 
+  <!-- Servo ID: 2 -->
   <joint name="shoulder_flexion_extension_joint" type="revolute">
     <parent link="shoulder_link"/>
     <child link="upper_arm_upper_link"/>
     <origin xyz="0.0925 0.001 -0.1025" rpy="0 0 0"/>
-    <axis xyz="1 0 0"/>
+    <axis xyz="-1 0 0"/>
     <limit lower="-1.57" upper="1.57" effort="0.4" velocity="1.0"/>
     <dynamics damping="2.0" friction="0.3"/>
   </joint>
@@ -113,6 +115,7 @@
     </inertial>
   </link>
 
+  <!-- Servo ID: 3 -->
   <joint name="upper_arm_external_internal_rotation_joint" type="revolute">
     <parent link="upper_arm_upper_link"/>
     <child link="upper_arm_lower_link"/>
@@ -149,11 +152,12 @@
     </inertial>
   </link>
 
+  <!-- Servo ID: 4 -->
   <joint name="elbow_flexion_extension_joint" type="revolute">
     <parent link="upper_arm_lower_link"/>
     <child link="lower_arm_upper_link"/>
     <origin xyz="-0.00675 0.00 -0.1209" rpy="0 0 0"/>
-    <axis xyz="1 0 0"/>
+    <axis xyz="-1 0 0"/>
     <limit lower="-1.57" upper="1.57" effort="0.4" velocity="1.0"/>
     <dynamics damping="2.0" friction="0.3"/>
   </joint>
@@ -185,6 +189,7 @@
     </inertial>
   </link>
 
+  <!-- Servo ID: 5 -->
   <joint name="wrist_supination_joint" type="revolute">
     <parent link="lower_arm_upper_link"/>
     <child link="lower_arm_lower_link"/>
@@ -221,11 +226,12 @@
     </inertial>
   </link>
 
+  <!-- Servo ID: 6 -->
   <joint name="wrist_flexion_extension_joint" type="revolute">
     <parent link="lower_arm_lower_link"/>
     <child link="wrist_link"/>
     <origin xyz="-0.00675 0.00 -0.1209" rpy="0 0 0"/>
-    <axis xyz="1 0 0"/>
+    <axis xyz="-1 0 0"/>
     <limit lower="-1.57" upper="1.57" effort="0.4" velocity="1.0"/>
     <dynamics damping="2.0" friction="0.3"/>
   </joint>
@@ -257,6 +263,7 @@
     </inertial>
   </link>
 
+  <!-- Servo ID: 7 -->
   <joint name="wrist_abduction_adduction_joint" type="revolute">
     <parent link="wrist_link"/>
     <child link="hand_link"/>
