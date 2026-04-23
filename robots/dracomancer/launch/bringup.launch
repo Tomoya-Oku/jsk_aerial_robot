@@ -67,13 +67,11 @@
   <node pkg="joint_state_publisher"
       type="joint_state_publisher"
       name="joint_state_publisher"
-      ns="$(arg robot_ns)"
       unless="$(arg joint_gui)" />
 
   <node pkg="joint_state_publisher_gui"
       type="joint_state_publisher_gui"
       name="joint_state_publisher_gui"
-      ns="$(arg robot_ns)"
       if="$(arg joint_gui)" />
 
   ########## Simulation in Gazebo #########
