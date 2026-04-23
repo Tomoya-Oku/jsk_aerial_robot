@@ -16,6 +16,17 @@
   <arg name="robot_ns" value="dracomancer" />
   <arg name="headless" default="False" />
 
+  <arg name="joint_gui" default="false" />
+
+  ###########  Spinal Bridge  ###########
+  <arg name="mode" default="serial" />
+
+  <arg name="serial_port" default="/dev/ttyUSB0" />
+  <arg name="serial_baud" default="921600" />
+
+  <arg name="udp_port" default="12345" />
+  <arg name="udp_addr" default="192.168.25.238" />
+
   ###########  Robot Model  ###########
   <arg name="description_mode" value="urdf" unless="$(arg simulation)" />
   <arg name="description_mode" value="gazebo" if="$(arg simulation)" />
@@ -35,6 +46,18 @@
     <arg name="robot_ns" value="$(arg robot_ns)" />
   </include >
 
+  ###########  Spinal Bridge  ###########
+  <node pkg="rosserial_server" type="serial_node" name="rosserial_server" output="screen" if="$(eval arg('mode') == 'serial')">
+    <param name="port" value="$(arg serial_port)" />
+    <param name="baud" value="$(arg serial_baud)" />
+  </node>
+
+  <node pkg="rosserial_server" type="udp_socket_node" name="rosserial_server" output="screen" if="$(eval arg('mode') == 'udp')">
+    <param name="client_port" value="$(arg udp_port)" />
+    <param name="server_port" value="$(arg udp_port)" />
+    <param name="client_addr" value="$(arg udp_addr)" />
+  </node>
+
   ###########  Servo Bridge  ###########
   <node pkg="aerial_robot_model" type="servo_bridge_node" name="servo_bridge"  output="screen" ns="$(arg robot_ns)">
     <param name="use_mujoco" value="true" if="$(arg mujoco)"/>
@@ -43,7 +66,14 @@
   <node pkg="joint_state_publisher"
       type="joint_state_publisher"
       name="joint_state_publisher"
-      ns="$(arg robot_ns)" />
+      ns="$(arg robot_ns)"
+      unless="$(arg joint_gui)" />
+
+  <node pkg="joint_state_publisher_gui"
+      type="joint_state_publisher_gui"
+      name="joint_state_publisher_gui"
+      ns="$(arg robot_ns)"
+      if="$(arg joint_gui)" />
 
   ########## Simulation in Gazebo #########
   <include file="$(find aerial_robot_simulation)/launch/gazebo.launch" if = "$(eval arg('simulation') and not arg('real_machine') and not arg('mujoco'))" >
