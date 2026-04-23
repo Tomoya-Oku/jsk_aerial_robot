@@ -63,6 +63,7 @@
     <param name="use_mujoco" value="true" if="$(arg mujoco)"/>
   </node>
 
+  ###########  Joint State Publisher  ###########
   <node pkg="joint_state_publisher"
       type="joint_state_publisher"
       name="joint_state_publisher"
