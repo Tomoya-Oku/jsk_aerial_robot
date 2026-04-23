@@ -40,9 +40,9 @@
     <param name="use_mujoco" value="true" if="$(arg mujoco)"/>
   </node>
 
-  <node pkg="joint_state_publisher_gui"
-      type="joint_state_publisher_gui"
-      name="joint_state_publisher_gui"
+  <node pkg="joint_state_publisher"
+      type="joint_state_publisher"
+      name="joint_state_publisher"
       ns="$(arg robot_ns)" />
 
   ########## Simulation in Gazebo #########
