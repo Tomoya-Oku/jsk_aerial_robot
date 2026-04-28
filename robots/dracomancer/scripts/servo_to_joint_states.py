@@ -14,7 +14,7 @@ class ServoToJointStates:
         self.rate_hz = rospy.get_param("~rate", 40.0)
 
         # Topic names
-        self.servo_topic = rospy.get_param("~servo_topic", "/dracomancer/servo/states")
+        self.servo_topic = rospy.get_param("~servo_topic", "/servo/states")
         self.joint_states_topic = rospy.get_param("~joint_states_topic", "/dracomancer/joint_states")
 
         # サーボID -> Joint名
