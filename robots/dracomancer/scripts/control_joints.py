@@ -32,22 +32,31 @@ class ControlJoints:
         self.angle_scale = rospy.get_param("~angle_scale", 0.01)
 
         # --------------------------------------------------
-        # servo ID -> DRAGON joint index
+        # servo ID -> DRAGON gimbal index
         #
-        # target[0]: 第1関節 pitch
-        # target[1]: 第1関節 yaw
-        # target[2]: 第2関節 pitch
-        # target[3]: 第2関節 yaw
-        # target[4]: 第3関節 pitch
-        # target[5]: 第3関節 yaw
+        # target[0]: gimbal1_roll
+        # target[1]: gimbal1_pitch
+        # target[2]: gimbal2_roll
+        # target[3]: gimbal2_pitch
+        # target[4]: gimbal3_roll
+        # target[5]: gimbal3_pitch
         # --------------------------------------------------
-        self.servo_to_joint_index = {
+        self.servo_to_gimbal_index = {
             1: 0,
             2: 1,
             4: 2,
-            6: 4,
-            7: 5,
+            6: 3,
+            7: 4,
         }
+        
+        self.gimbal_names = [
+            "gimbal1_roll",
+            "gimbal1_pitch",
+            "gimbal2_roll",
+            "gimbal2_pitch",
+            "gimbal3_roll",
+            "gimbal3_pitch"
+        ]
 
         # 符号
         self.signs = {
@@ -58,10 +67,10 @@ class ControlJoints:
             7: 1.0,
         }
 
-        # DRAGON初期姿勢
-        self.dragon_init_pose = rospy.get_param(
-            "~dragon_init_pose",
-            [0.0, 1.56, 0.0, 1.56, 0.0, 1.56]
+        # ギンバル初期姿勢
+        self.gimbal_init_pose = rospy.get_param(
+            "~gimbal_init_pose",
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         )
 
         self.latest_servo_pos = {}
@@ -72,13 +81,13 @@ class ControlJoints:
         else:
             # captureしない場合は0基準
             self.initial_servo_pos = {
-                sid: 0.0 for sid in self.servo_to_joint_index.keys()
+                sid: 0.0 for sid in self.servo_to_gimbal_index.keys()
             }
             self.initialized = True
 
         # Publisher
-        self.joints_ctrl_pub = rospy.Publisher(
-            "/dragon/joints_ctrl",
+        self.gimbals_ctrl_pub = rospy.Publisher(
+            "/dragon/gimbals_ctrl",
             JointState,
             queue_size=10
         )
@@ -91,7 +100,7 @@ class ControlJoints:
             queue_size=10
         )
 
-        rospy.loginfo("servo_to_joint_index: %s", self.servo_to_joint_index)
+        rospy.loginfo("servo_to_gimbal_index: %s", self.servo_to_gimbal_index)
         rospy.loginfo("capture_initial_on_first_msg: %s", self.capture_initial_on_first_msg)
 
     def clamp(self, x):
@@ -104,34 +113,35 @@ class ControlJoints:
             sid = int(s.index)
 
             # 必要なservo IDだけ読む
-            if sid in self.servo_to_joint_index:
+            if sid in self.servo_to_gimbal_index:
                 current[sid] = float(s.angle)
 
         self.latest_servo_pos = current
 
         if self.capture_initial_on_first_msg and not self.initialized:
-            for sid in self.servo_to_joint_index.keys():
+            for sid in self.servo_to_gimbal_index.keys():
                 if sid in current:
                     self.initial_servo_pos[sid] = current[sid]
 
-            if len(self.initial_servo_pos) == len(self.servo_to_joint_index):
+            if len(self.initial_servo_pos) == len(self.servo_to_gimbal_index):
                 self.initialized = True
                 rospy.loginfo(
                     "Captured initial servo angles: %s",
                     self.initial_servo_pos
                 )
 
-    def make_joint_msg(self):
+    def make_gimbal_msg(self):
         msg = JointState()
         msg.header.stamp = rospy.Time.now()
+        msg.name = self.gimbal_names
 
-        target = list(self.dragon_init_pose)
+        target = list(self.gimbal_init_pose)
 
         if not self.initialized:
             msg.position = target
             return msg
 
-        for servo_id, joint_index in self.servo_to_joint_index.items():
+        for servo_id, gimbal_index in self.servo_to_gimbal_index.items():
             if servo_id not in self.latest_servo_pos:
                 continue
 
@@ -141,8 +151,8 @@ class ControlJoints:
             delta = self.latest_servo_pos[servo_id] - self.initial_servo_pos[servo_id]
             delta = self.signs[servo_id] * delta * self.angle_scale
 
-            target[joint_index] = self.clamp(
-                self.dragon_init_pose[joint_index] + delta
+            target[gimbal_index] = self.clamp(
+                self.gimbal_init_pose[gimbal_index] + delta
             )
 
         msg.position = target
@@ -152,7 +162,7 @@ class ControlJoints:
         rate = rospy.Rate(self.rate_hz)
 
         while not rospy.is_shutdown():
-            self.joints_ctrl_pub.publish(self.make_joint_msg())
+            self.gimbals_ctrl_pub.publish(self.make_gimbal_msg())
             rate.sleep()
 
 
