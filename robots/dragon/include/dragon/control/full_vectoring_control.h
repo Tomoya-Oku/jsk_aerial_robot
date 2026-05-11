@@ -96,6 +96,8 @@ namespace aerial_robot_control
     ros::Publisher estimate_external_wrench_pub_;
     ros::Publisher rotor_interfere_wrench_pub_;
     ros::Publisher interfrence_marker_pub_;
+    ros::Publisher fc_f_min_pub_;
+    ros::Publisher fc_t_min_pub_;
 
     boost::shared_ptr<Dragon::FullVectoringRobotModel> dragon_robot_model_;
     boost::shared_ptr<aerial_robot_model::RobotModel> robot_model_for_control_;
