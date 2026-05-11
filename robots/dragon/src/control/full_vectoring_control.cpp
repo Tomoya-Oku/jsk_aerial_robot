@@ -2037,8 +2037,8 @@ void DragonFullVectoringController::sendCmd()
 
   std_msgs::Float64 fc_f_min_msg;
   std_msgs::Float64 fc_t_min_msg;
-  fc_f_min_msg.data = dragon_robot_model_->getFeasibleControlFMin();
-  fc_t_min_msg.data = dragon_robot_model_->getFeasibleControlTMin();
+  fc_f_min_msg.data = robot_model_for_control_->getFeasibleControlFMin();
+  fc_t_min_msg.data = robot_model_for_control_->getFeasibleControlTMin();
   fc_f_min_pub_.publish(fc_f_min_msg);
   fc_t_min_pub_.publish(fc_t_min_msg);
 
