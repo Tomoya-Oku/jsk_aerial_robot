@@ -3,8 +3,8 @@
 
 import rospy
 import numpy as np
+from std_msgs.msg import Float64, Float64MultiArray, UInt8
 from sensor_msgs.msg import JointState
-from spinal.msg import ServoStates
 
 
 class ControlJoints:
@@ -13,156 +13,168 @@ class ControlJoints:
 
         # Parameters
         self.robot_name = rospy.get_param("~robot_name", "dragon")
-        self.frame = rospy.get_param("~frame", "local")
+        self.device_joint_topic = rospy.get_param("~device_joint_topic", "/dracomancer/joint_states")
+        self.command_topic = rospy.get_param("~command_topic", "/" + self.robot_name + "/joints_ctrl")
         self.rate_hz = rospy.get_param("~rate", 40.0)
 
-        # DRAGONの尾頭のどちらを手首側にするか
-        self.reverse_head = rospy.get_param("~reverse_head", False)
+        self.joint_names = rospy.get_param("~dragon_joint_names", [
+            "joint1_pitch",
+            "joint1_yaw",
+            "joint2_pitch",
+            "joint2_yaw",
+            "joint3_pitch",
+            "joint3_yaw",
+        ])
+        self.source_joint_names = rospy.get_param("~source_joint_names", [
+            "shoulder_flexion_extension_joint",
+            "shoulder_abduction_adduction_joint",
+            "elbow_flexion_extension_joint",
+            "upper_arm_external_internal_rotation_joint",
+            "wrist_flexion_extension_joint",
+            "wrist_supination_joint",
+        ])
+        self.signs = rospy.get_param("~signs", [1.0] * len(self.joint_names))
+        self.scales = rospy.get_param("~scales", [1.0] * len(self.joint_names))
+        self.offsets = rospy.get_param("~offsets", [0.0, 0.0, np.pi / 2.0, 0.0, 0.0, np.pi / 2.0])
+        self.safe_pose = rospy.get_param("~safe_pose", [0.0, np.pi / 2.0, 0.0, np.pi / 2.0, 0.0, np.pi / 2.0])
+        self.joint_limit = rospy.get_param("~joint_limit", np.pi / 2.0)
+        self.max_step = rospy.get_param("~max_step", 0.04)
+        self.capture_neutral = rospy.get_param("~capture_neutral_on_first_msg", True)
 
-        # 関節角制限
-        self.device_joint_limit = rospy.get_param("~joint_limit", np.pi / 2)
+        self.force_inradius_topic = rospy.get_param("~force_inradius_topic", "/" + self.robot_name + "/debug/fc_f_min")
+        self.torque_inradius_topic = rospy.get_param("~torque_inradius_topic", "/" + self.robot_name + "/debug/fc_t_min")
+        self.force_inradius_min = rospy.get_param("~force_inradius_min", 0.2)
+        self.torque_inradius_min = rospy.get_param("~torque_inradius_min", 0.02)
+        self.force_inradius_hard_min = rospy.get_param("~force_inradius_hard_min", 0.1)
+        self.torque_inradius_hard_min = rospy.get_param("~torque_inradius_hard_min", 0.01)
+        self.inradius_timeout = rospy.get_param("~inradius_timeout", 0.5)
 
-        # サーボ起動時の角度を初期値として使う
-        self.capture_initial_on_first_msg = rospy.get_param(
-            "~capture_initial_on_first_msg",
-            False
-        )
-
-        # servo角度からjoint角度への変換係数
-        self.angle_scale = rospy.get_param("~angle_scale", 0.01)
-
-        # --------------------------------------------------
-        # servo ID -> DRAGON gimbal index
-        #
-        # target[0]: gimbal1_roll
-        # target[1]: gimbal1_pitch
-        # target[2]: gimbal2_roll
-        # target[3]: gimbal2_pitch
-        # target[4]: gimbal3_roll
-        # target[5]: gimbal3_pitch
-        # --------------------------------------------------
-        self.servo_to_gimbal_index = {
-            1: 0,
-            2: 1,
-            4: 2,
-            6: 3,
-            7: 4,
-        }
-        
-        self.gimbal_names = [
-            "gimbal1_roll",
-            "gimbal1_pitch",
-            "gimbal2_roll",
-            "gimbal2_pitch",
-            "gimbal3_roll",
-            "gimbal3_pitch"
-        ]
-
-        # 符号
-        self.signs = {
-            1: 1.0,
-            2: 1.0,
-            4: 1.0,
-            6: 1.0,
-            7: 1.0,
-        }
-
-        # ギンバル初期姿勢
-        self.gimbal_init_pose = rospy.get_param(
-            "~gimbal_init_pose",
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        )
-
-        self.latest_servo_pos = {}
-
-        if self.capture_initial_on_first_msg:
-            self.initial_servo_pos = {}
-            self.initialized = False
-        else:
-            # captureしない場合は0基準
-            self.initial_servo_pos = {
-                sid: 0.0 for sid in self.servo_to_gimbal_index.keys()
-            }
-            self.initialized = True
+        self.latest_device_joints = {}
+        self.neutral_device_joints = {}
+        self.current_target = list(self.safe_pose)
+        self.force_inradius = None
+        self.torque_inradius = None
+        self.last_inradius_stamp = rospy.Time(0)
+        self.robot_hovering = False
 
         # Publisher
-        self.gimbals_ctrl_pub = rospy.Publisher(
-            "/dragon/gimbals_ctrl",
-            JointState,
-            queue_size=10
-        )
+        self.joints_ctrl_pub = rospy.Publisher(self.command_topic, JointState, queue_size=10)
+        self.safety_pub = rospy.Publisher("/dracomancer/dragon_shape_safety", Float64MultiArray, queue_size=1)
 
         # Subscriber
-        self.servo_states_sub = rospy.Subscriber(
-            "/servo/states",
-            ServoStates,
-            self.servo_cb,
-            queue_size=10
-        )
+        self.device_joint_sub = rospy.Subscriber(self.device_joint_topic, JointState, self.device_joint_cb, queue_size=1)
+        self.force_inradius_sub = rospy.Subscriber(self.force_inradius_topic, Float64, self.force_inradius_cb, queue_size=1)
+        self.torque_inradius_sub = rospy.Subscriber(self.torque_inradius_topic, Float64, self.torque_inradius_cb, queue_size=1)
+        self.robot_flight_state_sub = rospy.Subscriber('/' + self.robot_name + '/flight_state', UInt8, self.robot_flight_state_cb, queue_size=1)
 
-        rospy.loginfo("servo_to_gimbal_index: %s", self.servo_to_gimbal_index)
-        rospy.loginfo("capture_initial_on_first_msg: %s", self.capture_initial_on_first_msg)
+        rospy.loginfo("device_joint_topic: %s", self.device_joint_topic)
+        rospy.loginfo("command_topic: %s", self.command_topic)
+        rospy.loginfo("force/torque inradius topics: %s, %s", self.force_inradius_topic, self.torque_inradius_topic)
 
     def clamp(self, x):
-        return max(-self.device_joint_limit, min(self.device_joint_limit, x))
+        return max(-self.joint_limit, min(self.joint_limit, x))
 
-    def servo_cb(self, msg):
-        current = {}
+    def device_joint_cb(self, msg):
+        self.latest_device_joints = {
+            name: float(pos) for name, pos in zip(msg.name, msg.position)
+        }
+        if self.capture_neutral and not self.neutral_device_joints:
+            if all(name in self.latest_device_joints for name in self.source_joint_names):
+                self.neutral_device_joints = {
+                    name: self.latest_device_joints[name] for name in self.source_joint_names
+                }
+                rospy.loginfo("Captured dracomancer neutral joints for DRAGON mapping")
 
-        for s in msg.servos:
-            sid = int(s.index)
+    def force_inradius_cb(self, msg):
+        self.force_inradius = float(msg.data)
+        self.last_inradius_stamp = rospy.Time.now()
 
-            # 必要なservo IDだけ読む
-            if sid in self.servo_to_gimbal_index:
-                current[sid] = float(s.angle)
+    def torque_inradius_cb(self, msg):
+        self.torque_inradius = float(msg.data)
+        self.last_inradius_stamp = rospy.Time.now()
 
-        self.latest_servo_pos = current
+    def robot_flight_state_cb(self, msg):
+        self.robot_hovering = int(msg.data) >= 4
 
-        if self.capture_initial_on_first_msg and not self.initialized:
-            for sid in self.servo_to_gimbal_index.keys():
-                if sid in current:
-                    self.initial_servo_pos[sid] = current[sid]
+    def inradius_ready(self):
+        if self.force_inradius is None or self.torque_inradius is None:
+            return False
+        return (rospy.Time.now() - self.last_inradius_stamp).to_sec() <= self.inradius_timeout
 
-            if len(self.initial_servo_pos) == len(self.servo_to_gimbal_index):
-                self.initialized = True
-                rospy.loginfo(
-                    "Captured initial servo angles: %s",
-                    self.initial_servo_pos
-                )
+    def safety_scale(self):
+        if not self.inradius_ready():
+            return 0.0
+        if (self.force_inradius <= self.force_inradius_hard_min or
+                self.torque_inradius <= self.torque_inradius_hard_min):
+            return 0.0
+        force_margin = (self.force_inradius - self.force_inradius_hard_min) / max(
+            self.force_inradius_min - self.force_inradius_hard_min, 1e-6)
+        torque_margin = (self.torque_inradius - self.torque_inradius_hard_min) / max(
+            self.torque_inradius_min - self.torque_inradius_hard_min, 1e-6)
+        return max(0.0, min(1.0, force_margin, torque_margin))
 
-    def make_gimbal_msg(self):
+    def mapped_target(self):
+        if not self.latest_device_joints:
+            return list(self.safe_pose)
+
+        target = []
+        for i, source_name in enumerate(self.source_joint_names):
+            source = self.latest_device_joints.get(source_name)
+            if source is None:
+                target.append(self.current_target[i])
+                continue
+
+            neutral = self.neutral_device_joints.get(source_name, 0.0)
+            mapped = self.offsets[i] + self.signs[i] * self.scales[i] * (source - neutral)
+            target.append(self.clamp(mapped))
+
+        return target
+
+    @staticmethod
+    def blend(a, b, ratio):
+        return [ai + ratio * (bi - ai) for ai, bi in zip(a, b)]
+
+    def rate_limit(self, target):
+        limited = []
+        for cur, dst in zip(self.current_target, target):
+            delta = max(-self.max_step, min(self.max_step, dst - cur))
+            limited.append(cur + delta)
+        return limited
+
+    def make_joint_msg(self):
+        scale = self.safety_scale()
+        desired = self.mapped_target()
+
+        if scale <= 0.0:
+            target = list(self.safe_pose)
+        elif scale < 1.0:
+            target = self.blend(self.safe_pose, desired, scale)
+        else:
+            target = desired
+
+        self.current_target = self.rate_limit(target)
+
         msg = JointState()
         msg.header.stamp = rospy.Time.now()
-        msg.name = self.gimbal_names
-
-        target = list(self.gimbal_init_pose)
-
-        if not self.initialized:
-            msg.position = target
-            return msg
-
-        for servo_id, gimbal_index in self.servo_to_gimbal_index.items():
-            if servo_id not in self.latest_servo_pos:
-                continue
-
-            if servo_id not in self.initial_servo_pos:
-                continue
-
-            delta = self.latest_servo_pos[servo_id] - self.initial_servo_pos[servo_id]
-            delta = self.signs[servo_id] * delta * self.angle_scale
-
-            target[gimbal_index] = self.clamp(
-                self.gimbal_init_pose[gimbal_index] + delta
-            )
-
-        msg.position = target
+        msg.name = self.joint_names
+        msg.position = list(self.current_target)
         return msg
+
+    def publish_safety(self):
+        msg = Float64MultiArray()
+        msg.data = [
+            float(self.force_inradius if self.force_inradius is not None else -1.0),
+            float(self.torque_inradius if self.torque_inradius is not None else -1.0),
+            float(self.safety_scale()),
+        ]
+        self.safety_pub.publish(msg)
 
     def main(self):
         rate = rospy.Rate(self.rate_hz)
 
         while not rospy.is_shutdown():
-            self.gimbals_ctrl_pub.publish(self.make_gimbal_msg())
+            self.joints_ctrl_pub.publish(self.make_joint_msg())
+            self.publish_safety()
             rate.sleep()
 
 

@@ -2,9 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import rospy
-import rosgraph
 from std_msgs.msg import Float32MultiArray, UInt8
-from geometry_msgs.msg import PoseStamped, WrenchStamped, Vector3Stamped
+from geometry_msgs.msg import PoseStamped, Vector3Stamped
 from aerial_robot_msgs.msg import FlightNav
 
 
@@ -13,8 +12,9 @@ class ControlPose:
         rospy.init_node("control_pose")
 
         self.robot_name = rospy.get_param("~robot_name", "dragon")
-        self.frame = rospy.get_param("~frame", "local") 
+        self.joy_topic = rospy.get_param("~joy_topic", "/dracomancer/joystick/calibrated")
         self.rate_hz = rospy.get_param("~rate", 40.0)
+        self.wait_after_hover = rospy.get_param("~wait_after_hover", 3.0)
 
         # Msgs
         self.flight_nav = FlightNav()
@@ -44,10 +44,19 @@ class ControlPose:
         self.scale_x = rospy.get_param("~scale_x", 1.0)
         self.scale_y = rospy.get_param("~scale_y", 1.0)
         self.scale_z = rospy.get_param("~scale_z", 1.0)
+        self.axis_x = rospy.get_param("~axis_x", 0)
+        self.axis_y = rospy.get_param("~axis_y", 1)
+        self.axis_z = rospy.get_param("~axis_z", 2)
+        self.xy_vel = rospy.get_param("~xy_vel", 0.3)
+        self.z_vel = rospy.get_param("~z_vel", 0.2)
         ## Deadzone for Joystick
         self.deadzone = rospy.get_param("~deadzone", 0.05)
         ## Buffer for latest joystick axes
         self.latest_axes = None
+        self.robot_pose = None
+        self.robot_hovering = False
+        self.robot_landing = False
+        self.wait_flag = False
 
         # Publishers
         self.nav_pub = rospy.Publisher('/'+self.robot_name + "/uav/nav", FlightNav, queue_size=1)
@@ -56,10 +65,22 @@ class ControlPose:
         # Subscribers
         self.robot_flight_state_sub = rospy.Subscriber('/'+self.robot_name+'/flight_state', UInt8, self.robot_flight_state_cb)
         self.robot_pos_sub = rospy.Subscriber('/'+self.robot_name+'/mocap/pose', PoseStamped, self.robot_pos_cb)
-        self.js_calibrated_sub = rospy.Subscriber('/dracomancer/joystick/calibrated', Float32MultiArray, self.joystick_calib_cb, queue_size=1)
+        self.js_calibrated_sub = rospy.Subscriber(self.joy_topic, Float32MultiArray, self.joystick_calib_cb, queue_size=1)
 
         # Logger
         rospy.loginfo("robot_name: %s", self.robot_name)
+        rospy.loginfo("joy_topic: %s", self.joy_topic)
+
+    def robot_flight_state_cb(self, msg):
+        # aerial_robot commonly uses HOVER_STATE=5 and LAND_STATE=6, but keep
+        # this node permissive because enum values differ between branches.
+        self.robot_hovering = int(msg.data) >= 4
+        self.robot_landing = int(msg.data) == 6
+        if not self.robot_hovering:
+            self.wait_flag = False
+
+    def robot_pos_cb(self, msg):
+        self.robot_pose = msg
 
     def get_axis(self, data, idx):
         if idx < 0 or idx >= len(data):
@@ -90,6 +111,7 @@ class ControlPose:
         self.flight_nav.target_vel_x = x_cmd * self.xy_vel
         self.flight_nav.target_vel_y = y_cmd * self.xy_vel
         self.flight_nav.target_vel_z = z_cmd * self.z_vel
+        return self.flight_nav
 
     def limit_pose(self, pos, att):
         # Limit position
@@ -110,25 +132,15 @@ class ControlPose:
         rate = rospy.Rate(self.rate_hz)
 
         while not rospy.is_shutdown():
-            target_pos = [0.0]*3
-            target_att = [0.0]*3
-
-            if self.device_init_pos is None or not self.robot_hovering:
-                self.device_initialize_flag = False
-            if self.robot_init_pos is None or not self.robot_hovering:
-                self.robot_initialize_flag = False
-
-            if self.device_initialize_flag and self.robot_initialize_flag:
-                # limitation of position and attitude
-                target_pos, target_att = self.limit_pose(target_pos, target_att)
-
             if self.robot_hovering and not self.robot_landing:
                 if not self.wait_flag:
-                    rospy.sleep(3.0)
+                    rospy.sleep(self.wait_after_hover)
                     self.wait_flag = True
                 
                 self.make_nav_msg()
                 self.nav_pub.publish(self.flight_nav)
+            else:
+                self.latest_axes = None
 
             rate.sleep()
 

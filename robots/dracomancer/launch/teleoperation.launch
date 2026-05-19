@@ -10,6 +10,7 @@
   <!-- topic names -->
   <arg name="js_raw_topic" default="/$(arg device_ns)/joystick/raw"/>
   <arg name="js_calibrated_topic" default="/$(arg device_ns)/joystick/calibrated"/>
+  <arg name="device_joint_topic" default="/$(arg device_ns)/joint_states"/>
 
   <!-- raw joystick publisher side -->
   <!-- spinal/bridge.launch の中で rosserial_server を起動しているなら include でも可 -->
@@ -19,7 +20,7 @@
         output="screen">
     <param name="port" value="$(arg port)"/>
     <param name="baud" value="$(arg baud)"/>
-    <remap from="joystick_m5stack" to="$(arg joy_raw_topic)"/>
+    <remap from="joystick_m5stack" to="$(arg js_raw_topic)"/>
   </node>
 
   <!-- joystick calibration -->
@@ -40,7 +41,17 @@
 
     <!-- Calibration data -->
     <param name="save_yaml" value="true"/>
+    <param name="use_saved_calibration" value="true"/>
     <param name="yaml_path" value="$(find dracomancer)/config/joystick_calibration.yaml"/>
+  </node>
+
+  <node pkg="dracomancer"
+        type="servo_to_joint_states.py"
+        name="$(arg device_ns)_servo_to_joint_states"
+        output="screen">
+    <param name="servo_topic" value="/servo/states"/>
+    <param name="joint_states_topic" value="$(arg device_joint_topic)"/>
+    <param name="rate" value="40.0"/>
   </node>
 
   <!-- Control Pose -->
@@ -49,7 +60,8 @@
         name="$(arg device_ns)_control_pose"
         output="screen">
     <param name="device_ns" value="/$(arg device_ns)"/>
-    <param name="publish_rate" value="40.0"/>
+    <param name="robot_name" value="$(arg robot_ns)"/>
+    <param name="rate" value="40.0"/>
     <param name="joy_topic" value="$(arg js_calibrated_topic)"/>
 
     <!-- Scaling and Threshold -->
@@ -65,6 +77,13 @@
         name="$(arg device_ns)_control_joints"
         output="screen">
     <param name="device_ns" value="/$(arg device_ns)"/>
-    <param name="publish_rate" value="40.0"/>
+    <param name="robot_name" value="$(arg robot_ns)"/>
+    <param name="device_joint_topic" value="$(arg device_joint_topic)"/>
+    <param name="command_topic" value="/$(arg robot_ns)/joints_ctrl"/>
+    <param name="rate" value="40.0"/>
+    <param name="force_inradius_topic" value="/$(arg robot_ns)/debug/fc_f_min"/>
+    <param name="torque_inradius_topic" value="/$(arg robot_ns)/debug/fc_t_min"/>
+    <param name="force_inradius_min" value="0.2"/>
+    <param name="torque_inradius_min" value="0.02"/>
   </node>
 </launch>

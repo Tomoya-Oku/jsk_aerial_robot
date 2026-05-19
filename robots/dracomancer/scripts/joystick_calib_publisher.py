@@ -23,6 +23,8 @@ class JoystickCalibPublisher:
         self.range_duration = rospy.get_param("~range_duration", 5.0)
         self.deadzone = rospy.get_param("~deadzone", 0.05)
         self.save_yaml = rospy.get_param("~save_yaml", True)
+        self.use_saved_calibration = rospy.get_param("~use_saved_calibration", True)
+        self.force_calibration = rospy.get_param("~force_calibration", False)
         self.yaml_path = rospy.get_param("~yaml_path", "../config/joystick_calibration.yaml")
         ## Buffers
         self.latest_raw = None
@@ -126,7 +128,7 @@ class JoystickCalibPublisher:
             return
 
         data = {
-            "topic": self.in_topic,
+            "topic": self.js_raw_topic,
             "axis_indices": self.axis_indices,
             "center": [float(x) for x in self.center],
             "min": [float(x) for x in self.min_vals],
@@ -143,6 +145,36 @@ class JoystickCalibPublisher:
             yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
 
         rospy.loginfo("Saved calibration yaml: %s", self.yaml_path)
+
+    def load_calibration_yaml(self):
+        if not self.use_saved_calibration or self.force_calibration:
+            return False
+        if not self.yaml_path or not os.path.exists(self.yaml_path):
+            return False
+
+        with open(self.yaml_path, "r") as f:
+            data = yaml.safe_load(f) or {}
+
+        try:
+            axis_indices = data.get("axis_indices", self.axis_indices)
+            center = data["center"]
+            min_vals = data["min"]
+            max_vals = data["max"]
+            if not (len(axis_indices) == len(center) == len(min_vals) == len(max_vals)):
+                raise ValueError("axis/calibration length mismatch")
+
+            self.axis_indices = [int(x) for x in axis_indices]
+            self.center = [float(x) for x in center]
+            self.min_vals = [float(x) for x in min_vals]
+            self.max_vals = [float(x) for x in max_vals]
+            self.deadzone = float(data.get("deadzone", self.deadzone))
+            self.invert_axes = [int(x) for x in data.get("invert_axes", self.invert_axes)]
+        except Exception as e:
+            rospy.logwarn("Failed to load joystick calibration from %s: %s", self.yaml_path, str(e))
+            return False
+
+        rospy.loginfo("Loaded joystick calibration yaml: %s", self.yaml_path)
+        return True
 
     def run_calibration(self):
         if not self.wait_for_first_message():
@@ -176,7 +208,7 @@ class JoystickCalibPublisher:
         if self.center is None or self.min_vals is None or self.max_vals is None:
             raise RuntimeError("Calibration parameters are not initialized.")
 
-        rospy.loginfo("Publishing calibrated joystick to %s", self.out_topic)
+        rospy.loginfo("Publishing calibrated joystick to %s", self.js_calibrated_topic)
 
         rate = rospy.Rate(self.rate_hz)
         while not rospy.is_shutdown():
@@ -202,7 +234,7 @@ class JoystickCalibPublisher:
 
             msg = Float32MultiArray()
             msg.data = calib
-            self.pub.publish(msg)
+            self.js_calibrated_pub.publish(msg)
 
             sys.stdout.write("\rraw={} calib={}".format([int(x) for x in axes],
                                                         [round(x, 3) for x in calib]))
@@ -211,7 +243,8 @@ class JoystickCalibPublisher:
             rate.sleep()
 
     def main(self):
-        self.run_calibration()
+        if not self.load_calibration_yaml():
+            self.run_calibration()
         print("")
         print("Calibration finished. Publishing started.")
         self.publish_loop()
