@@ -24,6 +24,7 @@
   <arg name="torque_inradius_hard_min" default="0.01"/>
   <arg name="max_step" default="0.04"/>
   <arg name="joint_limit" default="1.57079632679"/>
+  <arg name="capture_neutral_on_first_msg" default="false"/>
   <arg name="enable_control_pose" default="true"/>
   <arg name="enable_control_joints" default="true"/>
   <arg name="publish_joints_only_when_hovering" default="false"/>
@@ -104,6 +105,7 @@
     <param name="rate" value="40.0"/>
     <param name="joint_limit" value="$(arg joint_limit)"/>
     <param name="max_step" value="$(arg max_step)"/>
+    <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
     <param name="publish_only_when_hovering" value="$(arg publish_joints_only_when_hovering)"/>
     <param name="publish_before_device_ready" value="$(arg publish_joints_before_device_ready)"/>
     <param name="force_inradius_topic" value="/$(arg robot_ns)/debug/fc_f_min"/>

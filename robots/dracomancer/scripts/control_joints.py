@@ -26,20 +26,20 @@ class ControlJoints:
             "joint3_yaw",
         ])
         self.source_joint_names = rospy.get_param("~source_joint_names", [
-            "shoulder_flexion_extension_joint",
-            "shoulder_abduction_adduction_joint",
-            "elbow_flexion_extension_joint",
-            "upper_arm_external_internal_rotation_joint",
             "wrist_flexion_extension_joint",
             "wrist_supination_joint",
+            "upper_arm_external_internal_rotation_joint",
+            "elbow_flexion_extension_joint",
+            "shoulder_flexion_extension_joint",
+            "shoulder_abduction_adduction_joint",
         ])
-        self.signs = rospy.get_param("~signs", [1.0] * len(self.joint_names))
+        self.signs = rospy.get_param("~signs", [1.0, 1.0, 1.0, -1.0, 1.0, 1.0])
         self.scales = rospy.get_param("~scales", [1.0] * len(self.joint_names))
-        self.offsets = rospy.get_param("~offsets", [0.0, 0.0, np.pi / 2.0, 0.0, 0.0, np.pi / 2.0])
+        self.offsets = rospy.get_param("~offsets", [0.0, np.pi / 2.0, 0.0, 0.0, 0.0, np.pi / 2.0])
         self.safe_pose = rospy.get_param("~safe_pose", [0.0, np.pi / 2.0, 0.0, np.pi / 2.0, 0.0, np.pi / 2.0])
         self.joint_limit = rospy.get_param("~joint_limit", np.pi / 2.0)
         self.max_step = rospy.get_param("~max_step", 0.04)
-        self.capture_neutral = rospy.get_param("~capture_neutral_on_first_msg", True)
+        self.capture_neutral = rospy.get_param("~capture_neutral_on_first_msg", False)
         self.publish_only_when_hovering = rospy.get_param("~publish_only_when_hovering", True)
         self.publish_before_device_ready = rospy.get_param("~publish_before_device_ready", False)
 
@@ -74,6 +74,14 @@ class ControlJoints:
 
         rospy.loginfo("device_joint_topic: %s", self.device_joint_topic)
         rospy.loginfo("command_topic: %s", self.command_topic)
+        rospy.loginfo("joint mapping: %s",
+                      ", ".join("{}<-{}".format(dst, src)
+                                for dst, src in zip(self.joint_names, self.source_joint_names)))
+        rospy.loginfo("joint mapping scale/sign/offset: %s",
+                      ", ".join("{}:{:.3f}/{:.3f}/{:.3f}".format(
+                          name, scale, sign, offset)
+                                for name, scale, sign, offset in zip(
+                                    self.joint_names, self.scales, self.signs, self.offsets)))
         rospy.loginfo("force/torque inradius topics: %s, %s", self.force_inradius_topic, self.torque_inradius_topic)
         rospy.loginfo("joint command gating: only_when_hovering=%s, before_device_ready=%s",
                       self.publish_only_when_hovering, self.publish_before_device_ready)

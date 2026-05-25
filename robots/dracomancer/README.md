@@ -21,12 +21,29 @@ M5/joystick serial
   -> /dragon/uav/nav
 
 Dracomancer servo states
-  -> /dracomancer/servo/states
+  -> /servo/states
   -> servo_to_joint_states.py
   -> /dracomancer/joint_states
   -> control_joints.py
   -> /dragon/joints_ctrl
 ```
+
+Default joint mapping treats DRAGON as one serial arm.  DRAGON `link1` is the
+head side and `link4` is the tail side, so wrist motion from Dracomancer drives
+the head-side DRAGON joint and shoulder motion drives the tail-side joint:
+
+```text
+DRAGON joint1_pitch <- Dracomancer wrist_flexion_extension_joint
+DRAGON joint1_yaw   <- Dracomancer wrist_supination_joint
+DRAGON joint2_pitch <- Dracomancer upper_arm_external_internal_rotation_joint
+DRAGON joint2_yaw   <- Dracomancer elbow_flexion_extension_joint, inverted
+DRAGON joint3_pitch <- Dracomancer shoulder_flexion_extension_joint
+DRAGON joint3_yaw   <- Dracomancer shoulder_abduction_adduction_joint
+```
+
+The default scale is 1:1.  DRAGON yaw joints keep their nominal `pi/2` offset
+except `joint2_yaw`, where the Dracomancer elbow is inverted with no offset so
+elbow extension maps to the straight middle joint.
 
 `control_joints.py` also subscribes to:
 
