@@ -16,7 +16,7 @@
   <arg name="enable_servo_to_joint_states" default="true"/>
   <arg name="servo_to_joint_states_rate" default="40.0"/>
   <arg name="enable_shape_safety" default="true"/>
-  <arg name="missing_inradius_scale" default="0.0"/>
+  <arg name="missing_inradius_scale" default="1.0"/>
   <arg name="min_safety_scale" default="0.0"/>
   <arg name="force_inradius_min" default="0.2"/>
   <arg name="torque_inradius_min" default="0.02"/>
