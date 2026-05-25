@@ -23,6 +23,10 @@
   <arg name="torque_inradius_hard_min" default="0.01"/>
   <arg name="max_step" default="0.04"/>
   <arg name="joint_limit" default="1.57079632679"/>
+  <arg name="enable_control_pose" default="true"/>
+  <arg name="enable_control_joints" default="true"/>
+  <arg name="publish_joints_only_when_hovering" default="true"/>
+  <arg name="publish_joints_before_device_ready" default="false"/>
 
   <!-- raw joystick publisher side -->
   <!-- spinal/bridge.launch の中で rosserial_server を起動しているなら include でも可 -->
@@ -71,7 +75,8 @@
   <node pkg="dracomancer"
         type="control_pose.py"
         name="$(arg device_ns)_control_pose"
-        output="screen">
+        output="screen"
+        if="$(arg enable_control_pose)">
     <param name="device_ns" value="/$(arg device_ns)"/>
     <param name="robot_name" value="$(arg robot_ns)"/>
     <param name="rate" value="40.0"/>
@@ -88,7 +93,8 @@
   <node pkg="dracomancer"
         type="control_joints.py"
         name="$(arg device_ns)_control_joints"
-        output="screen">
+        output="screen"
+        if="$(arg enable_control_joints)">
     <param name="device_ns" value="/$(arg device_ns)"/>
     <param name="robot_name" value="$(arg robot_ns)"/>
     <param name="device_joint_topic" value="$(arg device_joint_topic)"/>
@@ -96,6 +102,8 @@
     <param name="rate" value="40.0"/>
     <param name="joint_limit" value="$(arg joint_limit)"/>
     <param name="max_step" value="$(arg max_step)"/>
+    <param name="publish_only_when_hovering" value="$(arg publish_joints_only_when_hovering)"/>
+    <param name="publish_before_device_ready" value="$(arg publish_joints_before_device_ready)"/>
     <param name="force_inradius_topic" value="/$(arg robot_ns)/debug/fc_f_min"/>
     <param name="torque_inradius_topic" value="/$(arg robot_ns)/debug/fc_t_min"/>
     <param name="force_inradius_min" value="$(arg force_inradius_min)"/>

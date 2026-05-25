@@ -40,6 +40,8 @@ class ControlJoints:
         self.joint_limit = rospy.get_param("~joint_limit", np.pi / 2.0)
         self.max_step = rospy.get_param("~max_step", 0.04)
         self.capture_neutral = rospy.get_param("~capture_neutral_on_first_msg", True)
+        self.publish_only_when_hovering = rospy.get_param("~publish_only_when_hovering", True)
+        self.publish_before_device_ready = rospy.get_param("~publish_before_device_ready", False)
 
         self.force_inradius_topic = rospy.get_param("~force_inradius_topic", "/" + self.robot_name + "/debug/fc_f_min")
         self.torque_inradius_topic = rospy.get_param("~torque_inradius_topic", "/" + self.robot_name + "/debug/fc_t_min")
@@ -73,6 +75,8 @@ class ControlJoints:
         rospy.loginfo("device_joint_topic: %s", self.device_joint_topic)
         rospy.loginfo("command_topic: %s", self.command_topic)
         rospy.loginfo("force/torque inradius topics: %s, %s", self.force_inradius_topic, self.torque_inradius_topic)
+        rospy.loginfo("joint command gating: only_when_hovering=%s, before_device_ready=%s",
+                      self.publish_only_when_hovering, self.publish_before_device_ready)
         rospy.loginfo(
             "shape safety: enable=%s, missing_scale=%.3f, min_scale=%.3f, force=(%.3f/%.3f), torque=(%.3f/%.3f)",
             self.enable_shape_safety, self.missing_inradius_scale, self.min_safety_scale,
@@ -170,6 +174,13 @@ class ControlJoints:
         msg.position = list(self.current_target)
         return msg
 
+    def can_publish_joint_command(self):
+        if self.publish_only_when_hovering and not self.robot_hovering:
+            return False
+        if not self.publish_before_device_ready and not self.latest_device_joints:
+            return False
+        return True
+
     def publish_safety(self):
         msg = Float64MultiArray()
         msg.data = [
@@ -183,7 +194,8 @@ class ControlJoints:
         rate = rospy.Rate(self.rate_hz)
 
         while not rospy.is_shutdown():
-            self.joints_ctrl_pub.publish(self.make_joint_msg())
+            if self.can_publish_joint_command():
+                self.joints_ctrl_pub.publish(self.make_joint_msg())
             self.publish_safety()
             rate.sleep()
 
