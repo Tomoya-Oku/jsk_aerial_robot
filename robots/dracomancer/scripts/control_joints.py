@@ -48,6 +48,9 @@ class ControlJoints:
         self.force_inradius_hard_min = rospy.get_param("~force_inradius_hard_min", 0.1)
         self.torque_inradius_hard_min = rospy.get_param("~torque_inradius_hard_min", 0.01)
         self.inradius_timeout = rospy.get_param("~inradius_timeout", 0.5)
+        self.enable_shape_safety = rospy.get_param("~enable_shape_safety", True)
+        self.missing_inradius_scale = rospy.get_param("~missing_inradius_scale", 0.0)
+        self.min_safety_scale = rospy.get_param("~min_safety_scale", 0.0)
 
         self.latest_device_joints = {}
         self.neutral_device_joints = {}
@@ -70,6 +73,11 @@ class ControlJoints:
         rospy.loginfo("device_joint_topic: %s", self.device_joint_topic)
         rospy.loginfo("command_topic: %s", self.command_topic)
         rospy.loginfo("force/torque inradius topics: %s, %s", self.force_inradius_topic, self.torque_inradius_topic)
+        rospy.loginfo(
+            "shape safety: enable=%s, missing_scale=%.3f, min_scale=%.3f, force=(%.3f/%.3f), torque=(%.3f/%.3f)",
+            self.enable_shape_safety, self.missing_inradius_scale, self.min_safety_scale,
+            self.force_inradius_hard_min, self.force_inradius_min,
+            self.torque_inradius_hard_min, self.torque_inradius_min)
 
     def clamp(self, x):
         return max(-self.joint_limit, min(self.joint_limit, x))
@@ -102,16 +110,18 @@ class ControlJoints:
         return (rospy.Time.now() - self.last_inradius_stamp).to_sec() <= self.inradius_timeout
 
     def safety_scale(self):
+        if not self.enable_shape_safety:
+            return 1.0
         if not self.inradius_ready():
-            return 0.0
+            return max(0.0, min(1.0, self.missing_inradius_scale))
         if (self.force_inradius <= self.force_inradius_hard_min or
                 self.torque_inradius <= self.torque_inradius_hard_min):
-            return 0.0
+            return max(0.0, min(1.0, self.min_safety_scale))
         force_margin = (self.force_inradius - self.force_inradius_hard_min) / max(
             self.force_inradius_min - self.force_inradius_hard_min, 1e-6)
         torque_margin = (self.torque_inradius - self.torque_inradius_hard_min) / max(
             self.torque_inradius_min - self.torque_inradius_hard_min, 1e-6)
-        return max(0.0, min(1.0, force_margin, torque_margin))
+        return max(self.min_safety_scale, min(1.0, force_margin, torque_margin))
 
     def mapped_target(self):
         if not self.latest_device_joints:

@@ -11,6 +11,18 @@
   <arg name="js_raw_topic" default="/$(arg device_ns)/joystick/raw"/>
   <arg name="js_calibrated_topic" default="/$(arg device_ns)/joystick/calibrated"/>
   <arg name="device_joint_topic" default="/$(arg device_ns)/joint_states"/>
+  <arg name="servo_topic" default="/$(arg device_ns)/servo/states"/>
+  <arg name="enable_servo_to_joint_states" default="true"/>
+  <arg name="servo_to_joint_states_rate" default="40.0"/>
+  <arg name="enable_shape_safety" default="true"/>
+  <arg name="missing_inradius_scale" default="0.0"/>
+  <arg name="min_safety_scale" default="0.0"/>
+  <arg name="force_inradius_min" default="0.2"/>
+  <arg name="torque_inradius_min" default="0.02"/>
+  <arg name="force_inradius_hard_min" default="0.1"/>
+  <arg name="torque_inradius_hard_min" default="0.01"/>
+  <arg name="max_step" default="0.04"/>
+  <arg name="joint_limit" default="1.57079632679"/>
 
   <!-- raw joystick publisher side -->
   <!-- spinal/bridge.launch の中で rosserial_server を起動しているなら include でも可 -->
@@ -48,10 +60,11 @@
   <node pkg="dracomancer"
         type="servo_to_joint_states.py"
         name="$(arg device_ns)_servo_to_joint_states"
-        output="screen">
-    <param name="servo_topic" value="/servo/states"/>
+        output="screen"
+        if="$(arg enable_servo_to_joint_states)">
+    <param name="servo_topic" value="$(arg servo_topic)"/>
     <param name="joint_states_topic" value="$(arg device_joint_topic)"/>
-    <param name="rate" value="40.0"/>
+    <param name="rate" value="$(arg servo_to_joint_states_rate)"/>
   </node>
 
   <!-- Control Pose -->
@@ -81,9 +94,16 @@
     <param name="device_joint_topic" value="$(arg device_joint_topic)"/>
     <param name="command_topic" value="/$(arg robot_ns)/joints_ctrl"/>
     <param name="rate" value="40.0"/>
+    <param name="joint_limit" value="$(arg joint_limit)"/>
+    <param name="max_step" value="$(arg max_step)"/>
     <param name="force_inradius_topic" value="/$(arg robot_ns)/debug/fc_f_min"/>
     <param name="torque_inradius_topic" value="/$(arg robot_ns)/debug/fc_t_min"/>
-    <param name="force_inradius_min" value="0.2"/>
-    <param name="torque_inradius_min" value="0.02"/>
+    <param name="force_inradius_min" value="$(arg force_inradius_min)"/>
+    <param name="torque_inradius_min" value="$(arg torque_inradius_min)"/>
+    <param name="force_inradius_hard_min" value="$(arg force_inradius_hard_min)"/>
+    <param name="torque_inradius_hard_min" value="$(arg torque_inradius_hard_min)"/>
+    <param name="enable_shape_safety" value="$(arg enable_shape_safety)"/>
+    <param name="missing_inradius_scale" value="$(arg missing_inradius_scale)"/>
+    <param name="min_safety_scale" value="$(arg min_safety_scale)"/>
   </node>
 </launch>
