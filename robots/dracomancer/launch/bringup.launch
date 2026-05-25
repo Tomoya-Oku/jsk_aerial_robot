@@ -48,6 +48,9 @@
     <arg name="run_servo_rough_calib" value="$(arg run_servo_rough_calib)" />
   </include >
 
+  ###########  Servo Config  ###########
+  <rosparam file="$(find dracomancer)/config/Servo.yaml" command="load" ns="$(arg robot_ns)" />
+
   ###########  Servo Bridge  ###########
   <node unless="$(arg joint_gui)" pkg="aerial_robot_model" type="servo_bridge_node" name="servo_bridge"  output="screen" ns="$(arg robot_ns)">
     <param name="simulation_mode" value="$(eval arg('simulation') and not arg('real_machine'))" />

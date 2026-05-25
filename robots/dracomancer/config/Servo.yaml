@@ -1,0 +1,34 @@
+servo_controller:
+  state_sub_topic: /servo/states
+
+  joints:
+    angle_sgn: 1
+    angle_scale: 0.00153398 # 2 * pi / 4096
+    zero_point_offset: 2048
+    torque_scale: 1.0
+
+    filter_flag: true
+    sample_freq: 50.0
+    cutoff_freq: 10.0
+
+    controller1:
+      id: 0
+      name: shoulder_abduction_adduction_joint
+    controller2:
+      id: 1
+      name: shoulder_flexion_extension_joint
+    controller3:
+      id: 2
+      name: upper_arm_external_internal_rotation_joint
+    controller4:
+      id: 3
+      name: elbow_flexion_extension_joint
+    controller5:
+      id: 4
+      name: wrist_supination_joint
+    controller6:
+      id: 5
+      name: wrist_flexion_extension_joint
+    controller7:
+      id: 6
+      name: wrist_abduction_adduction_joint
