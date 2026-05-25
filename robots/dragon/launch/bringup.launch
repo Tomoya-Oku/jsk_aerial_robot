@@ -33,6 +33,7 @@
 
   <arg name="demo" default="False" />
   <arg name="headless" default="True" />
+  <arg name="preflight_joint_control" default="$(arg simulation)" />
 
   ###########  UAV Config  ###########
   <group ns="$(arg robot_ns)">
@@ -70,6 +71,7 @@
     <param name="flight_navigation_plugin_name" value="aerial_robot_navigation/dragon_navigation" />
     <rosparam file="$(arg config_dir)/NavigationConfig.yaml" command="load" />
     <param name="navigation/takeoff_height" value="$(arg takeoff_height)" if="$(eval arg('takeoff_height') > 0)"/>
+    <param name="navigation/enable_preflight_joint_control" value="$(arg preflight_joint_control)"/>
   </group>
 
   ###########  Base Platform  ###########
@@ -129,5 +131,4 @@
   <node pkg="dragon" type="simple_demo.py" name="simple_demo" ns="$(arg robot_ns)" output="screen" if="$(arg demo)"/>
 
 </launch>
-
 
