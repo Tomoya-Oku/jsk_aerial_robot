@@ -6,9 +6,10 @@
   <!-- serial settings -->
   <arg name="port" default="/dev/ttyUSB0"/>
   <arg name="baud" default="921600"/>
+  <arg name="enable_joystick_serial" default="false"/>
 
   <!-- topic names -->
-  <arg name="js_raw_topic" default="/$(arg device_ns)/joystick/raw"/>
+  <arg name="js_raw_topic" default="/joystick/raw"/>
   <arg name="js_calibrated_topic" default="/$(arg device_ns)/joystick/calibrated"/>
   <arg name="device_joint_topic" default="/$(arg device_ns)/joint_states"/>
   <arg name="servo_topic" default="/servo/states"/>
@@ -25,7 +26,7 @@
   <arg name="joint_limit" default="1.57079632679"/>
   <arg name="enable_control_pose" default="true"/>
   <arg name="enable_control_joints" default="true"/>
-  <arg name="publish_joints_only_when_hovering" default="true"/>
+  <arg name="publish_joints_only_when_hovering" default="false"/>
   <arg name="publish_joints_before_device_ready" default="false"/>
 
   <!-- raw joystick publisher side -->
@@ -33,7 +34,8 @@
   <node pkg="rosserial_server"
         type="serial_node"
         name="$(arg device_ns)_rosserial_server"
-        output="screen">
+        output="screen"
+        if="$(arg enable_joystick_serial)">
     <param name="port" value="$(arg port)"/>
     <param name="baud" value="$(arg baud)"/>
     <remap from="joystick_m5stack" to="$(arg js_raw_topic)"/>

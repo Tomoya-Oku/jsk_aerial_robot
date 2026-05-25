@@ -24,6 +24,10 @@
   <arg name="gui" default="False" />
   <arg name="joint_gui" default="$(arg gui)" />
   <arg name="model_headless" value="$(eval arg('headless') or not arg('launch_rviz'))" />
+  <arg name="use_servo_bridge" default="True" />
+  <arg name="use_servo_to_joint_states" default="False" />
+  <arg name="servo_topic" default="/servo/states" />
+  <arg name="joint_states_topic" default="/$(arg robot_ns)/joint_states" />
 
   ###########  Robot Model  ###########
   <arg name="description_mode" value="urdf" unless="$(arg simulation)" />
@@ -52,9 +56,16 @@
   <rosparam file="$(find dracomancer)/config/Servo.yaml" command="load" ns="$(arg robot_ns)" />
 
   ###########  Servo Bridge  ###########
-  <node unless="$(arg joint_gui)" pkg="aerial_robot_model" type="servo_bridge_node" name="servo_bridge"  output="screen" ns="$(arg robot_ns)">
+  <node pkg="aerial_robot_model" type="servo_bridge_node" name="servo_bridge" output="screen" ns="$(arg robot_ns)" if="$(eval (not arg('joint_gui')) and arg('use_servo_bridge'))">
     <param name="simulation_mode" value="$(eval arg('simulation') and not arg('real_machine'))" />
     <param name="use_mujoco" value="true" if="$(arg mujoco)"/>
+  </node>
+
+  ###########  Servo State to Joint State  ###########
+  <node pkg="dracomancer" type="servo_to_joint_states.py" name="servo_to_joint_states" output="screen" if="$(eval (not arg('joint_gui')) and arg('use_servo_to_joint_states'))">
+    <param name="servo_topic" value="$(arg servo_topic)"/>
+    <param name="joint_states_topic" value="$(arg joint_states_topic)"/>
+    <param name="rate" value="40.0"/>
   </node>
 
   ###########  Joint State Publisher  ###########
