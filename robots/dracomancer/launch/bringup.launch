@@ -17,7 +17,7 @@
   <arg name="headless" default="True" />
   <arg name="launch_rviz" default="False" />
   <arg name="connect_fc" default="$(arg real_machine)" />
-  <arg name="fc_serial_port" default="/dev/flight_controller" />
+  <arg name="fc_serial_port" default="/dev/ttyUSB0" />
   <arg name="fc_serial_baud" default="921600" />
   <arg name="run_servo_rough_calib" default="False" />
 
