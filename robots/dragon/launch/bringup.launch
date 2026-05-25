@@ -3,7 +3,7 @@
   ###########  launch config  ###########
   <arg name="rm" default="True" />
   <arg name="sim" default="False" />
-  <arg name="real_machine" default="$(arg rm)" />
+  <arg name="real_machine" default="$(eval arg('rm') and not arg('sim'))" />
   <arg name="simulation" default="$(arg sim)" />
 
   <arg name="full_vectoring_mode"  default= "true" />
@@ -31,7 +31,7 @@
   <arg name="robot_ns" value="dragon$(arg robot_id)" />
   <arg name="config_dir" default="$(find dragon)/config/$(arg link_num)/$(arg model_name)" />
 
-  <arg name="demo" default="True" />
+  <arg name="demo" default="False" />
   <arg name="headless" default="True" />
 
   ###########  UAV Config  ###########
@@ -129,6 +129,5 @@
   <node pkg="dragon" type="simple_demo.py" name="simple_demo" ns="$(arg robot_ns)" output="screen" if="$(arg demo)"/>
 
 </launch>
-
 
 
