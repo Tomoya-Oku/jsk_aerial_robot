@@ -1,0 +1,15 @@
+topic: /joystick/raw
+axis_indices:
+- 0
+- 1
+center:
+- -41.04
+- 192.29
+min:
+- -32768.0
+- -32768.0
+max:
+- 30777.0
+- 32393.0
+deadzone: 0.05
+invert_axes: []

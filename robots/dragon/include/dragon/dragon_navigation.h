@@ -98,6 +98,7 @@ namespace aerial_robot_navigation
     string joints_torque_control_srv_name_, gimbals_torque_control_srv_name_;
     double baselink_rot_change_thresh_;
     double baselink_rot_pub_interval_;
+    bool enable_preflight_joint_control_;
 
     // addtional state 
     static constexpr uint8_t PRE_LAND_STATE = 0x20;

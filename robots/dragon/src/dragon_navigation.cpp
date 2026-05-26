@@ -7,7 +7,8 @@ DragonNavigator::DragonNavigator():
   BaseNavigator(),
   servo_torque_(false),
   level_flag_(false),
-  eq_cog_world_(false)
+  eq_cog_world_(false),
+  enable_preflight_joint_control_(false)
 {
   curr_target_baselink_rot_.setRPY(0, 0, 0);
   final_target_baselink_rot_.setRPY(0, 0, 0);
@@ -39,7 +40,7 @@ void DragonNavigator::update()
   baselinkRotationProcess();
 
   landingProcess();
-  // servoTorqueProcess();
+  if(enable_preflight_joint_control_) servoTorqueProcess();
 
 }
 
@@ -289,6 +290,13 @@ void DragonNavigator::servoTorqueProcess()
 {
   ros::ServiceClient client = nh_.serviceClient<std_srvs::SetBool>(joints_torque_control_srv_name_);
   std_srvs::SetBool srv;
+  const uint8_t navi_state = getNaviState();
+
+  if(!client.exists())
+    {
+      ROS_WARN_THROTTLE(1.0, "waiting for joint torque service %s", joints_torque_control_srv_name_.c_str());
+      return;
+    }
 
   if(servo_torque_)
     {
@@ -313,7 +321,10 @@ void DragonNavigator::servoTorqueProcess()
     }
   else
     {
-      if(getNaviState() == ARM_ON_STATE)
+      if(navi_state == ARM_OFF_STATE ||
+         navi_state == START_STATE ||
+         navi_state == ARM_ON_STATE ||
+         navi_state == TAKEOFF_STATE)
         {
           srv.request.data = true;
 
@@ -377,6 +388,7 @@ void DragonNavigator::rosParamInit()
   getParam<double>(navi_nh, "height_thresh", height_thresh_, 0.1); // height threshold to disable the joint servo when landing
   getParam<double>(navi_nh, "baselink_rot_change_thresh", baselink_rot_change_thresh_, 0.02);  // the threshold to change the baselink rotation
   getParam<double>(navi_nh, "baselink_rot_pub_interval", baselink_rot_pub_interval_, 0.1); // the rate to pub baselink rotation command
+  getParam<bool>(navi_nh, "enable_preflight_joint_control", enable_preflight_joint_control_, false);
 }
 
 /* plugin registration */

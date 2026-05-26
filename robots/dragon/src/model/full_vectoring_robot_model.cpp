@@ -801,6 +801,16 @@ Eigen::VectorXd FullVectoringRobotModel::calcFeasibleControlFxyDists(const std::
   return f_min;
 }
 
+void FullVectoringRobotModel::calcFeasibleControlFDists()
+{
+  aerial_robot_model::RobotModel::calcFeasibleControlFDists();
+}
+
+void FullVectoringRobotModel::calcFeasibleControlTDists()
+{
+  aerial_robot_model::RobotModel::calcFeasibleControlTDists();
+}
+
 Eigen::VectorXd FullVectoringRobotModel::calcFeasibleControlTDists(const std::vector<int>& roll_locked_gimbal, const std::vector<double>& locked_angles, int rotor_num, const std::vector<Eigen::Vector3d>& rotor_pos, const std::vector<Eigen::Matrix3d>& link_rot, const Eigen::Matrix3d& cog_rot)
 {
   // Note: calculate in baselink frame to remove the influence of desired rotation

@@ -387,6 +387,8 @@ void DragonFullVectoringController::initialize(ros::NodeHandle nh, ros::NodeHand
   estimate_external_wrench_pub_ = nh_.advertise<geometry_msgs::WrenchStamped>("estimated_external_wrench", 1);
   rotor_interfere_wrench_pub_ = nh_.advertise<geometry_msgs::WrenchStamped>("rotor_interfere_wrench", 1);
   interfrence_marker_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("interference_markers", 1);
+  fc_f_min_pub_ = nh_.advertise<std_msgs::Float64>("debug/fc_f_min", 1);
+  fc_t_min_pub_ = nh_.advertise<std_msgs::Float64>("debug/fc_t_min", 1);
 
   add_external_wrench_sub_ = nh_.subscribe(std::string("apply_external_wrench"), 1, &DragonFullVectoringController::addExternalWrenchCallback, this);
   clear_external_wrench_sub_ = nh_.subscribe(std::string("clear_external_wrench"), 1, &DragonFullVectoringController::clearExternalWrenchCallback, this);
@@ -2032,6 +2034,13 @@ void DragonFullVectoringController::sendCmd()
       target_force_msg.forces.push_back(f);
     }
   target_vectoring_force_pub_.publish(target_force_msg);
+
+  std_msgs::Float64 fc_f_min_msg;
+  std_msgs::Float64 fc_t_min_msg;
+  fc_f_min_msg.data = robot_model_for_control_->getFeasibleControlFMin();
+  fc_t_min_msg.data = robot_model_for_control_->getFeasibleControlTMin();
+  fc_f_min_pub_.publish(fc_f_min_msg);
+  fc_t_min_pub_.publish(fc_t_min_msg);
 
   /* rotor interfere wrench */
   geometry_msgs::WrenchStamped wrench_msg;

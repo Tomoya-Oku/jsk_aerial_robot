@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<package>
+  <name>dracomancer</name>
+  <version>0.0.0</version>
+  <description>Uplimb-Exoskeleton Type Teleoperation System</description>
+
+  <maintainer email="oku@dragon.t.u-tokyo.ac.jp">Tomoya Oku</maintainer>
+  <license>BSD</license>
+  <url type="website">https://github.com/Tomoya-Oku/jsk_aerial_robot</url>
+  <author email="oku@dragon.t.u-tokyo.ac.jp">Tomoya Oku</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>aerial_robot_control</build_depend>
+  <build_depend>aerial_robot_model</build_depend>
+  <build_depend>aerial_robot_msgs</build_depend>
+  <build_depend>pluginlib</build_depend>
+  <build_depend>message_runtime</build_depend>
+  <build_depend>diagnostic_msgs</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <!-- <build_depend>roscpp</build_depend>
+  <build_depend>rospy</build_depend> -->
+ 
+  <run_depend>aerial_robot_control</run_depend>
+  <run_depend>aerial_robot_model</run_depend>
+  <run_depend>aerial_robot_msgs</run_depend>
+  <run_depend>aerial_robot_estimation</run_depend>
+  <run_depend>aerial_robot_simulation</run_depend>
+  <run_depend>aerial_robot_base</run_depend>
+  <run_depend>roscpp</run_depend>
+  <run_depend>pluginlib</run_depend>
+  <run_depend>diagnostic_msgs</run_depend>
+  <run_depend>geometry_msgs</run_depend>
+  <run_depend>std_msgs</run_depend>
+  <run_depend>message_runtime</run_depend>
+
+  <export>
+    <aerial_robot_model plugin="${prefix}/plugins/robot_model_plugins.xml" />
+    <aerial_robot_control plugin="${prefix}/plugins/control_plugins.xml" />
+  </export>
+</package>

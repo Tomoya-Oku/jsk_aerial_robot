@@ -1,0 +1,121 @@
+<launch>
+  <!-- robot namespace -->
+  <arg name="device_ns" default="dracomancer"/>
+  <arg name="robot_ns" default="dragon"/>
+
+  <!-- serial settings -->
+  <arg name="port" default="/dev/ttyUSB0"/>
+  <arg name="baud" default="921600"/>
+  <arg name="enable_joystick_serial" default="false"/>
+
+  <!-- topic names -->
+  <arg name="js_raw_topic" default="/joystick/raw"/>
+  <arg name="js_calibrated_topic" default="/$(arg device_ns)/joystick/calibrated"/>
+  <arg name="device_joint_topic" default="/$(arg device_ns)/joint_states"/>
+  <arg name="servo_topic" default="/servo/states"/>
+  <arg name="enable_servo_to_joint_states" default="true"/>
+  <arg name="servo_to_joint_states_rate" default="40.0"/>
+  <arg name="enable_shape_safety" default="true"/>
+  <arg name="missing_inradius_scale" default="1.0"/>
+  <arg name="min_safety_scale" default="0.0"/>
+  <arg name="force_inradius_min" default="0.2"/>
+  <arg name="torque_inradius_min" default="0.02"/>
+  <arg name="force_inradius_hard_min" default="0.1"/>
+  <arg name="torque_inradius_hard_min" default="0.01"/>
+  <arg name="max_step" default="0.04"/>
+  <arg name="joint_limit" default="1.57079632679"/>
+  <arg name="capture_neutral_on_first_msg" default="false"/>
+  <arg name="enable_control_pose" default="true"/>
+  <arg name="enable_control_joints" default="true"/>
+  <arg name="publish_joints_only_when_hovering" default="false"/>
+  <arg name="publish_joints_before_device_ready" default="false"/>
+
+  <!-- raw joystick publisher side -->
+  <!-- spinal/bridge.launch の中で rosserial_server を起動しているなら include でも可 -->
+  <node pkg="rosserial_server"
+        type="serial_node"
+        name="$(arg device_ns)_rosserial_server"
+        output="screen"
+        if="$(arg enable_joystick_serial)">
+    <param name="port" value="$(arg port)"/>
+    <param name="baud" value="$(arg baud)"/>
+    <remap from="joystick_m5stack" to="$(arg js_raw_topic)"/>
+  </node>
+
+  <!-- joystick calibration -->
+  <node pkg="dracomancer"
+        type="joystick_calib_publisher.py"
+        name="$(arg device_ns)_joystick_calib_publisher"
+        output="screen">
+    <param name="js_raw_topic" value="$(arg js_raw_topic)"/>
+    <param name="js_calibrated_topic" value="$(arg js_calibrated_topic)"/>
+
+    <!-- calibration parameters -->
+    <rosparam param="axis_indices">[0, 1]</rosparam>
+    <rosparam param="invert_axes">[]</rosparam>
+    <param name="rate" value="40"/>
+    <param name="center_duration" value="2.0"/>
+    <param name="range_duration" value="5.0"/>
+    <param name="deadzone" value="0.05"/>
+
+    <!-- Calibration data -->
+    <param name="save_yaml" value="true"/>
+    <param name="use_saved_calibration" value="true"/>
+    <param name="yaml_path" value="$(find dracomancer)/config/joystick_calibration.yaml"/>
+  </node>
+
+  <node pkg="dracomancer"
+        type="servo_to_joint_states.py"
+        name="$(arg device_ns)_servo_to_joint_states"
+        output="screen"
+        if="$(arg enable_servo_to_joint_states)">
+    <param name="servo_topic" value="$(arg servo_topic)"/>
+    <param name="joint_states_topic" value="$(arg device_joint_topic)"/>
+    <param name="rate" value="$(arg servo_to_joint_states_rate)"/>
+  </node>
+
+  <!-- Control Pose -->
+  <node pkg="dracomancer"
+        type="control_pose.py"
+        name="$(arg device_ns)_control_pose"
+        output="screen"
+        if="$(arg enable_control_pose)">
+    <param name="device_ns" value="/$(arg device_ns)"/>
+    <param name="robot_name" value="$(arg robot_ns)"/>
+    <param name="rate" value="40.0"/>
+    <param name="joy_topic" value="$(arg js_calibrated_topic)"/>
+
+    <!-- Scaling and Threshold -->
+    <param name="scale_x" value="1.0"/>
+    <param name="scale_y" value="1.0"/>
+    <param name="scale_z" value="1.0"/>
+    <param name="deadzone" value="0.05"/>    
+  </node>
+
+  <!-- Control Joints -->
+  <node pkg="dracomancer"
+        type="control_joints.py"
+        name="$(arg device_ns)_control_joints"
+        output="screen"
+        if="$(arg enable_control_joints)">
+    <param name="device_ns" value="/$(arg device_ns)"/>
+    <param name="robot_name" value="$(arg robot_ns)"/>
+    <param name="device_joint_topic" value="$(arg device_joint_topic)"/>
+    <param name="command_topic" value="/$(arg robot_ns)/joints_ctrl"/>
+    <param name="rate" value="40.0"/>
+    <param name="joint_limit" value="$(arg joint_limit)"/>
+    <param name="max_step" value="$(arg max_step)"/>
+    <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
+    <param name="publish_only_when_hovering" value="$(arg publish_joints_only_when_hovering)"/>
+    <param name="publish_before_device_ready" value="$(arg publish_joints_before_device_ready)"/>
+    <param name="force_inradius_topic" value="/$(arg robot_ns)/debug/fc_f_min"/>
+    <param name="torque_inradius_topic" value="/$(arg robot_ns)/debug/fc_t_min"/>
+    <param name="force_inradius_min" value="$(arg force_inradius_min)"/>
+    <param name="torque_inradius_min" value="$(arg torque_inradius_min)"/>
+    <param name="force_inradius_hard_min" value="$(arg force_inradius_hard_min)"/>
+    <param name="torque_inradius_hard_min" value="$(arg torque_inradius_hard_min)"/>
+    <param name="enable_shape_safety" value="$(arg enable_shape_safety)"/>
+    <param name="missing_inradius_scale" value="$(arg missing_inradius_scale)"/>
+    <param name="min_safety_scale" value="$(arg min_safety_scale)"/>
+  </node>
+</launch>

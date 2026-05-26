@@ -124,8 +124,8 @@ namespace Dragon
     std::vector<double>  calcBestLockGimbalRoll(const std::vector<int>& gimbal_roll_lock, const std::vector<int>& prev_gimbal_roll_lock, const std::vector<double>& prev_opt_locked_roll_angles);
 
     void calcStaticThrust() override {}; // do nothing
-    void calcFeasibleControlFDists() {}; // do nothing
-    void calcFeasibleControlTDists() {}; // do nothing
+    void calcFeasibleControlFDists() override;
+    void calcFeasibleControlTDists() override;
   };
 
   template<> inline std::vector<KDL::Vector> FullVectoringRobotModel::getGimbalRollOriginFromCog() const
