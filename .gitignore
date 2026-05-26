@@ -118,5 +118,5 @@ devel/
 logs/
 
 .vscode
-.history
+.history/
 *.bag
