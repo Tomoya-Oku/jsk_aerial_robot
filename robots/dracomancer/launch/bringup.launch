@@ -1,11 +1,12 @@
 <?xml version="1.0"?>
 <launch>
-  ##############  launch config  ###########
+  ##############  Mode selection  ###########
   <arg name="rm" default="True" />
   <arg name="sim" default="False" />
   <arg name="real_machine" default="$(eval arg('rm') and not arg('sim'))" />
   <arg name="simulation" default="$(arg sim)" />
 
+  ##############  Simulation placeholders  ###########
   <arg name="worldtype" default="$(find aerial_robot_simulation)/gazebo_model/world/empty.world" />
   <arg name="launch_gazebo" default="True" />
   <arg name="spawn_x" default="0.0"/>
@@ -13,17 +14,22 @@
   <arg name="spawn_z" default="0.0"/>
   <arg name="spawn_yaw" default="0.0"/>
   <arg name="mujoco" default="False" />
+
+  ##############  Model/RViz  ###########
   <arg name="robot_ns" value="dracomancer" />
   <arg name="headless" default="True" />
   <arg name="launch_rviz" default="False" />
+  <arg name="gui" default="False" />
+  <arg name="joint_gui" default="$(arg gui)" />
+  <arg name="model_headless" value="$(eval arg('headless') or not arg('launch_rviz'))" />
+
+  ##############  Flight controller  ###########
   <arg name="connect_fc" default="$(arg real_machine)" />
   <arg name="fc_serial_port" default="/dev/ttyUSB0" />
   <arg name="fc_serial_baud" default="921600" />
   <arg name="run_servo_rough_calib" default="False" />
 
-  <arg name="gui" default="False" />
-  <arg name="joint_gui" default="$(arg gui)" />
-  <arg name="model_headless" value="$(eval arg('headless') or not arg('launch_rviz'))" />
+  ##############  Servo/joint state  ###########
   <arg name="use_servo_bridge" default="True" />
   <arg name="use_servo_to_joint_states" default="False" />
   <arg name="servo_topic" default="/servo/states" />

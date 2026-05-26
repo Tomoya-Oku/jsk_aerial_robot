@@ -54,12 +54,17 @@ elbow extension maps to the straight middle joint.
 These are used to gate or scale joint commands so that the robot is not forced
 into obviously infeasible shapes.  For simulation, these checks can be relaxed.
 
-## Recommended Bringup
+## Bringup Quick Reference
+
+Use `rm` and `sim` for normal operation.  `real_machine` and `simulation` are
+kept as compatibility aliases for older commands.
+
+### Frequently Used Commands
 
 On the PC running DRAGON simulation:
 
 ```bash
-roslaunch dragon bringup.launch sim:=true rm:=true headless:=false
+roslaunch dragon bringup.launch sim:=true headless:=false
 ```
 
 On the Dracomancer/Khadas side without FC connected:
@@ -82,6 +87,47 @@ roslaunch dracomancer bringup.launch rm:=true sim:=false fc_serial_port:=/dev/tt
 
 Khadas usually has no display.  Do not start RViz there.  Use
 `launch_rviz:=true headless:=false` only on a GUI machine.
+
+RViz-only Dracomancer joint slider mode, without FC or simulator:
+
+```bash
+roslaunch dracomancer bringup.launch \
+  rm:=false \
+  sim:=false \
+  gui:=true \
+  launch_rviz:=true \
+  headless:=false
+```
+
+Use servo states as Dracomancer joint states without teleoperation:
+
+```bash
+roslaunch dracomancer bringup.launch use_servo_to_joint_states:=true
+```
+
+### Bringup Arguments
+
+| Group | Argument | Default | Purpose |
+| --- | --- | --- | --- |
+| Mode | `rm` | `True` | Shortcut for real-machine mode. |
+| Mode | `sim` | `False` | Shortcut for simulation mode.  When true, `real_machine` becomes false. |
+| Mode | `real_machine` | `rm && !sim` | Compatibility alias used by included launch files. |
+| Mode | `simulation` | `sim` | Compatibility alias used by included launch files. |
+| FC | `connect_fc` | `real_machine` | Starts the flight-controller serial bridge. |
+| FC | `fc_serial_port` | `/dev/ttyUSB0` | Serial device for the FC. |
+| FC | `fc_serial_baud` | `921600` | Serial baud rate for the FC. |
+| FC | `run_servo_rough_calib` | `False` | Runs rough servo calibration node from the sensor include. |
+| Model/RViz | `headless` | `True` | Hides RViz/model visualization unless overridden. |
+| Model/RViz | `launch_rviz` | `False` | Allows the model launch to show RViz. |
+| Model/RViz | `gui` | `False` | Shortcut for `joint_gui`. |
+| Model/RViz | `joint_gui` | `gui` | Starts `joint_state_publisher_gui` instead of servo bridge. |
+| Model/RViz | `robot_ns` | `dracomancer` | ROS namespace. |
+| Servo | `use_servo_bridge` | `True` | Starts `servo_bridge_node` when `joint_gui:=false`. |
+| Servo | `use_servo_to_joint_states` | `False` | Converts servo states to `/dracomancer/joint_states` in bringup. |
+| Servo | `servo_topic` | `/servo/states` | Input topic for `servo_to_joint_states.py`. |
+| Servo | `joint_states_topic` | `/dracomancer/joint_states` | Output topic from `servo_to_joint_states.py`. |
+| Simulation reserved | `mujoco` | `False` | Passes `use_mujoco` to the servo bridge. |
+| Simulation reserved | `worldtype`, `launch_gazebo`, `spawn_*` | empty world / zero pose | Kept for parity with robot bringup; this launch does not start Gazebo by itself. |
 
 ## Teleoperation Launch
 
@@ -182,7 +228,8 @@ safety.
 
 ## RViz-Only Dracomancer Simulation
 
-To move only the Dracomancer URDF in RViz using sliders:
+To move only the Dracomancer URDF in RViz using sliders, use the RViz-only
+bringup command above:
 
 ```bash
 roslaunch dracomancer bringup.launch \
