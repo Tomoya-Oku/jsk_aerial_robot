@@ -117,6 +117,7 @@ build/
 devel/
 logs/
 
-.vscode
+.vscode/
 .history/
+bags/
 *.bag
