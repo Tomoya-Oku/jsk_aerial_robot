@@ -34,6 +34,11 @@
   <arg name="demo" default="False" />
   <arg name="headless" default="True" />
   <arg name="preflight_joint_control" default="$(arg simulation)" />
+  <arg name="rviz_joint_ctrl" default="$(eval not arg('real_machine') and not arg('simulation'))" />
+  <arg name="rviz_spawn_x" default="0.0"/>
+  <arg name="rviz_spawn_y" default="0.0"/>
+  <arg name="rviz_spawn_z" default="2.0"/>
+  <arg name="rviz_spawn_yaw" default="0.0"/>
 
   ###########  UAV Config  ###########
   <group ns="$(arg robot_ns)">
@@ -107,6 +112,12 @@
     <param name="use_mujoco" value="true" if="$(arg mujoco)"/>
   </node>
 
+  ########## Rviz Joint Control #########
+  <group if="$(arg rviz_joint_ctrl)">
+    <node pkg="dragon" type="rviz_joint_ctrl_wrapper.py" name="rviz_joint_ctrl_wrapper" output="screen" ns="$(arg robot_ns)" />
+    <node pkg="tf" type="static_transform_publisher" name="rviz_root_tf" args="$(arg rviz_spawn_x) $(arg rviz_spawn_y) $(arg rviz_spawn_z) $(arg rviz_spawn_yaw) 0 0 world $(arg robot_ns)/root 100" />
+  </group>
+
   ########## Simulation in Gazebo #########
   <include file="$(find aerial_robot_simulation)/launch/gazebo.launch" if = "$(eval arg('simulation') and not arg('real_machine') and not arg('mujoco'))" >
     <arg name="robot_ns" default="$(arg robot_ns)" />
@@ -132,4 +143,3 @@
   <node pkg="dragon" type="simple_demo.py" name="simple_demo" ns="$(arg robot_ns)" output="screen" if="$(arg demo)"/>
 
 </launch>
-
