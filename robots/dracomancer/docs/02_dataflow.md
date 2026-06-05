@@ -27,21 +27,26 @@ flowchart TB
 ## ① 位置系統（control_pose.py）
 
 操縦桿の傾きを **DRAGON の速度指令**（`FlightNav`）に変換します。
+さらに操作者の **IMU 姿勢**で移動方向を回転し、**操作者の向きに対する相対移動**にします。
 
 ```mermaid
 flowchart LR
     JOY["calibrated 軸値"] --> DZ["デッドゾーン処理<br/>(±0.05)"]
     DZ --> SC["スケール<br/>scale_x/y/z"]
-    SC --> VEL["速度に変換<br/>xy_vel=0.3, z_vel=0.2"]
-    VEL --> NAV["/dragon/uav/nav<br/>(POS_VEL_MODE)"]
+    SC --> VEL["body 速度ベクトル<br/>xy_vel=0.3, z_vel=0.2"]
+    VEL --> ROT["向き補正<br/>direction_mode"]
+    IMU["/dracomancer/imu<br/>(spinal Imu)"] -.->|操作者姿勢| ROT
+    ROT --> NAV["/dragon/uav/nav<br/>(WORLD_FRAME, POS_VEL_MODE)"]
 
     STATE["/dragon/flight_state"] -.->|hover中のみ送信| NAV
     POS["/dragon/mocap/pose"] -.->|位置リミット参照| NAV
+    TGT["nav_target<br/>cog / baselink"] -.->|移動対象| NAV
 ```
 
 要点:
 - DRAGON が**ホバリング状態（flight_state ≥ 4）になってから**指令を送信。ホバ直後は `wait_after_hover`（既定 3 秒）待機。
-- 制御モードは全軸 `POS_VEL_MODE`、対象は重心 `COG`、`WORLD_FRAME`。
+- 制御モードは全軸 `POS_VEL_MODE`、`WORLD_FRAME`。移動対象（COG / baselink）は `nav_target` で切替（既定 COG）。
+- IMU 姿勢による向き補正は `direction_mode`（`none`/`yaw`/`yaw_pitch`/`full`）で切替。詳細は [06. IMU 相対移動](06_imu_relative_control.md)。
 - `pos_limit` 有効時は部屋内の安全範囲（X/Y/Z）にクランプ。
 
 ## ② 形状系統（servo_to_joint_states → control_joints）
@@ -67,6 +72,7 @@ flowchart LR
 | `/joystick/raw` | `Int16MultiArray` | 入力 | 操縦桿の生値 |
 | `/dracomancer/joystick/calibrated` | `Float32MultiArray` | 内部 | 較正済み軸値 |
 | `/servo/states` | `spinal/ServoStates` | 入力 | 腕サーボの状態 |
+| `/dracomancer/imu` | `spinal/Imu` | 入力 | 操作者の姿勢（向き補正用） |
 | `/dracomancer/joint_states` | `JointState` | 内部 | 腕関節角 |
 | `/dragon/uav/nav` | `aerial_robot_msgs/FlightNav` | 出力 | DRAGON 速度指令 |
 | `/dragon/joints_ctrl` | `JointState` | 出力 | DRAGON 形状指令 |

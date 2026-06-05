@@ -27,6 +27,20 @@
   <arg name="capture_neutral_on_first_msg" default="false"/>
   <arg name="enable_control_pose" default="true"/>
   <arg name="enable_control_joints" default="true"/>
+
+  <!-- pose (movement) control settings -->
+  <!-- nav_target: cog (重心) or baselink (ベースリンク) -->
+  <arg name="nav_target" default="cog"/>
+  <!-- direction_mode: none / yaw / yaw_pitch / full -->
+  <arg name="direction_mode" default="yaw"/>
+  <arg name="imu_topic" default="/$(arg device_ns)/imu"/>
+  <!-- IMU mounting correction (operator-body <- IMU board) [rad].
+       Default assumes the IMU is tilted 90deg on the operator's back.
+       Tune on the real hardware. -->
+  <arg name="imu_mount_roll" default="0.0"/>
+  <arg name="imu_mount_pitch" default="-1.57079632679"/>
+  <arg name="imu_mount_yaw" default="0.0"/>
+  <arg name="recapture_neutral_on_hover" default="true"/>
   <arg name="publish_joints_only_when_hovering" default="false"/>
   <arg name="publish_joints_before_device_ready" default="false"/>
 
@@ -85,11 +99,19 @@
     <param name="rate" value="40.0"/>
     <param name="joy_topic" value="$(arg js_calibrated_topic)"/>
 
+    <!-- Movement target and IMU-relative direction -->
+    <param name="nav_target" value="$(arg nav_target)"/>
+    <param name="direction_mode" value="$(arg direction_mode)"/>
+    <param name="imu_topic" value="$(arg imu_topic)"/>
+    <rosparam param="imu_mount_rpy"
+              subst_value="true">[$(arg imu_mount_roll), $(arg imu_mount_pitch), $(arg imu_mount_yaw)]</rosparam>
+    <param name="recapture_on_hover" value="$(arg recapture_neutral_on_hover)"/>
+
     <!-- Scaling and Threshold -->
     <param name="scale_x" value="1.0"/>
     <param name="scale_y" value="1.0"/>
     <param name="scale_z" value="1.0"/>
-    <param name="deadzone" value="0.05"/>    
+    <param name="deadzone" value="0.05"/>
   </node>
 
   <!-- Control Joints -->

@@ -78,6 +78,11 @@ roslaunch dracomancer teleoperation.launch
 | `min_safety_scale` | 安全スケールの下限 |
 | `max_step` | 1 周期あたりの関節変化量上限 |
 | `publish_joints_only_when_hovering` | ホバリング以降のみ形状指令を送信 |
+| `nav_target` | 移動対象 `cog`(既定) / `baselink`（[06](06_imu_relative_control.md)） |
+| `direction_mode` | IMU 向き補正 `none`/`yaw`(既定)/`yaw_pitch`/`full` |
+| `imu_topic` | 操作者 IMU トピック（既定 `/dracomancer/imu`） |
+| `imu_mount_roll/pitch/yaw` | IMU 取付け補正 [rad]（実機で要調整） |
+| `recapture_neutral_on_hover` | ホバ開始時に中立向きを取り直す |
 
 ### シミュレーションで落下を許容（安全機構を緩和）
 
