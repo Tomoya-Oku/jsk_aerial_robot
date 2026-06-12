@@ -25,7 +25,14 @@ Required packages:
 - `python3-qrcode` (apt) / `qrcode` (pip) is used to print a terminal QR code for the
   phone/LAN URL.
 
-Each robot `bringup.launch` includes this package by default and prints a URL similar to:
+Each robot `bringup.launch` can include this package, but it is disabled by default; enable it
+explicitly:
+
+```bash
+roslaunch hydrus bringup.launch launch_web_console:=true
+```
+
+When enabled, a URL similar to the following is printed:
 
 ```text
 ============================================================
