@@ -1,4 +1,16 @@
 (() => {
+  if (!window.React || !window.ReactDOM) {
+    const root = document.getElementById('root');
+    if (root) {
+      root.querySelector('.boot-hint')?.replaceChildren(
+        'React assets failed to load. Connect this device to the internet once or pre-cache the CDN assets.',
+      );
+    }
+    return;
+  }
+
+  const React = window.React;
+  const ReactDOM = window.ReactDOM;
   const e = React.createElement;
   const params = new URLSearchParams(window.location.search);
   const defaultBridgePort = params.get('rosbridge_port') || '9090';
@@ -17,17 +29,48 @@
     return name.startsWith('/') ? name : `/${name}`;
   }
 
+  function describeError(error, fallback) {
+    if (!error) return fallback;
+    if (error.message) return error.message;
+    if (error.reason) return error.reason;
+    if (error.type) return `${error.type} event`;
+    return String(error);
+  }
+
   function useRosConnection(url) {
     const [attempt, setAttempt] = React.useState(0);
     const [state, setState] = React.useState({ connected: false, error: '', ros: null });
     React.useEffect(() => {
       let alive = true;
       let retryId = 0;
-      const ros = new ROSLIB.Ros({ url });
       const scheduleRetry = () => {
         window.clearTimeout(retryId);
         retryId = window.setTimeout(() => setAttempt((value) => value + 1), RECONNECT_DELAY_MS);
       };
+      if (!window.ROSLIB) {
+        setState({
+          connected: false,
+          error: 'roslib failed to load; connect this browser to the internet once or pre-cache the CDN asset',
+          ros: null,
+        });
+        scheduleRetry();
+        return () => {
+          alive = false;
+          window.clearTimeout(retryId);
+        };
+      }
+
+      let ros;
+      try {
+        ros = new window.ROSLIB.Ros({ url });
+      } catch (error) {
+        setState({ connected: false, error: describeError(error, 'connection setup failed'), ros: null });
+        scheduleRetry();
+        return () => {
+          alive = false;
+          window.clearTimeout(retryId);
+        };
+      }
       ros.on('connection', () => alive && setState({ connected: true, error: '', ros }));
       ros.on('close', () => {
         if (!alive) return;
@@ -36,7 +79,7 @@
       });
       ros.on('error', (error) => {
         if (!alive) return;
-        setState({ connected: false, error: String(error?.message || error || 'connection error'), ros });
+        setState({ connected: false, error: describeError(error, 'connection error'), ros });
       });
       return () => {
         alive = false;
@@ -49,8 +92,12 @@
 
   function callService(ros, name, type, values = {}) {
     return new Promise((resolve, reject) => {
-      const service = new ROSLIB.Service({ ros, name: serviceName(name), serviceType: type });
-      service.callService(new ROSLIB.ServiceRequest(values), resolve, reject);
+      if (!window.ROSLIB) {
+        reject(new Error('roslib is not loaded'));
+        return;
+      }
+      const service = new window.ROSLIB.Service({ ros, name: serviceName(name), serviceType: type });
+      service.callService(new window.ROSLIB.ServiceRequest(values), resolve, reject);
     });
   }
 
@@ -124,7 +171,8 @@
     React.useEffect(() => {
       setPreview(null);
       if (!ros || !connected || selected?.kind !== 'topic' || !details?.type) return undefined;
-      const topic = new ROSLIB.Topic({
+      if (!window.ROSLIB) return undefined;
+      const topic = new window.ROSLIB.Topic({
         ros,
         name: selected.name,
         messageType: details.type,
@@ -140,7 +188,8 @@
     const viewerApiRef = React.useRef(null);
     React.useEffect(() => {
       if (!ros || !connected) return undefined;
-      const topic = new ROSLIB.Topic({
+      if (!window.ROSLIB) return undefined;
+      const topic = new window.ROSLIB.Topic({
         ros,
         name: `${robotNs}/joint_states`,
         messageType: 'sensor_msgs/JointState',
