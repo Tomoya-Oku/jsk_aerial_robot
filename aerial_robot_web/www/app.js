@@ -397,10 +397,19 @@
   }
 
   function DetailsCard({ selected, details, preview, ros, connected }) {
+    const [collapsed, setCollapsed] = React.useState(false);
     const list = (label, values) => e('div', { className: 'section' }, e('span', { className: 'label' }, label), (values || []).map((value) => e('div', { className: 'meta', key: value }, value)));
-    return e('article', { className: 'card' },
-      e('h2', null, 'Info / Pub-Sub'),
-      e('div', { className: 'details-body' },
+    return e('article', { className: `card${collapsed ? ' collapsed' : ''}` },
+      e('div', { className: 'card-head list-head' },
+        e('h2', null, 'Info / Pub-Sub'),
+        e('button', {
+          className: 'secondary toggle-btn',
+          onClick: () => setCollapsed((value) => !value),
+          'aria-expanded': !collapsed,
+          'aria-label': collapsed ? 'Expand info panel' : 'Collapse info panel',
+        }, collapsed ? '▸' : '▾'),
+      ),
+      !collapsed && e('div', { className: 'details-body' },
         selected ? e('div', null,
         e('div', { className: 'topic-row' }, e('strong', null, selected.name), e('span', { className: 'badge' }, selected.kind)),
         details?.error && e('p', { className: 'value bad' }, details.error),
