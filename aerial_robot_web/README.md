@@ -82,6 +82,9 @@ If roslaunch reports that `rosbridge_server` or `rosbridge_websocket` cannot be 
 - Touch-friendly live robot model viewer (URDF + odometry) that mirrors live `/joint_states`,
   follows the odometry pose topic, reframes the camera once meshes finish loading, and
   reports mesh load failures.
+- Flight control buttons beside the model viewer that mirror
+  `aerial_robot_base/scripts/keyboard_command.py`: arm/takeoff/land/force-landing/halt via
+  `<robot_ns>/teleop_command/*` and velocity nudges via `<robot_ns>/uav/nav` (`FlightNav`).
 - `package://` mesh resources are served by the console HTTP server under `/pkg/<package>/<path>`.
 - Automatic rosbridge reconnection every few seconds after a dropped or failed connection.
 

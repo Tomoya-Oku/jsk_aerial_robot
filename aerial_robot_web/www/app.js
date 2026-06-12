@@ -320,7 +320,11 @@
         e(GraphList, { title: 'Topics', items: graph.topics, kind: 'topic', selected, setSelected, connected, loading: lastUpdate === 'never' }),
         e(DetailsCard, { selected, details, preview, ros, connected }),
       ),
-      e(UrdfPanel, { urdf, viewerApiRef, basePose, poseTopic, poseStamp, jointTopic: nsJoin(robotNs, 'joint_states') }),
+      e(UrdfPanel, {
+        urdf, viewerApiRef, basePose, poseTopic, poseStamp,
+        jointTopic: nsJoin(robotNs, 'joint_states'),
+        controls: e(FlightControl, { ros, connected, robotNs }),
+      }),
     );
   }
 
@@ -506,7 +510,66 @@
     );
   }
 
-  function UrdfPanel({ urdf, viewerApiRef, basePose, poseTopic, poseStamp, jointTopic }) {
+  // Mirrors aerial_robot_base/scripts/keyboard_command.py: Empty teleop
+  // commands plus FlightNav velocity nudges.
+  const FLIGHT_NAV = { VEL_MODE: 1, WORLD_FRAME: 0, COG: 1 };
+  const TELEOP_XY_VEL = 0.2;
+  const TELEOP_Z_VEL = 0.2;
+  const TELEOP_YAW_VEL = 0.2;
+
+  function FlightControl({ ros, connected, robotNs }) {
+    const [status, setStatus] = React.useState('');
+    const send = (topicName, type, payload, label) => {
+      if (!ros || !connected || !window.ROSLIB) return;
+      try {
+        const topic = new window.ROSLIB.Topic({ ros, name: topicName, messageType: type });
+        topic.publish(new window.ROSLIB.Message(payload));
+        setStatus(`sent ${label}`);
+      } catch (error) {
+        setStatus(describeError(error, 'publish failed'));
+      }
+    };
+    const teleop = (command, label) => send(nsJoin(robotNs, `teleop_command/${command}`), 'std_msgs/Empty', {}, label);
+    const nav = (fields, label) => send(nsJoin(robotNs, 'uav/nav'), 'aerial_robot_msgs/FlightNav', {
+      control_frame: FLIGHT_NAV.WORLD_FRAME,
+      target: FLIGHT_NAV.COG,
+      ...fields,
+    }, label);
+    const btn = (label, onClick, extra) => e('button', {
+      className: `fc-btn${extra ? ` ${extra}` : ''}`,
+      onClick,
+      disabled: !connected,
+    }, label);
+    return e('div', { className: 'flight-control' },
+      e('span', { className: 'label' }, 'Flight Control'),
+      e('div', { className: 'fc-row fc-row-2' },
+        btn('Arm', () => teleop('start', 'arm')),
+        btn('Takeoff', () => teleop('takeoff', 'takeoff')),
+      ),
+      e('div', { className: 'fc-row fc-row-3' },
+        btn('↺ Yaw', () => nav({ yaw_nav_mode: FLIGHT_NAV.VEL_MODE, target_omega_z: TELEOP_YAW_VEL }, '+yaw vel')),
+        btn('↑ Fwd', () => nav({ pos_xy_nav_mode: FLIGHT_NAV.VEL_MODE, target_vel_x: TELEOP_XY_VEL }, '+x vel')),
+        btn('↻ Yaw', () => nav({ yaw_nav_mode: FLIGHT_NAV.VEL_MODE, target_omega_z: -TELEOP_YAW_VEL }, '-yaw vel')),
+      ),
+      e('div', { className: 'fc-row fc-row-3' },
+        btn('← Left', () => nav({ pos_xy_nav_mode: FLIGHT_NAV.VEL_MODE, target_vel_y: TELEOP_XY_VEL }, '+y vel')),
+        btn('↓ Back', () => nav({ pos_xy_nav_mode: FLIGHT_NAV.VEL_MODE, target_vel_x: -TELEOP_XY_VEL }, '-x vel')),
+        btn('→ Right', () => nav({ pos_xy_nav_mode: FLIGHT_NAV.VEL_MODE, target_vel_y: -TELEOP_XY_VEL }, '-y vel')),
+      ),
+      e('div', { className: 'fc-row fc-row-2' },
+        btn('▲ Up', () => nav({ pos_z_nav_mode: FLIGHT_NAV.VEL_MODE, target_vel_z: TELEOP_Z_VEL }, '+z vel')),
+        btn('▼ Down', () => nav({ pos_z_nav_mode: FLIGHT_NAV.VEL_MODE, target_vel_z: -TELEOP_Z_VEL }, '-z vel')),
+      ),
+      e('div', { className: 'fc-row fc-row-3' },
+        btn('Land', () => teleop('land', 'land')),
+        btn('F.Land', () => teleop('force_landing', 'force landing'), 'danger'),
+        btn('Halt', () => teleop('halt', 'halt'), 'danger'),
+      ),
+      e('p', { className: 'meta fc-status' }, status || `vel step: ${TELEOP_XY_VEL} m/s, ${TELEOP_YAW_VEL} rad/s`),
+    );
+  }
+
+  function UrdfPanel({ urdf, viewerApiRef, basePose, poseTopic, poseStamp, jointTopic, controls }) {
     const viewerRef = React.useRef(null);
     const [message, setMessage] = React.useState('Waiting for robot_description...');
     const [meshNotice, setMeshNotice] = React.useState('');
@@ -542,9 +605,12 @@
     return e('section', { className: 'card section' },
       e('h2', null, 'Live Robot Model (URDF + Odometry)'),
       e('p', { className: 'meta' }, `Touch-drag to orbit. The model follows ${poseTopic} and live ${jointTopic}. Last pose: ${poseStamp}.`),
-      e('div', { className: 'viewer' },
-        e('div', { className: 'viewer-host', ref: viewerRef }),
-        message && e('div', { className: 'viewer-message' }, e('div', { className: 'empty' }, message)),
+      e('div', { className: 'viewer-row' },
+        e('div', { className: 'viewer' },
+          e('div', { className: 'viewer-host', ref: viewerRef }),
+          message && e('div', { className: 'viewer-message' }, e('div', { className: 'empty' }, message)),
+        ),
+        controls,
       ),
       meshNotice && e('p', { className: 'meta' }, meshNotice),
     );

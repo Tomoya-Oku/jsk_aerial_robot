@@ -148,6 +148,21 @@ button:disabled { opacity: 0.4; cursor: default; }
 .joint-head strong { font-family: var(--font-data); font-size: 0.88rem; }
 input[type="range"] { accent-color: var(--ink); width: 100%; min-height: 44px; margin: 0; cursor: pointer; }
 input[type="range"]:disabled { cursor: default; }
+.viewer-row { display: grid; grid-template-columns: 1fr 230px; gap: 12px; align-items: start; }
+.flight-control {
+  display: grid; gap: 8px; align-content: start; padding: 12px;
+  border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface-2);
+}
+.fc-row { display: grid; gap: 6px; }
+.fc-row-2 { grid-template-columns: repeat(2, 1fr); }
+.fc-row-3 { grid-template-columns: repeat(3, 1fr); }
+.fc-btn {
+  min-height: 40px; padding: 8px 4px;
+  font-family: var(--font-data); font-size: 0.76rem; font-weight: 600; white-space: nowrap;
+}
+.fc-btn.danger { background: #ffffff; color: var(--bad); border-color: var(--bad); }
+.fc-btn.danger:hover:not(:disabled) { background: #fbeded; border-color: var(--bad); color: var(--bad); }
+.fc-status { margin: 0; font-size: 0.78rem; }
 .viewer {
   position: relative; min-height: 360px; border-radius: var(--radius-card); overflow: hidden;
   background: var(--surface-2); border: 1px solid var(--line);
@@ -200,6 +215,7 @@ input[type="range"]:disabled { cursor: default; }
   .toolbar { grid-template-columns: 1fr; }
   .cards { grid-template-columns: 1fr; }
   .cards .card { height: 380px; }
+  .viewer-row { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
