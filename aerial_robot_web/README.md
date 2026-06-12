@@ -32,7 +32,8 @@ explicitly:
 roslaunch hydrus bringup.launch launch_web_console:=true
 ```
 
-When enabled, a URL similar to the following is printed:
+When enabled, the console URL and a QR code are printed near the end of the launch output
+(after a short `banner_delay`, default 8 s, so they are not buried by other startup logs):
 
 ```text
 ============================================================
@@ -65,6 +66,8 @@ Useful arguments:
 - `auto_install_qr_dependency` (default: `true`) tries `sudo -n apt-get install -y python3-qrcode`
   first, then `python3 -m pip install --user qrcode` when QR support is missing. It never waits
   for a sudo password; if automatic installation is not allowed, install it manually with apt or pip.
+- `banner_delay` (default: `8.0`) is how many seconds the URL/QR banner is delayed so it appears
+  near the end of the roslaunch startup output.
 
 If roslaunch reports that `rosbridge_server` or `rosbridge_websocket` cannot be found, install
 `ros-one-rosbridge-server` and source the ROS environment again before relaunching.

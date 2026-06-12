@@ -217,6 +217,7 @@ def main():
     port = int(rospy.get_param("~port", 8080))
     rosbridge_port = int(rospy.get_param("~rosbridge_port", 9090))
     auto_install_qr = get_bool_param("~auto_install_qr_dependency", True)
+    banner_delay = float(rospy.get_param("~banner_delay", 8.0))
     robot_ns = rospy.get_param("~robot_ns", "")
     robot_type = rospy.get_param("~robot_type", "generic")
     pose_topic = rospy.get_param("~pose_topic", "") or ns_join(robot_ns, "ground_truth")
@@ -243,12 +244,26 @@ def main():
     })
     localhost_url = "http://localhost:{}{}".format(port, query)
     host_url = "http://{}:{}{}".format(get_host_label(host), port, query)
-    print_console_banner(localhost_url, host_url, web_root, bind_host, auto_install_qr)
     rospy.loginfo("[aerial_robot_web] Local URL: %s", localhost_url)
     rospy.loginfo("[aerial_robot_web] Phone/LAN URL: %s", host_url)
     rospy.loginfo("[aerial_robot_web] ROS bridge URL used by browser: ws://<browser-host>:%s", rosbridge_port)
 
-    rospy.on_shutdown(httpd.shutdown)
+    # Delay the banner so the URL and QR code land near the end of the
+    # roslaunch startup output instead of being buried by other nodes' logs.
+    def banner():
+        if rospy.is_shutdown():
+            return
+        print_console_banner(localhost_url, host_url, web_root, bind_host, auto_install_qr)
+
+    banner_timer = threading.Timer(max(banner_delay, 0.0), banner)
+    banner_timer.daemon = True
+    banner_timer.start()
+
+    def shutdown():
+        banner_timer.cancel()
+        httpd.shutdown()
+
+    rospy.on_shutdown(shutdown)
     rospy.spin()
 
 
