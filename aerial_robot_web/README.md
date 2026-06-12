@@ -6,10 +6,30 @@ or a laptop browser can inspect the ROS graph without RViz/rqt.
 
 ## Launch
 
+Install the runtime dependencies before launching the console:
+
+```bash
+sudo apt install ros-one-rosbridge-server python3-rospkg python3-qrcode
+```
+
+Required packages:
+
+- `ros-one-rosbridge-server` provides `rosbridge_server`, `rosbridge_websocket`, and `rosapi`.
+- `python3-rospkg` is used by the web server to resolve `package://` mesh resources.
+- `python3-qrcode` is used to print a terminal QR code for the phone/LAN URL.
+
 Each robot `bringup.launch` includes this package by default and prints a URL similar to:
 
 ```text
-Aerial Robot Web Console ready: http://localhost:8080?robot_ns=hydrus&robot_type=hydrus&rosbridge_port=9090
+============================================================
+ Aerial Robot Web Console
+------------------------------------------------------------
+ Local browser : http://localhost:8080?robot_ns=hydrus&robot_type=hydrus&rosbridge_port=9090
+ Phone / LAN   : http://192.168.0.10:8080?robot_ns=hydrus&robot_type=hydrus&rosbridge_port=9090
+------------------------------------------------------------
+ Scan this QR code from a phone on the robot network:
+...
+============================================================
 ```
 
 The console can also be launched directly:
@@ -23,6 +43,9 @@ Useful arguments:
 - `web_port` (default: `8080`) changes the HTTP port.
 - `rosbridge_port` (default: `9090`) changes the websocket port.
 - `launch_rosbridge` (default: `true`) can be disabled when another rosbridge is already running.
+
+If roslaunch reports that `rosbridge_server` or `rosbridge_websocket` cannot be found, install
+`ros-one-rosbridge-server` and source the ROS environment again before relaunching.
 
 ## Features
 

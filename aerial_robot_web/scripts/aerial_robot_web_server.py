@@ -6,8 +6,9 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import os
 import posixpath
 import socket
+import sys
 import threading
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlencode, unquote, urlparse
 
 import rospy
 import rospkg
@@ -71,10 +72,69 @@ class ConsoleHandler(SimpleHTTPRequestHandler):
 def get_host_label(configured_host):
     if configured_host not in ("", "0.0.0.0", "::"):
         return configured_host
+    lan_host = get_lan_host()
+    if lan_host:
+        return lan_host
     try:
         return socket.gethostname() or "localhost"
     except socket.error:
         return "localhost"
+
+
+def get_lan_host():
+    """Return the outbound LAN address when the robot is on a network."""
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect(("8.8.8.8", 80))
+        address = probe.getsockname()[0]
+        if address and not address.startswith("127."):
+            return address
+    except socket.error:
+        return None
+    finally:
+        probe.close()
+    return None
+
+
+def format_qr(url):
+    try:
+        import qrcode
+    except ImportError:
+        return None
+
+    qr = qrcode.QRCode(border=1)
+    qr.add_data(url)
+    qr.make(fit=True)
+    rows = []
+    for row in qr.get_matrix():
+        rows.append("".join("██" if cell else "  " for cell in row))
+    return "\n".join(rows)
+
+
+def print_console_banner(localhost_url, host_url):
+    qr = format_qr(host_url)
+    lines = [
+        "",
+        "============================================================",
+        " Aerial Robot Web Console",
+        "------------------------------------------------------------",
+        " Local browser : {}".format(localhost_url),
+        " Phone / LAN   : {}".format(host_url),
+    ]
+    if qr:
+        lines.extend([
+            "------------------------------------------------------------",
+            " Scan this QR code from a phone on the robot network:",
+            qr,
+        ])
+    else:
+        lines.extend([
+            "------------------------------------------------------------",
+            " QR code unavailable: install python3-qrcode.",
+        ])
+    lines.append("============================================================")
+    sys.stdout.write("\n".join(lines) + "\n")
+    sys.stdout.flush()
 
 
 def main():
@@ -94,11 +154,16 @@ def main():
     thread.daemon = True
     thread.start()
 
-    query = "?robot_ns={}&robot_type={}&rosbridge_port={}".format(robot_ns, robot_type, rosbridge_port)
+    query = "?" + urlencode({
+        "robot_ns": robot_ns,
+        "robot_type": robot_type,
+        "rosbridge_port": rosbridge_port,
+    })
     localhost_url = "http://localhost:{}{}".format(port, query)
     host_url = "http://{}:{}{}".format(get_host_label(host), port, query)
-    rospy.loginfo("Aerial Robot Web Console ready: %s", localhost_url)
-    rospy.loginfo("Aerial Robot Web Console LAN hint: %s", host_url)
+    print_console_banner(localhost_url, host_url)
+    rospy.loginfo("Aerial Robot Web Console local URL: %s", localhost_url)
+    rospy.loginfo("Aerial Robot Web Console LAN URL: %s", host_url)
 
     rospy.on_shutdown(httpd.shutdown)
     rospy.spin()
