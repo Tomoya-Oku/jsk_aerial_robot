@@ -9,13 +9,13 @@ or a laptop browser can inspect the ROS graph without RViz/rqt.
 Each robot `bringup.launch` includes this package by default and prints a URL similar to:
 
 ```text
-Aerial Robot Web Console ready: http://localhost:8080?robot_ns=hydrus&robot_type=hydrus&rosbridge_port=9090
+Aerial Robot Web Console ready: http://localhost:8080?robot_ns=dracomancer&robot_type=dracomancer&rosbridge_port=9090
 ```
 
 The console can also be launched directly:
 
 ```bash
-roslaunch aerial_robot_web web_console.launch robot_ns:=hydrus robot_type:=hydrus
+roslaunch aerial_robot_web web_console.launch robot_ns:=dracomancer robot_type:=dracomancer
 ```
 
 Useful arguments:
@@ -29,8 +29,10 @@ Useful arguments:
 - Live node/topic lists using `rosapi`, with case-insensitive filtering.
 - Per-node publications, subscriptions, and services.
 - Per-topic type, publishers, subscribers, and a throttled live message preview.
-- Touch-friendly URDF viewer that mirrors live `/joint_states`, reframes the camera once
-  meshes finish loading, and reports mesh load failures.
+- Dracomancer joint sliders generated from `robot_description` (mimic joints excluded) and
+  published as `sensor_msgs/JointState`, throttled, with sync-from-robot and reset-to-zero buttons.
+- Touch-friendly URDF viewer that mirrors live `/joint_states` as well as the sliders,
+  reframes the camera once meshes finish loading, and reports mesh load failures.
 - `package://` mesh resources are served by the console HTTP server under `/pkg/<package>/<path>`.
 - Automatic rosbridge reconnection every few seconds after a dropped or failed connection.
 

@@ -126,6 +126,7 @@ input[type="range"]:disabled { cursor: default; }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .card-head h2 { margin: 0; }
 .card-head button { min-height: 38px; padding: 8px 14px; }
+.button-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .boot-fallback {
   width: min(640px, 92%); margin: 18vh auto 0; padding: 26px; text-align: center;
   border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface);
