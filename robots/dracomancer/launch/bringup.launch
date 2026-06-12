@@ -17,6 +17,12 @@
 
   ##############  Model/RViz  ###########
   <arg name="robot_ns" value="dracomancer" />
+
+  ###########  Mobile Web Console  ###########
+  <arg name="launch_web_console" default="True" />
+  <arg name="web_console_port" default="8080" />
+  <arg name="web_console_rosbridge_port" default="9090" />
+  <arg name="web_console_launch_rosbridge" default="True" />
   <arg name="headless" default="True" />
   <arg name="launch_rviz" default="False" />
   <arg name="gui" default="False" />
@@ -81,5 +87,15 @@
       name="joint_state_publisher_gui"
       ns="$(arg robot_ns)">
   </node>
+
+
+  ###########  Mobile Web Console  ###########
+  <include file="$(find aerial_robot_web)/launch/web_console.launch" if="$(arg launch_web_console)">
+    <arg name="robot_ns" value="$(arg robot_ns)" />
+    <arg name="robot_type" value="dracomancer" />
+    <arg name="web_port" value="$(arg web_console_port)" />
+    <arg name="rosbridge_port" value="$(arg web_console_rosbridge_port)" />
+    <arg name="launch_rosbridge" value="$(arg web_console_launch_rosbridge)" />
+  </include>
 
 </launch>
