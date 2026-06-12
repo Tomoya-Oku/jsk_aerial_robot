@@ -79,8 +79,9 @@ If roslaunch reports that `rosbridge_server` or `rosbridge_websocket` cannot be 
 - Per-topic type, publishers, subscribers, and a throttled live message preview.
 - A publish box below the topic info that pre-fills a JSON template generated from the
   topic's message type (via `rosapi/message_details`) and publishes it through rosbridge.
-- Touch-friendly URDF viewer that mirrors live `/joint_states`, reframes the camera once
-  meshes finish loading, and reports mesh load failures.
+- Touch-friendly live robot model viewer (URDF + odometry) that mirrors live `/joint_states`,
+  follows the odometry pose topic, reframes the camera once meshes finish loading, and
+  reports mesh load failures.
 - `package://` mesh resources are served by the console HTTP server under `/pkg/<package>/<path>`.
 - Automatic rosbridge reconnection every few seconds after a dropped or failed connection.
 

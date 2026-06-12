@@ -538,7 +538,7 @@
       viewerApiRef.current?.setBasePose(basePose);
     }, [basePose, viewerApiRef]);
     return e('section', { className: 'card section' },
-      e('h2', null, 'URDF Viewer'),
+      e('h2', null, 'Live Robot Model (URDF + Odometry)'),
       e('p', { className: 'meta' }, `Touch-drag to orbit. The model follows ${poseTopic} and live ${jointTopic}. Last pose: ${poseStamp}.`),
       e('div', { className: 'viewer' },
         e('div', { className: 'viewer-host', ref: viewerRef }),
