@@ -2,6 +2,7 @@
 <launch>
   <arg name="robot_ns" default="" />
   <arg name="robot_type" default="generic" />
+  <arg name="pose_topic" default="" />
   <arg name="web_port" default="8080" />
   <arg name="rosbridge_port" default="9090" />
   <arg name="launch_rosbridge" default="true" />
@@ -22,5 +23,6 @@
     <param name="auto_install_qr_dependency" value="$(arg auto_install_qr_dependency)" />
     <param name="robot_ns" value="$(arg robot_ns)" />
     <param name="robot_type" value="$(arg robot_type)" />
+    <param name="pose_topic" value="$(arg pose_topic)" />
   </node>
 </launch>

@@ -106,6 +106,14 @@ def get_bool_param(name, default):
     return bool(value)
 
 
+def ns_join(ns, name):
+    clean_name = name[1:] if name.startswith("/") else name
+    if not ns:
+        return "/" + clean_name
+    clean_ns = ns if ns.startswith("/") else "/" + ns
+    return clean_ns.rstrip("/") + "/" + clean_name
+
+
 def import_qrcode(auto_install):
     try:
         import qrcode
@@ -193,11 +201,13 @@ def main():
     auto_install_qr = get_bool_param("~auto_install_qr_dependency", True)
     robot_ns = rospy.get_param("~robot_ns", "")
     robot_type = rospy.get_param("~robot_type", "generic")
+    pose_topic = rospy.get_param("~pose_topic", "") or ns_join(robot_ns, "ground_truth")
     package_path = ROSPACK.get_path("aerial_robot_web")
     web_root = rospy.get_param("~web_root", os.path.join(package_path, "www"))
 
     rospy.loginfo("[aerial_robot_web] Starting web console")
     rospy.loginfo("[aerial_robot_web] robot_type=%s robot_ns=%s", robot_type, robot_ns or "/")
+    rospy.loginfo("[aerial_robot_web] odometry pose topic=%s", pose_topic)
     rospy.loginfo("[aerial_robot_web] HTTP port=%s rosbridge_port=%s", port, rosbridge_port)
 
     handler = partial(ConsoleHandler, directory=web_root)
@@ -211,6 +221,7 @@ def main():
         "robot_ns": robot_ns,
         "robot_type": robot_type,
         "rosbridge_port": rosbridge_port,
+        "pose_topic": pose_topic,
     })
     localhost_url = "http://localhost:{}{}".format(port, query)
     host_url = "http://{}:{}{}".format(get_host_label(host), port, query)

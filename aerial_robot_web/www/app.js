@@ -15,6 +15,7 @@
   const params = new URLSearchParams(window.location.search);
   const defaultBridgePort = params.get('rosbridge_port') || '9090';
   const initialRobotNs = normalizeNs(params.get('robot_ns') || '');
+  const initialPoseTopic = params.get('pose_topic') || nsJoin(initialRobotNs, 'ground_truth');
   const robotType = params.get('robot_type') || 'generic';
   const RECONNECT_DELAY_MS = 3000;
   const PREVIEW_THROTTLE_MS = 500;
@@ -27,6 +28,12 @@
 
   function serviceName(name) {
     return name.startsWith('/') ? name : `/${name}`;
+  }
+
+  function nsJoin(ns, name) {
+    const cleanName = name.startsWith('/') ? name.slice(1) : name;
+    if (!ns) return `/${cleanName}`;
+    return `${normalizeNs(ns)}/${cleanName}`;
   }
 
   function describeError(error, fallback) {
@@ -144,14 +151,23 @@
   function App() {
     const [bridgeUrl, setBridgeUrl] = React.useState(`ws://${window.location.hostname}:${defaultBridgePort}`);
     const [robotNs, setRobotNs] = React.useState(initialRobotNs);
+    const [poseTopic, setPoseTopic] = React.useState(initialPoseTopic);
     const [filter, setFilter] = React.useState('');
     const [graph, setGraph] = React.useState({ nodes: [], topics: [] });
     const [selected, setSelected] = React.useState(null);
     const [details, setDetails] = React.useState(null);
     const [preview, setPreview] = React.useState(null);
     const [urdf, setUrdf] = React.useState('');
+    const [basePose, setBasePose] = React.useState(null);
+    const [poseStamp, setPoseStamp] = React.useState('never');
     const [lastUpdate, setLastUpdate] = React.useState('never');
     const { connected, error, ros } = useRosConnection(bridgeUrl);
+
+    const updateRobotNs = React.useCallback((value) => {
+      const nextNs = normalizeNs(value);
+      setRobotNs(nextNs);
+      setPoseTopic(nsJoin(nextNs, 'ground_truth'));
+    }, []);
 
     const refresh = React.useCallback(async () => {
       if (!ros || !connected) return;
@@ -244,6 +260,34 @@
       return () => topic.unsubscribe();
     }, [ros, connected, robotNs]);
 
+    // Move the whole URDF model from odometry so the browser view can be used
+    // like a lightweight Gazebo pose viewer.
+    React.useEffect(() => {
+      setBasePose(null);
+      setPoseStamp('never');
+      if (!ros || !connected || !poseTopic) return undefined;
+      if (!window.ROSLIB) return undefined;
+      const topic = new window.ROSLIB.Topic({
+        ros,
+        name: poseTopic,
+        messageType: 'nav_msgs/Odometry',
+        throttle_rate: 50,
+        queue_length: 1,
+      });
+      topic.subscribe((msg) => {
+        const pose = msg.pose?.pose;
+        if (!pose) return;
+        setBasePose(pose);
+        const stamp = msg.header?.stamp;
+        if (stamp && Number.isFinite(stamp.secs)) {
+          setPoseStamp(`${stamp.secs}.${String(stamp.nsecs || 0).padStart(9, '0')}`);
+        } else {
+          setPoseStamp(new Date().toLocaleTimeString());
+        }
+      });
+      return () => topic.unsubscribe();
+    }, [ros, connected, poseTopic]);
+
     const lowerFilter = filter.toLowerCase();
     const filteredNodes = graph.nodes.filter((name) => name.toLowerCase().includes(lowerFilter));
     const filteredTopics = graph.topics.filter((name) => name.toLowerCase().includes(lowerFilter));
@@ -254,6 +298,7 @@
         e('div', { className: 'status-row' },
           e(InfoPill, { label: 'ROS Bridge', value: connected ? 'connected' : (error ? `${error} (retrying...)` : 'connecting...'), tone: connected ? 'ok' : error ? 'bad' : 'warn' }),
           e(InfoPill, { label: 'Robot', value: `${robotType}${robotNs ? ` @ ${robotNs}` : ''}` }),
+          e(InfoPill, { label: 'Pose', value: formatPose(basePose), tone: basePose ? 'ok' : 'warn' }),
           e(InfoPill, { label: 'Nodes / Topics', value: `${graph.nodes.length} / ${graph.topics.length}` }),
           e(InfoPill, { label: 'Last update', value: lastUpdate }),
         ),
@@ -266,7 +311,11 @@
           ),
           e('label', { className: 'field' },
             e('span', { className: 'label' }, 'Namespace'),
-            e('input', { value: robotNs, onChange: (ev) => setRobotNs(normalizeNs(ev.target.value)), placeholder: '/robot_ns' }),
+            e('input', { value: robotNs, onChange: (ev) => updateRobotNs(ev.target.value), placeholder: '/robot_ns' }),
+          ),
+          e('label', { className: 'field' },
+            e('span', { className: 'label' }, 'Odometry Topic'),
+            e('input', { value: poseTopic, onChange: (ev) => setPoseTopic(serviceName(ev.target.value)), placeholder: '/robot/ground_truth' }),
           ),
           e('label', { className: 'field' },
             e('span', { className: 'label' }, 'Filter'),
@@ -280,7 +329,7 @@
         e(GraphList, { title: 'Topics', items: filteredTopics, kind: 'topic', selected, setSelected, connected, loading: lastUpdate === 'never' }),
         e(DetailsCard, { selected, details, preview }),
       ),
-      e(UrdfPanel, { urdf, viewerApiRef }),
+      e(UrdfPanel, { urdf, viewerApiRef, basePose, poseTopic, poseStamp, jointTopic: nsJoin(robotNs, 'joint_states') }),
     );
   }
 
@@ -321,6 +370,17 @@
     return text;
   }
 
+  function formatPose(pose) {
+    if (!pose) return 'waiting...';
+    const p = pose.position || {};
+    return `x ${formatNumber(p.x)} y ${formatNumber(p.y)} z ${formatNumber(p.z)}`;
+  }
+
+  function formatNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number.toFixed(2) : '0.00';
+  }
+
   function DetailsCard({ selected, details, preview }) {
     const list = (label, values) => e('div', { className: 'section' }, e('span', { className: 'label' }, label), (values || []).map((value) => e('div', { className: 'meta', key: value }, value)));
     return e('article', { className: 'card' },
@@ -343,7 +403,7 @@
     );
   }
 
-  function UrdfPanel({ urdf, viewerApiRef }) {
+  function UrdfPanel({ urdf, viewerApiRef, basePose, poseTopic, poseStamp, jointTopic }) {
     const viewerRef = React.useRef(null);
     const [message, setMessage] = React.useState('Waiting for robot_description...');
     const [meshNotice, setMeshNotice] = React.useState('');
@@ -364,6 +424,7 @@
           return;
         }
         viewerApiRef.current = viewer;
+        if (basePose) viewer.setBasePose(basePose);
         setMessage('');
       }).catch((err) => setMessage(`3D viewer unavailable: ${err.message || err}`));
       return () => {
@@ -372,9 +433,12 @@
         viewerApiRef.current = null;
       };
     }, [urdf, viewerApiRef]);
+    React.useEffect(() => {
+      viewerApiRef.current?.setBasePose(basePose);
+    }, [basePose, viewerApiRef]);
     return e('section', { className: 'card section' },
       e('h2', null, 'URDF Viewer'),
-      e('p', { className: 'meta' }, 'Touch-drag to orbit. The model follows live /joint_states.'),
+      e('p', { className: 'meta' }, `Touch-drag to orbit. The model follows ${poseTopic} and live ${jointTopic}. Last pose: ${poseStamp}.`),
       e('div', { className: 'viewer' },
         e('div', { className: 'viewer-host', ref: viewerRef }),
         message && e('div', { className: 'viewer-message' }, e('div', { className: 'empty' }, message)),

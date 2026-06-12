@@ -42,6 +42,9 @@ Useful arguments:
 
 - `web_port` (default: `8080`) changes the HTTP port.
 - `rosbridge_port` (default: `9090`) changes the websocket port.
+- `pose_topic` (default: `/<robot_ns>/ground_truth`) sets the `nav_msgs/Odometry` topic used
+  to move the whole URDF model in the viewer. For estimator output, use a topic such as
+  `/<robot_ns>/uav/baselink/odom`.
 - `launch_rosbridge` (default: `true`) can be disabled when another rosbridge is already running.
 - `rosbridge_output` (default: `log`) changes rosbridge/rosapi output; set it to `screen`
   when debugging rosbridge itself.
