@@ -99,6 +99,15 @@ button:disabled { opacity: 0.4; cursor: default; }
 .cards .card h2 { flex: none; }
 .list { display: grid; gap: 8px; align-content: start; flex: 1; min-height: 0; overflow: auto; padding-right: 2px; }
 .details-body { flex: 1; min-height: 0; overflow: auto; padding-right: 2px; }
+.list-filter {
+  flex: none; width: 100%; margin-bottom: 10px; padding: 9px 12px;
+  border-radius: var(--radius-control); border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--text); font-size: 0.86rem;
+  transition: border-color 180ms ease-out, box-shadow 180ms ease-out;
+}
+.list-filter:focus {
+  outline: none; border-color: var(--ink); box-shadow: 0 0 0 2px rgba(17, 17, 17, 0.12);
+}
 /* One scrollbar look for every scrollable panel. */
 .list, .details-body, .preview {
   scrollbar-width: thin;

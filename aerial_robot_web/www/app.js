@@ -152,7 +152,6 @@
     const [bridgeUrl, setBridgeUrl] = React.useState(`ws://${window.location.hostname}:${defaultBridgePort}`);
     const [robotNs, setRobotNs] = React.useState(initialRobotNs);
     const [poseTopic, setPoseTopic] = React.useState(initialPoseTopic);
-    const [filter, setFilter] = React.useState('');
     const [graph, setGraph] = React.useState({ nodes: [], topics: [] });
     const [selected, setSelected] = React.useState(null);
     const [details, setDetails] = React.useState(null);
@@ -288,10 +287,6 @@
       return () => topic.unsubscribe();
     }, [ros, connected, poseTopic]);
 
-    const lowerFilter = filter.toLowerCase();
-    const filteredNodes = graph.nodes.filter((name) => name.toLowerCase().includes(lowerFilter));
-    const filteredTopics = graph.topics.filter((name) => name.toLowerCase().includes(lowerFilter));
-
     return e('main', { className: 'app' },
       e('header', { className: 'app-header' },
         e('h1', null, 'DRAGON Lab Aerial Robot Web Console'),
@@ -317,16 +312,12 @@
             e('span', { className: 'label' }, 'Odometry Topic'),
             e('input', { value: poseTopic, onChange: (ev) => setPoseTopic(serviceName(ev.target.value)), placeholder: '/robot/ground_truth' }),
           ),
-          e('label', { className: 'field' },
-            e('span', { className: 'label' }, 'Filter'),
-            e('input', { value: filter, onChange: (ev) => setFilter(ev.target.value), placeholder: 'Filter nodes/topics...' }),
-          ),
         ),
         e('button', { onClick: refresh, disabled: !connected }, 'Refresh'),
       ),
       e('section', { className: 'cards' },
-        e(GraphList, { title: 'Nodes', items: filteredNodes, kind: 'node', selected, setSelected, connected, loading: lastUpdate === 'never' }),
-        e(GraphList, { title: 'Topics', items: filteredTopics, kind: 'topic', selected, setSelected, connected, loading: lastUpdate === 'never' }),
+        e(GraphList, { title: 'Nodes', items: graph.nodes, kind: 'node', selected, setSelected, connected, loading: lastUpdate === 'never' }),
+        e(GraphList, { title: 'Topics', items: graph.topics, kind: 'topic', selected, setSelected, connected, loading: lastUpdate === 'never' }),
         e(DetailsCard, { selected, details, preview, ros, connected }),
       ),
       e(UrdfPanel, { urdf, viewerApiRef, basePose, poseTopic, poseStamp, jointTopic: nsJoin(robotNs, 'joint_states') }),
@@ -338,9 +329,12 @@
   }
 
   function GraphList({ title, items, kind, selected, setSelected, connected, loading }) {
+    const [filter, setFilter] = React.useState('');
+    const lowerFilter = filter.trim().toLowerCase();
+    const visible = lowerFilter ? items.filter((name) => name.toLowerCase().includes(lowerFilter)) : items;
     let body;
-    if (items.length) {
-      body = items.map((name) => e('button', {
+    if (visible.length) {
+      body = visible.map((name) => e('button', {
         key: `${kind}:${name}`,
         className: `item ${selected?.kind === kind && selected?.name === name ? 'active' : ''}`,
         onClick: () => setSelected({ kind, name }),
@@ -354,7 +348,13 @@
       body = e('div', { className: 'empty' }, 'No matching entries');
     }
     return e('article', { className: 'card' },
-      e('h2', null, `${title} (${items.length})`),
+      e('h2', null, `${title} (${lowerFilter ? `${visible.length}/${items.length}` : items.length})`),
+      e('input', {
+        className: 'list-filter',
+        value: filter,
+        onChange: (ev) => setFilter(ev.target.value),
+        placeholder: `Filter ${title.toLowerCase()}...`,
+      }),
       e('div', { className: 'list' }, body),
     );
   }
