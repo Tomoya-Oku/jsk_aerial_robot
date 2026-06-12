@@ -99,6 +99,23 @@ button:disabled { opacity: 0.4; cursor: default; }
 .cards .card h2 { flex: none; }
 .list { display: grid; gap: 8px; align-content: start; flex: 1; min-height: 0; overflow: auto; padding-right: 2px; }
 .details-body { flex: 1; min-height: 0; overflow: auto; padding-right: 2px; }
+/* One scrollbar look for every scrollable panel. */
+.list, .details-body, .preview {
+  scrollbar-width: thin;
+  scrollbar-color: #c2c2c2 transparent;
+}
+.list::-webkit-scrollbar, .details-body::-webkit-scrollbar, .preview::-webkit-scrollbar {
+  width: 8px; height: 8px;
+}
+.list::-webkit-scrollbar-track, .details-body::-webkit-scrollbar-track, .preview::-webkit-scrollbar-track {
+  background: transparent;
+}
+.list::-webkit-scrollbar-thumb, .details-body::-webkit-scrollbar-thumb, .preview::-webkit-scrollbar-thumb {
+  background: #c2c2c2; border-radius: 999px;
+}
+.list::-webkit-scrollbar-thumb:hover, .details-body::-webkit-scrollbar-thumb:hover, .preview::-webkit-scrollbar-thumb:hover {
+  background: #9a9a9a;
+}
 .item {
   padding: 12px; border-radius: var(--radius-control); background: var(--surface-2); border: 1px solid transparent;
   color: var(--text); text-align: left; width: 100%; overflow-wrap: anywhere; min-height: 44px;
