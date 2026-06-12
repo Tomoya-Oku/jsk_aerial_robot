@@ -121,34 +121,40 @@ def import_qrcode(auto_install):
     except ImportError:
         pass
 
-    install_cmd = ["sudo", "-n", "apt-get", "install", "-y", "python3-qrcode"]
     if not auto_install:
         return None
-    rospy.logwarn("[aerial_robot_web] python3-qrcode is missing; trying: %s", " ".join(install_cmd))
-    try:
-        result = subprocess.run(
-            install_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=120,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        rospy.logwarn("[aerial_robot_web] QR dependency auto-install failed: %s", error)
-        return None
-    if result.returncode != 0:
-        rospy.logwarn("[aerial_robot_web] QR dependency auto-install failed with code %s", result.returncode)
-        if result.stdout:
-            rospy.logdebug("[aerial_robot_web] apt-get output:\n%s", result.stdout)
-        return None
-    try:
-        import qrcode
-        rospy.loginfo("[aerial_robot_web] Installed python3-qrcode automatically.")
-        return qrcode
-    except ImportError:
-        rospy.logwarn("[aerial_robot_web] python3-qrcode still cannot be imported after installation.")
-        return None
+
+    install_commands = [
+        ("apt", ["sudo", "-n", "apt-get", "install", "-y", "python3-qrcode"]),
+        ("pip", [sys.executable, "-m", "pip", "install", "--user", "qrcode"]),
+    ]
+    rospy.logwarn("[aerial_robot_web] QR module is missing; apt package is python3-qrcode, pip package is qrcode.")
+    for label, install_cmd in install_commands:
+        rospy.logwarn("[aerial_robot_web] Trying QR dependency install via %s: %s", label, " ".join(install_cmd))
+        try:
+            result = subprocess.run(
+                install_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            rospy.logwarn("[aerial_robot_web] QR dependency install via %s failed: %s", label, error)
+            continue
+        if result.returncode != 0:
+            rospy.logwarn("[aerial_robot_web] QR dependency install via %s failed with code %s", label, result.returncode)
+            if result.stdout:
+                rospy.logdebug("[aerial_robot_web] %s output:\n%s", label, result.stdout)
+            continue
+        try:
+            import qrcode
+            rospy.loginfo("[aerial_robot_web] Installed QR dependency automatically via %s.", label)
+            return qrcode
+        except ImportError:
+            rospy.logwarn("[aerial_robot_web] QR module still cannot be imported after %s install.", label)
+    return None
 
 
 def format_qr(url, auto_install):
@@ -186,7 +192,8 @@ def print_console_banner(localhost_url, host_url, web_root, bind_host, auto_inst
         lines.extend([
             "------------------------------------------------------------",
             " QR code unavailable.",
-            " Install manually: sudo apt install python3-qrcode",
+            " Install manually with apt: sudo apt install python3-qrcode",
+            " Or with pip: python3 -m pip install --user qrcode",
         ])
     lines.append("============================================================")
     sys.stdout.write("\n".join(lines) + "\n")
