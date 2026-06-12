@@ -385,7 +385,8 @@
     const list = (label, values) => e('div', { className: 'section' }, e('span', { className: 'label' }, label), (values || []).map((value) => e('div', { className: 'meta', key: value }, value)));
     return e('article', { className: 'card' },
       e('h2', null, 'Info / Pub-Sub'),
-      selected ? e('div', null,
+      e('div', { className: 'details-body' },
+        selected ? e('div', null,
         e('div', { className: 'topic-row' }, e('strong', null, selected.name), e('span', { className: 'badge' }, selected.kind)),
         details?.error && e('p', { className: 'value bad' }, details.error),
         !details && !preview && e('div', { className: 'empty' }, 'Loading details...'),
@@ -400,7 +401,8 @@
           ),
           e(PublishBox, { ros, connected, topic: selected.name, type: details.type }),
         ),
-      ) : e('div', { className: 'empty' }, 'Select a node or topic'),
+        ) : e('div', { className: 'empty' }, 'Select a node or topic'),
+      ),
     );
   }
 

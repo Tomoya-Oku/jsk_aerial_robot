@@ -88,13 +88,17 @@ button:active:not(:disabled) { transform: translateY(1px); }
 button.secondary { background: var(--surface); color: var(--ink); border: 1px solid var(--ink); }
 button.secondary:hover:not(:disabled) { background: var(--surface-2); }
 button:disabled { opacity: 0.4; cursor: default; }
-.cards { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+.cards { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); align-items: start; }
 .card { padding: 15px; min-width: 0; }
 .card h2, .card h3 {
   margin: 0 0 12px; letter-spacing: -0.02em; font-size: 1.05rem;
   padding-bottom: 8px; border-bottom: 2px solid var(--ink);
 }
-.list { display: grid; gap: 8px; max-height: 460px; overflow: auto; padding-right: 2px; }
+/* Nodes / Topics / Info share one fixed card height; content scrolls inside. */
+.cards .card { height: 440px; display: flex; flex-direction: column; }
+.cards .card h2 { flex: none; }
+.list { display: grid; gap: 8px; align-content: start; flex: 1; min-height: 0; overflow: auto; padding-right: 2px; }
+.details-body { flex: 1; min-height: 0; overflow: auto; padding-right: 2px; }
 .item {
   padding: 12px; border-radius: var(--radius-control); background: var(--surface-2); border: 1px solid transparent;
   color: var(--text); text-align: left; width: 100%; overflow-wrap: anywhere; min-height: 44px;
@@ -169,7 +173,7 @@ input[type="range"]:disabled { cursor: default; }
   .app { padding: 12px max(10px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); }
   .toolbar { grid-template-columns: 1fr; }
   .cards { grid-template-columns: 1fr; }
-  .list { max-height: 330px; }
+  .cards .card { height: 380px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
