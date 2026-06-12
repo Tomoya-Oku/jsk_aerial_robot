@@ -20,7 +20,8 @@
   <arg name="robot_ns" value="quadrotor$(arg robot_id)" />
 
   ###########  Mobile Web Console  ###########
-  <arg name="launch_web_console" default="False" />
+  <arg name="web" default="False" />
+  <arg name="launch_web_console" default="$(arg web)" />
   <arg name="web_console_port" default="8080" />
   <arg name="web_console_rosbridge_port" default="9090" />
   <arg name="web_console_launch_rosbridge" default="True" />

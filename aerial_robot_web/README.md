@@ -18,8 +18,10 @@ sudo apt install ros-one-rosbridge-server python3-rospkg python3-qrcode
 Enable the console from any robot bringup (it is **disabled by default**):
 
 ```bash
-roslaunch dragon bringup.launch launch_web_console:=true
+roslaunch dragon bringup.launch web:=true
 ```
+
+The longer `launch_web_console:=true` argument is still accepted for compatibility.
 
 or launch it standalone:
 
