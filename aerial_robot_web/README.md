@@ -68,6 +68,7 @@ Useful arguments:
   for a sudo password; if automatic installation is not allowed, install it manually with apt or pip.
 - `banner_delay` (default: `8.0`) is how many seconds the URL/QR banner is delayed so it appears
   near the end of the roslaunch startup output.
+- `rosbag_dir` (default: `~/rosbags`) is where browser-triggered `rosbag record` files are saved.
 
 If roslaunch reports that `rosbridge_server` or `rosbridge_websocket` cannot be found, install
 `ros-one-rosbridge-server` and source the ROS environment again before relaunching.
@@ -83,6 +84,10 @@ If roslaunch reports that `rosbridge_server` or `rosbridge_websocket` cannot be 
 - Touch-friendly live robot model viewer (URDF + odometry) that mirrors live `/joint_states`,
   follows the odometry pose topic, reframes the camera once meshes finish loading, and
   reports mesh load failures.
+- Rosbag recording from the browser: a record button above the flight controls opens a
+  topic-selection popup, then the web server node runs `rosbag record` (bags are saved to
+  `~rosbag_dir`, default `~/rosbags`). Control flows over the
+  `/aerial_robot_web/rosbag/{start,stop,status}` topics.
 - Flight control buttons beside the model viewer that mirror
   `aerial_robot_base/scripts/keyboard_command.py`: arm/takeoff/land/force-landing/halt via
   `<robot_ns>/teleop_command/*` and velocity nudges via `<robot_ns>/uav/nav` (`FlightNav`).

@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 """Serve the aerial robot web console as a ROS node."""
 
+import datetime
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+import json
 import os
 import posixpath
+import re
+import signal
 import subprocess
 import socket
 import sys
 import threading
+import time
 from urllib.parse import urlencode, unquote, urlparse
 
 import rospy
 import rospkg
+from std_msgs.msg import Empty as EmptyMsg, String as StringMsg
 
 
 ROSPACK = rospkg.RosPack()
@@ -211,6 +217,107 @@ def print_console_banner(localhost_url, host_url, web_root, bind_host, auto_inst
     sys.stdout.flush()
 
 
+# Only plain ROS graph names may reach the rosbag command line; this also
+# rejects anything that could be parsed as an extra rosbag option.
+TOPIC_NAME_RE = re.compile(r"^/[A-Za-z0-9_][A-Za-z0-9_/]*$")
+
+
+class RosbagRecorder:
+    """Drive `rosbag record` from the web console over plain topics.
+
+    The browser publishes std_msgs/String (JSON {"topics": [...]}) on
+    /aerial_robot_web/rosbag/start and std_msgs/Empty on .../stop; the current
+    state is mirrored on the latched .../status topic as JSON.
+    """
+
+    def __init__(self, bag_dir):
+        self.bag_dir = bag_dir
+        self.proc = None
+        self.bag_path = None
+        self.topics = []
+        self.error = ""
+        self.lock = threading.Lock()
+        self.status_pub = rospy.Publisher(
+            "/aerial_robot_web/rosbag/status", StringMsg, queue_size=1, latch=True)
+        rospy.Subscriber("/aerial_robot_web/rosbag/start", StringMsg, self.handle_start)
+        rospy.Subscriber("/aerial_robot_web/rosbag/stop", EmptyMsg, self.handle_stop)
+        self.publish_status()
+        monitor = threading.Thread(target=self.watch_process)
+        monitor.daemon = True
+        monitor.start()
+
+    def recording(self):
+        return self.proc is not None and self.proc.poll() is None
+
+    def publish_status(self):
+        payload = {
+            "recording": self.recording(),
+            "bag_path": self.bag_path or "",
+            "topics": self.topics,
+            "error": self.error,
+        }
+        self.status_pub.publish(StringMsg(data=json.dumps(payload)))
+
+    def watch_process(self):
+        """Publish the final status once rosbag exits (stop or crash)."""
+        while not rospy.is_shutdown():
+            with self.lock:
+                if self.proc is not None and self.proc.poll() is not None:
+                    if self.proc.returncode not in (0, -signal.SIGINT):
+                        self.error = "rosbag exited with code {}".format(self.proc.returncode)
+                        rospy.logwarn("[aerial_robot_web] %s", self.error)
+                    self.proc = None
+                    self.publish_status()
+            time.sleep(0.5)
+
+    def handle_start(self, msg):
+        try:
+            request = json.loads(msg.data)
+            requested = request.get("topics", [])
+        except (ValueError, AttributeError):
+            requested = msg.data.split()
+        topics = [t for t in requested if isinstance(t, str) and TOPIC_NAME_RE.match(t)]
+        with self.lock:
+            self.error = ""
+            if self.recording():
+                self.error = "already recording"
+            elif not topics:
+                self.error = "no valid topics requested"
+            else:
+                try:
+                    os.makedirs(self.bag_dir, exist_ok=True)
+                    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    self.bag_path = os.path.join(self.bag_dir, "web_console_{}.bag".format(stamp))
+                    self.proc = subprocess.Popen(["rosbag", "record", "-O", self.bag_path] + topics)
+                    self.topics = topics
+                    rospy.loginfo("[aerial_robot_web] rosbag record started: %s (%d topics)",
+                                  self.bag_path, len(topics))
+                except OSError as error:
+                    self.error = "failed to start rosbag: {}".format(error)
+            if self.error:
+                rospy.logwarn("[aerial_robot_web] rosbag start rejected: %s", self.error)
+            self.publish_status()
+
+    def handle_stop(self, _msg):
+        with self.lock:
+            if not self.recording():
+                return
+            rospy.loginfo("[aerial_robot_web] stopping rosbag record (%s)", self.bag_path)
+            # SIGINT lets rosbag close the bag file cleanly; watch_process
+            # publishes the final status once it exits.
+            self.proc.send_signal(signal.SIGINT)
+
+    def shutdown(self):
+        with self.lock:
+            if not self.recording():
+                return
+            self.proc.send_signal(signal.SIGINT)
+            try:
+                self.proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+
+
 def main():
     rospy.init_node("aerial_robot_web_server")
     host = rospy.get_param("~host", "")
@@ -223,11 +330,14 @@ def main():
     pose_topic = rospy.get_param("~pose_topic", "") or ns_join(robot_ns, "ground_truth")
     package_path = ROSPACK.get_path("aerial_robot_web")
     web_root = rospy.get_param("~web_root", os.path.join(package_path, "www"))
+    rosbag_dir = rospy.get_param("~rosbag_dir", os.path.expanduser("~/rosbags"))
 
     rospy.loginfo("[aerial_robot_web] Starting web console")
     rospy.loginfo("[aerial_robot_web] robot_type=%s robot_ns=%s", robot_type, robot_ns or "/")
     rospy.loginfo("[aerial_robot_web] odometry pose topic=%s", pose_topic)
     rospy.loginfo("[aerial_robot_web] HTTP port=%s rosbridge_port=%s", port, rosbridge_port)
+
+    recorder = RosbagRecorder(rosbag_dir)
 
     handler = partial(ConsoleHandler, directory=web_root)
     bind_host = "" if host in ("0.0.0.0", "::") else host
@@ -261,6 +371,7 @@ def main():
 
     def shutdown():
         banner_timer.cancel()
+        recorder.shutdown()
         httpd.shutdown()
 
     rospy.on_shutdown(shutdown)

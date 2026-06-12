@@ -9,6 +9,7 @@
   <arg name="rosbridge_output" default="log" />
   <arg name="auto_install_qr_dependency" default="true" />
   <arg name="banner_delay" default="8.0" />
+  <arg name="rosbag_dir" default="$(env HOME)/rosbags" />
 
   <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" if="$(arg launch_rosbridge)">
     <arg name="port" value="$(arg rosbridge_port)" />
@@ -23,6 +24,7 @@
     <param name="rosbridge_port" value="$(arg rosbridge_port)" />
     <param name="auto_install_qr_dependency" value="$(arg auto_install_qr_dependency)" />
     <param name="banner_delay" value="$(arg banner_delay)" />
+    <param name="rosbag_dir" value="$(arg rosbag_dir)" />
     <param name="robot_ns" value="$(arg robot_ns)" />
     <param name="robot_type" value="$(arg robot_type)" />
     <param name="pose_topic" value="$(arg pose_topic)" />
