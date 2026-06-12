@@ -203,6 +203,17 @@ input[type="range"]:disabled { cursor: default; }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .card-head h2 { margin: 0; }
 .card-head button { min-height: 38px; padding: 8px 14px; }
+.list-head {
+  flex: none; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid var(--ink);
+}
+.list-head h2 { border-bottom: 0; padding-bottom: 0; }
+.toggle-btn { min-width: 44px; font-family: var(--font-data); }
+.collapsed-body {
+  flex: 1; min-height: 0; display: grid; place-items: center;
+  background: transparent; color: var(--muted); font-weight: 400; font-size: 0.86rem;
+  border: 1px dashed #c8c8c8; border-radius: var(--radius-card);
+}
+.collapsed-body:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 .boot-fallback {
   width: min(640px, 92%); margin: 18vh auto 0; padding: 26px; text-align: center;
   border: 1px solid var(--line-strong); border-radius: var(--radius-card); background: var(--surface);

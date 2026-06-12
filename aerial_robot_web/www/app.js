@@ -334,6 +334,7 @@
 
   function GraphList({ title, items, kind, selected, setSelected, connected, loading }) {
     const [filter, setFilter] = React.useState('');
+    const [collapsed, setCollapsed] = React.useState(false);
     const lowerFilter = filter.trim().toLowerCase();
     const visible = lowerFilter ? items.filter((name) => name.toLowerCase().includes(lowerFilter)) : items;
     let body;
@@ -352,14 +353,29 @@
       body = e('div', { className: 'empty' }, 'No matching entries');
     }
     return e('article', { className: 'card' },
-      e('h2', null, `${title} (${lowerFilter ? `${visible.length}/${items.length}` : items.length})`),
-      e('input', {
-        className: 'list-filter',
-        value: filter,
-        onChange: (ev) => setFilter(ev.target.value),
-        placeholder: `Filter ${title.toLowerCase()}...`,
-      }),
-      e('div', { className: 'list' }, body),
+      e('div', { className: 'card-head list-head' },
+        e('h2', null, `${title} (${lowerFilter ? `${visible.length}/${items.length}` : items.length})`),
+        e('button', {
+          className: 'secondary toggle-btn',
+          onClick: () => setCollapsed((value) => !value),
+          'aria-expanded': !collapsed,
+          'aria-label': collapsed ? `Expand ${title.toLowerCase()} list` : `Collapse ${title.toLowerCase()} list`,
+        }, collapsed ? '▸' : '▾'),
+      ),
+      collapsed
+        // The card keeps its fixed height when collapsed so the Nodes /
+        // Topics / Info cards always stay the same size.
+        ? e('button', { className: 'collapsed-body', onClick: () => setCollapsed(false) },
+          `${items.length} ${title.toLowerCase()} hidden — tap to expand`)
+        : e(React.Fragment, null,
+          e('input', {
+            className: 'list-filter',
+            value: filter,
+            onChange: (ev) => setFilter(ev.target.value),
+            placeholder: `Filter ${title.toLowerCase()}...`,
+          }),
+          e('div', { className: 'list' }, body),
+        ),
     );
   }
 
