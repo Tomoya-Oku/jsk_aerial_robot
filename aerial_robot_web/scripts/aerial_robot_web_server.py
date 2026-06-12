@@ -225,9 +225,10 @@ TOPIC_NAME_RE = re.compile(r"^/[A-Za-z0-9_][A-Za-z0-9_/]*$")
 class RosbagRecorder:
     """Drive `rosbag record` from the web console over plain topics.
 
-    The browser publishes std_msgs/String (JSON {"topics": [...]}) on
-    /aerial_robot_web/rosbag/start and std_msgs/Empty on .../stop; the current
-    state is mirrored on the latched .../status topic as JSON.
+    The browser publishes std_msgs/String on /aerial_robot_web/rosbag/start
+    with JSON {"all": bool, "topics": [...], "bag_dir": "..."} and
+    std_msgs/Empty on .../stop; the current state is mirrored on the latched
+    .../status topic as JSON.
     """
 
     def __init__(self, bag_dir):
@@ -235,6 +236,7 @@ class RosbagRecorder:
         self.proc = None
         self.bag_path = None
         self.topics = []
+        self.record_all = False
         self.error = ""
         self.lock = threading.Lock()
         self.status_pub = rospy.Publisher(
@@ -254,6 +256,7 @@ class RosbagRecorder:
             "recording": self.recording(),
             "bag_path": self.bag_path or "",
             "topics": self.topics,
+            "all": self.record_all,
             "error": self.error,
         }
         self.status_pub.publish(StringMsg(data=json.dumps(payload)))
@@ -273,25 +276,35 @@ class RosbagRecorder:
     def handle_start(self, msg):
         try:
             request = json.loads(msg.data)
-            requested = request.get("topics", [])
-        except (ValueError, AttributeError):
-            requested = msg.data.split()
+        except ValueError:
+            request = {"topics": msg.data.split()}
+        if not isinstance(request, dict):
+            request = {}
+        record_all = bool(request.get("all"))
+        requested = request.get("topics", [])
         topics = [t for t in requested if isinstance(t, str) and TOPIC_NAME_RE.match(t)]
+        bag_dir = request.get("bag_dir") or ""
+        bag_dir = os.path.expanduser(bag_dir) if isinstance(bag_dir, str) else ""
         with self.lock:
             self.error = ""
             if self.recording():
                 self.error = "already recording"
-            elif not topics:
+            elif not record_all and not topics:
                 self.error = "no valid topics requested"
+            elif bag_dir and not os.path.isabs(bag_dir):
+                self.error = "bag folder must be an absolute path"
             else:
+                target_dir = bag_dir or self.bag_dir
                 try:
-                    os.makedirs(self.bag_dir, exist_ok=True)
+                    os.makedirs(target_dir, exist_ok=True)
                     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                    self.bag_path = os.path.join(self.bag_dir, "web_console_{}.bag".format(stamp))
-                    self.proc = subprocess.Popen(["rosbag", "record", "-O", self.bag_path] + topics)
-                    self.topics = topics
-                    rospy.loginfo("[aerial_robot_web] rosbag record started: %s (%d topics)",
-                                  self.bag_path, len(topics))
+                    self.bag_path = os.path.join(target_dir, "web_console_{}.bag".format(stamp))
+                    args = ["-a"] if record_all else topics
+                    self.proc = subprocess.Popen(["rosbag", "record", "-O", self.bag_path] + args)
+                    self.topics = [] if record_all else topics
+                    self.record_all = record_all
+                    rospy.loginfo("[aerial_robot_web] rosbag record started: %s (%s)",
+                                  self.bag_path, "all topics" if record_all else "{} topics".format(len(topics)))
                 except OSError as error:
                     self.error = "failed to start rosbag: {}".format(error)
             if self.error:

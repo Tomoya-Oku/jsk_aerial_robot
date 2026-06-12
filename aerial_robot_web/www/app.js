@@ -542,11 +542,27 @@
     topic.publish(new window.ROSLIB.Message(payload));
   }
 
+  function loadRosbagSettings() {
+    try {
+      return JSON.parse(window.localStorage.getItem('rosbagSettings')) || {};
+    } catch (ignore) {
+      return {};
+    }
+  }
+
   function RosbagControl({ ros, connected, topics }) {
     const [status, setStatus] = React.useState(null);
     const [open, setOpen] = React.useState(false);
-    const [picked, setPicked] = React.useState(() => new Set());
+    const [recordAll, setRecordAll] = React.useState(() => loadRosbagSettings().all !== false);
+    const [picked, setPicked] = React.useState(() => new Set(loadRosbagSettings().topics || []));
+    const [bagDir, setBagDir] = React.useState(() => loadRosbagSettings().bagDir || '');
     const [pickFilter, setPickFilter] = React.useState('');
+
+    React.useEffect(() => {
+      try {
+        window.localStorage.setItem('rosbagSettings', JSON.stringify({ all: recordAll, topics: [...picked], bagDir }));
+      } catch (ignore) { /* private mode etc.; settings just stop persisting */ }
+    }, [recordAll, picked, bagDir]);
 
     React.useEffect(() => {
       setStatus(null);
@@ -563,21 +579,14 @@
     }, [ros, connected]);
 
     const recording = Boolean(status?.recording);
-    const openPicker = () => {
-      // Preselect the topics from the previous recording when they still exist.
-      setPicked(new Set((status?.topics || []).filter((name) => topics.includes(name))));
-      setPickFilter('');
-      setOpen(true);
-    };
-    const start = () => {
-      publishOnce(ros, `${ROSBAG_NS}/start`, 'std_msgs/String', { data: JSON.stringify({ topics: [...picked] }) });
-      setOpen(false);
-    };
+    const start = () => publishOnce(ros, `${ROSBAG_NS}/start`, 'std_msgs/String', {
+      data: JSON.stringify({ all: recordAll, topics: recordAll ? [] : [...picked], bag_dir: bagDir.trim() }),
+    });
     const stop = () => publishOnce(ros, `${ROSBAG_NS}/stop`, 'std_msgs/Empty', {});
 
-    let statusText = 'not recording';
+    let statusText = recordAll ? 'ready (all topics)' : `ready (${picked.size} topic(s))`;
     if (status?.error) statusText = status.error;
-    else if (recording) statusText = `recording ${status.topics.length} topic(s)`;
+    else if (recording) statusText = `recording ${status.all ? 'all topics' : `${status.topics.length} topic(s)`}`;
     else if (status?.bag_path) statusText = `saved: ${status.bag_path.split('/').pop()}`;
 
     const lowerPickFilter = pickFilter.trim().toLowerCase();
@@ -591,33 +600,58 @@
 
     return e('div', { className: 'flight-control' },
       e('span', { className: 'label' }, 'Rosbag'),
-      recording
-        ? e('button', { className: 'fc-btn danger', onClick: stop }, '■ Stop recording')
-        : e('button', { className: 'fc-btn', onClick: openPicker, disabled: !connected }, '● Record rosbag'),
+      e('div', { className: 'fc-row rosbag-row' },
+        recording
+          ? e('button', { className: 'fc-btn danger', onClick: stop }, '■ Stop recording')
+          : e('button', {
+            className: 'fc-btn',
+            onClick: start,
+            disabled: !connected || (!recordAll && !picked.size),
+          }, '● Record rosbag'),
+        e('button', {
+          className: 'secondary fc-btn gear-btn',
+          onClick: () => setOpen(true),
+          'aria-label': 'Rosbag settings',
+        }, '⚙'),
+      ),
       e('p', { className: `meta fc-status${status?.error ? ' bad' : ''}` }, statusText),
       open && e('div', { className: 'modal-overlay', onClick: () => setOpen(false) },
         e('div', { className: 'modal', onClick: (ev) => ev.stopPropagation() },
-          e('h3', null, 'Select topics to record'),
-          e('input', {
-            className: 'list-filter',
-            value: pickFilter,
-            onChange: (ev) => setPickFilter(ev.target.value),
-            placeholder: 'Filter topics...',
-          }),
-          e('div', { className: 'modal-tools' },
-            e('button', { className: 'secondary', onClick: () => setPicked(new Set([...picked, ...pickable])) }, 'Select shown'),
-            e('button', { className: 'secondary', onClick: () => setPicked(new Set()) }, 'Clear'),
+          e('h3', null, 'Rosbag settings'),
+          e('label', { className: 'field modal-field' },
+            e('span', { className: 'label' }, 'Bag folder (on the robot)'),
+            e('input', {
+              className: 'list-filter',
+              value: bagDir,
+              onChange: (ev) => setBagDir(ev.target.value),
+              placeholder: 'server default (~/rosbags)',
+            }),
           ),
-          e('div', { className: 'modal-list' },
-            pickable.length
-              ? pickable.map((name) => e('label', { className: 'check-row', key: name },
-                e('input', { type: 'checkbox', checked: picked.has(name), onChange: () => togglePick(name) }),
-                e('span', null, name)))
-              : e('div', { className: 'empty' }, 'No matching topics'),
+          e('label', { className: 'check-row all-row' },
+            e('input', { type: 'checkbox', checked: recordAll, onChange: (ev) => setRecordAll(ev.target.checked) }),
+            e('span', null, 'Record all topics (rosbag record -a)'),
+          ),
+          !recordAll && e(React.Fragment, null,
+            e('input', {
+              className: 'list-filter',
+              value: pickFilter,
+              onChange: (ev) => setPickFilter(ev.target.value),
+              placeholder: 'Filter topics...',
+            }),
+            e('div', { className: 'modal-tools' },
+              e('button', { className: 'secondary', onClick: () => setPicked(new Set([...picked, ...pickable])) }, 'Select shown'),
+              e('button', { className: 'secondary', onClick: () => setPicked(new Set()) }, 'Clear'),
+            ),
+            e('div', { className: 'modal-list' },
+              pickable.length
+                ? pickable.map((name) => e('label', { className: 'check-row', key: name },
+                  e('input', { type: 'checkbox', checked: picked.has(name), onChange: () => togglePick(name) }),
+                  e('span', null, name)))
+                : e('div', { className: 'empty' }, 'No matching topics'),
+            ),
           ),
           e('div', { className: 'modal-actions' },
-            e('button', { className: 'secondary', onClick: () => setOpen(false) }, 'Cancel'),
-            e('button', { onClick: start, disabled: !picked.size }, `Start recording (${picked.size})`),
+            e('button', { onClick: () => setOpen(false) }, recordAll ? 'Done (all topics)' : `Done (${picked.size} selected)`),
           ),
         ),
       ),

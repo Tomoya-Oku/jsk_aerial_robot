@@ -165,6 +165,11 @@ input[type="range"]:disabled { cursor: default; }
 .fc-btn.danger:hover:not(:disabled) { background: #fbeded; border-color: var(--bad); color: var(--bad); }
 .fc-status { margin: 0; font-size: 0.78rem; }
 .fc-status.bad { color: var(--bad); }
+.rosbag-row { grid-template-columns: 1fr 44px; }
+.gear-btn { padding: 8px 4px; font-size: 1rem; }
+.modal-field { margin-bottom: 10px; }
+.modal-field .list-filter { margin-bottom: 0; }
+.all-row { margin-bottom: 10px; border: 1px solid var(--line); }
 .modal-overlay {
   position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
   padding: 16px; background: rgba(17, 17, 17, 0.45);
