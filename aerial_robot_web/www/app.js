@@ -344,11 +344,11 @@
   }
 
   function UrdfPanel({ urdf, viewerApiRef }) {
-    const ref = React.useRef(null);
+    const viewerRef = React.useRef(null);
     const [message, setMessage] = React.useState('Waiting for robot_description...');
     const [meshNotice, setMeshNotice] = React.useState('');
     React.useEffect(() => {
-      if (!urdf || !ref.current) return undefined;
+      if (!urdf || !viewerRef.current) return undefined;
       if (!window.AerialRobotUrdfViewer) {
         setMessage('URDF viewer module is still loading.');
         return undefined;
@@ -358,7 +358,7 @@
       const options = {
         onMeshError: (count) => !cancelled && setMeshNotice(`${count} mesh file(s) failed to load; showing partial model.`),
       };
-      window.AerialRobotUrdfViewer(ref.current, urdf, options).then((viewer) => {
+      window.AerialRobotUrdfViewer(viewerRef.current, urdf, options).then((viewer) => {
         if (cancelled) {
           viewer.dispose();
           return;
@@ -375,7 +375,10 @@
     return e('section', { className: 'card section' },
       e('h2', null, 'URDF Viewer'),
       e('p', { className: 'meta' }, 'Touch-drag to orbit. The model follows live /joint_states.'),
-      e('div', { className: 'viewer', ref }, message && e('div', { className: 'empty' }, message)),
+      e('div', { className: 'viewer' },
+        e('div', { className: 'viewer-host', ref: viewerRef }),
+        message && e('div', { className: 'viewer-message' }, e('div', { className: 'empty' }, message)),
+      ),
       meshNotice && e('p', { className: 'meta' }, meshNotice),
     );
   }

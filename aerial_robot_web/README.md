@@ -45,6 +45,9 @@ Useful arguments:
 - `launch_rosbridge` (default: `true`) can be disabled when another rosbridge is already running.
 - `rosbridge_output` (default: `log`) changes rosbridge/rosapi output; set it to `screen`
   when debugging rosbridge itself.
+- `auto_install_qr_dependency` (default: `true`) tries `sudo -n apt-get install -y python3-qrcode`
+  when QR support is missing. It never waits for a sudo password; if automatic installation is
+  not allowed, install it manually with `sudo apt install python3-qrcode`.
 
 If roslaunch reports that `rosbridge_server` or `rosbridge_websocket` cannot be found, install
 `ros-one-rosbridge-server` and source the ROS environment again before relaunching.

@@ -5,6 +5,7 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import os
 import posixpath
+import subprocess
 import socket
 import sys
 import threading
@@ -96,12 +97,56 @@ def get_lan_host():
     return None
 
 
-def format_qr(url):
+def get_bool_param(name, default):
+    value = rospy.get_param(name, default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() not in ("0", "false", "no", "off")
+    return bool(value)
+
+
+def import_qrcode(auto_install):
     try:
         import qrcode
+        return qrcode
     except ImportError:
+        pass
+
+    install_cmd = ["sudo", "-n", "apt-get", "install", "-y", "python3-qrcode"]
+    if not auto_install:
+        return None
+    rospy.logwarn("[aerial_robot_web] python3-qrcode is missing; trying: %s", " ".join(install_cmd))
+    try:
+        result = subprocess.run(
+            install_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        rospy.logwarn("[aerial_robot_web] QR dependency auto-install failed: %s", error)
+        return None
+    if result.returncode != 0:
+        rospy.logwarn("[aerial_robot_web] QR dependency auto-install failed with code %s", result.returncode)
+        if result.stdout:
+            rospy.logdebug("[aerial_robot_web] apt-get output:\n%s", result.stdout)
+        return None
+    try:
+        import qrcode
+        rospy.loginfo("[aerial_robot_web] Installed python3-qrcode automatically.")
+        return qrcode
+    except ImportError:
+        rospy.logwarn("[aerial_robot_web] python3-qrcode still cannot be imported after installation.")
         return None
 
+
+def format_qr(url, auto_install):
+    qrcode = import_qrcode(auto_install)
+    if not qrcode:
+        return None
     qr = qrcode.QRCode(border=1)
     qr.add_data(url)
     qr.make(fit=True)
@@ -111,8 +156,8 @@ def format_qr(url):
     return "\n".join(rows)
 
 
-def print_console_banner(localhost_url, host_url):
-    qr = format_qr(host_url)
+def print_console_banner(localhost_url, host_url, web_root, bind_host, auto_install_qr):
+    qr = format_qr(host_url, auto_install_qr)
     lines = [
         "",
         "============================================================",
@@ -120,6 +165,8 @@ def print_console_banner(localhost_url, host_url):
         "------------------------------------------------------------",
         " Local browser : {}".format(localhost_url),
         " Phone / LAN   : {}".format(host_url),
+        " Bind address  : {}".format(bind_host or "0.0.0.0"),
+        " Web root      : {}".format(web_root),
     ]
     if qr:
         lines.extend([
@@ -130,7 +177,8 @@ def print_console_banner(localhost_url, host_url):
     else:
         lines.extend([
             "------------------------------------------------------------",
-            " QR code unavailable: install python3-qrcode.",
+            " QR code unavailable.",
+            " Install manually: sudo apt install python3-qrcode",
         ])
     lines.append("============================================================")
     sys.stdout.write("\n".join(lines) + "\n")
@@ -142,10 +190,15 @@ def main():
     host = rospy.get_param("~host", "")
     port = int(rospy.get_param("~port", 8080))
     rosbridge_port = int(rospy.get_param("~rosbridge_port", 9090))
+    auto_install_qr = get_bool_param("~auto_install_qr_dependency", True)
     robot_ns = rospy.get_param("~robot_ns", "")
     robot_type = rospy.get_param("~robot_type", "generic")
     package_path = ROSPACK.get_path("aerial_robot_web")
     web_root = rospy.get_param("~web_root", os.path.join(package_path, "www"))
+
+    rospy.loginfo("[aerial_robot_web] Starting web console")
+    rospy.loginfo("[aerial_robot_web] robot_type=%s robot_ns=%s", robot_type, robot_ns or "/")
+    rospy.loginfo("[aerial_robot_web] HTTP port=%s rosbridge_port=%s", port, rosbridge_port)
 
     handler = partial(ConsoleHandler, directory=web_root)
     bind_host = "" if host in ("0.0.0.0", "::") else host
@@ -161,9 +214,10 @@ def main():
     })
     localhost_url = "http://localhost:{}{}".format(port, query)
     host_url = "http://{}:{}{}".format(get_host_label(host), port, query)
-    print_console_banner(localhost_url, host_url)
-    rospy.loginfo("Aerial Robot Web Console local URL: %s", localhost_url)
-    rospy.loginfo("Aerial Robot Web Console LAN URL: %s", host_url)
+    print_console_banner(localhost_url, host_url, web_root, bind_host, auto_install_qr)
+    rospy.loginfo("[aerial_robot_web] Local URL: %s", localhost_url)
+    rospy.loginfo("[aerial_robot_web] Phone/LAN URL: %s", host_url)
+    rospy.loginfo("[aerial_robot_web] ROS bridge URL used by browser: ws://<browser-host>:%s", rosbridge_port)
 
     rospy.on_shutdown(httpd.shutdown)
     rospy.spin()

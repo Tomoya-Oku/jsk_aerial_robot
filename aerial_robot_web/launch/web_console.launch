@@ -6,6 +6,7 @@
   <arg name="rosbridge_port" default="9090" />
   <arg name="launch_rosbridge" default="true" />
   <arg name="rosbridge_output" default="log" />
+  <arg name="auto_install_qr_dependency" default="true" />
 
   <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" if="$(arg launch_rosbridge)">
     <arg name="port" value="$(arg rosbridge_port)" />
@@ -18,6 +19,7 @@
         output="screen">
     <param name="port" value="$(arg web_port)" />
     <param name="rosbridge_port" value="$(arg rosbridge_port)" />
+    <param name="auto_install_qr_dependency" value="$(arg auto_install_qr_dependency)" />
     <param name="robot_ns" value="$(arg robot_ns)" />
     <param name="robot_type" value="$(arg robot_type)" />
   </node>
