@@ -28,7 +28,7 @@ flowchart TB
 | --- | --- | --- | --- |
 | `joystick_calib_publisher.py` | 操縦桿の生値を較正して正規化 | `/joystick/raw` | `/dracomancer/joystick/calibrated` |
 | `servo_to_joint_states.py` | サーボtick → ラジアンの関節状態へ変換 | `/servo/states` | `/dracomancer/joint_states` |
-| `control_pose.py` | 操縦桿 → DRAGON 機体の速度指令 | `calibrated`, `flight_state`, `mocap/pose` | `/dragon/uav/nav` |
+| `control_pose.py` | 操縦桿(+IMU) → DRAGON 機体の速度指令（操作者向き相対 / COG・baselink 切替） | `calibrated`, `imu`, `flight_state`, `mocap/pose` | `/dragon/uav/nav` |
 | `control_joints.py` | 腕関節 → DRAGON 形状指令（＋安全） | `joint_states`, `debug/fc_*`, `flight_state` | `/dragon/joints_ctrl`, `dragon_shape_safety` |
 
 ## デバイス側ハードウェア構成
