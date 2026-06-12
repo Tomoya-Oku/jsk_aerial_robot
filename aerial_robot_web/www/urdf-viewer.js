@@ -9,7 +9,7 @@ async function loadDependencies() {
   return DEPS;
 }
 
-const VIEWER_HEIGHT = 360;
+const VIEWER_HEIGHT = 500;
 
 window.AerialRobotUrdfViewer = async function renderUrdfViewer(container, urdfText, options = {}) {
   const { THREE, OrbitControls, URDFLoader } = await loadDependencies();
