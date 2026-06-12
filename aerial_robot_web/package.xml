@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>aerial_robot_web</name>
+  <version>0.1.0</version>
+  <description>Mobile friendly web console for inspecting ROS graph state and debugging aerial robot joints.</description>
+
+  <maintainer email="oku@dragon.t.u-tokyo.ac.jp">Tomoya Oku</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>rospy</build_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>rosbridge_server</exec_depend>
+  <exec_depend>rosapi</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>python3-rospkg</exec_depend>
+
+  <export/>
+</package>
