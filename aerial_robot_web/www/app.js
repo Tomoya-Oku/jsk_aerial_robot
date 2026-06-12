@@ -327,7 +327,7 @@
       e('section', { className: 'cards' },
         e(GraphList, { title: 'Nodes', items: filteredNodes, kind: 'node', selected, setSelected, connected, loading: lastUpdate === 'never' }),
         e(GraphList, { title: 'Topics', items: filteredTopics, kind: 'topic', selected, setSelected, connected, loading: lastUpdate === 'never' }),
-        e(DetailsCard, { selected, details, preview }),
+        e(DetailsCard, { selected, details, preview, ros, connected }),
       ),
       e(UrdfPanel, { urdf, viewerApiRef, basePose, poseTopic, poseStamp, jointTopic: nsJoin(robotNs, 'joint_states') }),
     );
@@ -381,7 +381,7 @@
     return Number.isFinite(number) ? number.toFixed(2) : '0.00';
   }
 
-  function DetailsCard({ selected, details, preview }) {
+  function DetailsCard({ selected, details, preview, ros, connected }) {
     const list = (label, values) => e('div', { className: 'section' }, e('span', { className: 'label' }, label), (values || []).map((value) => e('div', { className: 'meta', key: value }, value)));
     return e('article', { className: 'card' },
       e('h2', null, 'Info / Pub-Sub'),
@@ -398,8 +398,109 @@
             e('span', { className: 'label' }, 'Latest message'),
             preview ? e('pre', { className: 'preview' }, formatPreview(preview)) : e('div', { className: 'meta' }, 'Waiting for a message...'),
           ),
+          e(PublishBox, { ros, connected, topic: selected.name, type: details.type }),
         ),
       ) : e('div', { className: 'empty' }, 'Select a node or topic'),
+    );
+  }
+
+  const PRIMITIVE_TYPES = new Set([
+    'bool', 'byte', 'char',
+    'int8', 'uint8', 'int16', 'uint16', 'int32', 'uint32', 'int64', 'uint64',
+    'float32', 'float64', 'string', 'time', 'duration',
+  ]);
+
+  function primitiveTemplate(type) {
+    if (type === 'string') return '';
+    if (type === 'bool') return false;
+    if (type === 'time' || type === 'duration') return { secs: 0, nsecs: 0 };
+    return 0;
+  }
+
+  // Build an empty message skeleton from rosapi/MessageDetails typedefs so the
+  // publish box always starts from a structure that matches the topic type.
+  function buildMessageTemplate(typedefs, rootType) {
+    const byType = new Map((typedefs || []).map((def) => [def.type, def]));
+    const build = (type, depth) => {
+      if (PRIMITIVE_TYPES.has(type)) return primitiveTemplate(type);
+      const def = byType.get(type);
+      if (!def || depth > 12) return {};
+      const message = {};
+      (def.fieldnames || []).forEach((name, index) => {
+        const fieldType = def.fieldtypes?.[index] || 'string';
+        const arrayLen = def.fieldarraylen?.[index] ?? -1;
+        if (arrayLen < 0) {
+          message[name] = build(fieldType, depth + 1);
+        } else if (arrayLen === 0) {
+          message[name] = [];
+        } else {
+          message[name] = Array.from({ length: arrayLen }, () => build(fieldType, depth + 1));
+        }
+      });
+      return message;
+    };
+    return build(rootType, 0);
+  }
+
+  function PublishBox({ ros, connected, topic, type }) {
+    const [text, setText] = React.useState('');
+    const [status, setStatus] = React.useState(null);
+    const publisherRef = React.useRef(null);
+
+    React.useEffect(() => {
+      setStatus(null);
+      setText('');
+      if (!ros || !connected || !type || !window.ROSLIB) return undefined;
+      let alive = true;
+      callService(ros, '/rosapi/message_details', 'rosapi/MessageDetails', { type })
+        .then((res) => {
+          if (!alive) return;
+          setText(JSON.stringify(buildMessageTemplate(res.typedefs, type), null, 2));
+        })
+        .catch(() => alive && setText('{}'));
+      const publisher = new window.ROSLIB.Topic({ ros, name: topic, messageType: type });
+      publisherRef.current = publisher;
+      return () => {
+        alive = false;
+        publisherRef.current = null;
+        try {
+          publisher.unadvertise();
+        } catch (error) {
+          console.warn(error);
+        }
+      };
+    }, [ros, connected, topic, type]);
+
+    const publish = () => {
+      let payload;
+      try {
+        payload = JSON.parse(text);
+      } catch (error) {
+        setStatus({ tone: 'bad', text: `Invalid JSON: ${error.message}` });
+        return;
+      }
+      try {
+        publisherRef.current?.publish(new window.ROSLIB.Message(payload));
+        setStatus({ tone: 'ok', text: `Published at ${new Date().toLocaleTimeString()}` });
+      } catch (error) {
+        setStatus({ tone: 'bad', text: describeError(error, 'publish failed') });
+      }
+    };
+
+    return e('div', { className: 'section publish-box' },
+      e('span', { className: 'label' }, `Publish (${type || 'unknown type'})`),
+      e('textarea', {
+        className: 'publish-input',
+        value: text,
+        rows: 8,
+        spellCheck: false,
+        onChange: (ev) => setText(ev.target.value),
+        placeholder: 'Loading message template...',
+      }),
+      e('div', { className: 'publish-actions' },
+        e('button', { onClick: publish, disabled: !connected || !type || !text }, 'Publish'),
+        status && e('span', { className: `value ${status.tone}` }, status.text),
+      ),
     );
   }
 
