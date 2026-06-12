@@ -43,6 +43,8 @@ Useful arguments:
 - `web_port` (default: `8080`) changes the HTTP port.
 - `rosbridge_port` (default: `9090`) changes the websocket port.
 - `launch_rosbridge` (default: `true`) can be disabled when another rosbridge is already running.
+- `rosbridge_output` (default: `log`) changes rosbridge/rosapi output; set it to `screen`
+  when debugging rosbridge itself.
 
 If roslaunch reports that `rosbridge_server` or `rosbridge_websocket` cannot be found, install
 `ros-one-rosbridge-server` and source the ROS environment again before relaunching.

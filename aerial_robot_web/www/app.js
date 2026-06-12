@@ -81,10 +81,19 @@
         if (!alive) return;
         setState({ connected: false, error: describeError(error, 'connection error'), ros });
       });
-      return () => {
+      const closeRos = () => {
         alive = false;
         window.clearTimeout(retryId);
-        ros.close();
+        try {
+          ros.close();
+        } catch (error) {
+          console.warn(error);
+        }
+      };
+      window.addEventListener('pagehide', closeRos, { once: true });
+      return () => {
+        window.removeEventListener('pagehide', closeRos);
+        closeRos();
       };
     }, [url, attempt]);
     return state;
@@ -99,6 +108,37 @@
       const service = new window.ROSLIB.Service({ ros, name: serviceName(name), serviceType: type });
       service.callService(new window.ROSLIB.ServiceRequest(values), resolve, reject);
     });
+  }
+
+  class ErrorBoundary extends React.Component {
+    constructor(props) {
+      super(props);
+      this.state = { error: null };
+    }
+
+    static getDerivedStateFromError(error) {
+      return { error };
+    }
+
+    componentDidCatch(error, info) {
+      console.error(error, info);
+    }
+
+    render() {
+      if (!this.state.error) return this.props.children;
+      return e('main', { className: 'app' },
+        e('header', { className: 'app-header' },
+          e('h1', null, 'Aerial Robot Web Console'),
+          e('div', { className: 'status-row' },
+            e(InfoPill, {
+              label: 'Interface',
+              value: describeError(this.state.error, 'render error'),
+              tone: 'bad',
+            }),
+          ),
+        ),
+      );
+    }
   }
 
   function App() {
@@ -340,5 +380,5 @@
     );
   }
 
-  ReactDOM.createRoot(document.getElementById('root')).render(e(App));
+  ReactDOM.createRoot(document.getElementById('root')).render(e(ErrorBoundary, null, e(App)));
 })();

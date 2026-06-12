@@ -5,9 +5,11 @@
   <arg name="web_port" default="8080" />
   <arg name="rosbridge_port" default="9090" />
   <arg name="launch_rosbridge" default="true" />
+  <arg name="rosbridge_output" default="log" />
 
   <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" if="$(arg launch_rosbridge)">
     <arg name="port" value="$(arg rosbridge_port)" />
+    <arg name="output" value="$(arg rosbridge_output)" />
   </include>
 
   <node pkg="aerial_robot_web"
