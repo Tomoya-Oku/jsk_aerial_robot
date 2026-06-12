@@ -75,7 +75,7 @@ If roslaunch reports that `rosbridge_server` or `rosbridge_websocket` cannot be 
 ## Features
 
 - Live node/topic lists using `rosapi`, each with its own case-insensitive filter and a
-  collapse toggle (the collapsed card keeps the same size as the other cards).
+  collapse toggle (a collapsed card shrinks to its title bar).
 - Per-node publications, subscriptions, and services.
 - Per-topic type, publishers, subscribers, and a throttled live message preview.
 - A publish box below the topic info that pre-fills a JSON template generated from the

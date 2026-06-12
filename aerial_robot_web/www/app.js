@@ -352,7 +352,7 @@
     } else {
       body = e('div', { className: 'empty' }, 'No matching entries');
     }
-    return e('article', { className: 'card' },
+    return e('article', { className: `card${collapsed ? ' collapsed' : ''}` },
       e('div', { className: 'card-head list-head' },
         e('h2', null, `${title} (${lowerFilter ? `${visible.length}/${items.length}` : items.length})`),
         e('button', {
@@ -362,20 +362,15 @@
           'aria-label': collapsed ? `Expand ${title.toLowerCase()} list` : `Collapse ${title.toLowerCase()} list`,
         }, collapsed ? '▸' : '▾'),
       ),
-      collapsed
-        // The card keeps its fixed height when collapsed so the Nodes /
-        // Topics / Info cards always stay the same size.
-        ? e('button', { className: 'collapsed-body', onClick: () => setCollapsed(false) },
-          `${items.length} ${title.toLowerCase()} hidden — tap to expand`)
-        : e(React.Fragment, null,
-          e('input', {
-            className: 'list-filter',
-            value: filter,
-            onChange: (ev) => setFilter(ev.target.value),
-            placeholder: `Filter ${title.toLowerCase()}...`,
-          }),
-          e('div', { className: 'list' }, body),
-        ),
+      !collapsed && e(React.Fragment, null,
+        e('input', {
+          className: 'list-filter',
+          value: filter,
+          onChange: (ev) => setFilter(ev.target.value),
+          placeholder: `Filter ${title.toLowerCase()}...`,
+        }),
+        e('div', { className: 'list' }, body),
+      ),
     );
   }
 
