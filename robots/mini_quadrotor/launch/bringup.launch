@@ -18,6 +18,12 @@
   <arg name="spawn_yaw" default="0.0"/>
   <arg name="robot_id" default="" />
   <arg name="robot_ns" value="quadrotor$(arg robot_id)" />
+
+  ###########  Mobile Web Console  ###########
+  <arg name="launch_web_console" default="True" />
+  <arg name="web_console_port" default="8080" />
+  <arg name="web_console_rosbridge_port" default="9090" />
+  <arg name="web_console_launch_rosbridge" default="True" />
   <arg name="config_dir" default="$(find mini_quadrotor)/config" />
   <arg name="mujoco" default="False" />
   <arg name="demo" default="True" />
@@ -102,5 +108,15 @@
   ########## Simple Demo #########
   <node pkg="aerial_robot_base" type="simple_demo.py" name="simple_demo" ns="$(arg robot_ns)" output="screen" if="$(arg demo)"/>
 
+
+
+  ###########  Mobile Web Console  ###########
+  <include file="$(find aerial_robot_web)/launch/web_console.launch" if="$(arg launch_web_console)">
+    <arg name="robot_ns" value="$(arg robot_ns)" />
+    <arg name="robot_type" value="mini_quadrotor" />
+    <arg name="web_port" value="$(arg web_console_port)" />
+    <arg name="rosbridge_port" value="$(arg web_console_rosbridge_port)" />
+    <arg name="launch_rosbridge" value="$(arg web_console_launch_rosbridge)" />
+  </include>
 
 </launch>

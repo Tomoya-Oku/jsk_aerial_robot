@@ -20,6 +20,12 @@
   <arg name="config_dir" default="$(find gimbalrotor)/config"/>
   <arg name="robot_id" default="" />
   <arg name="robot_ns" value="gimbalrotor$(arg robot_id)" />
+
+  ###########  Mobile Web Console  ###########
+  <arg name="launch_web_console" default="True" />
+  <arg name="web_console_port" default="8080" />
+  <arg name="web_console_rosbridge_port" default="9090" />
+  <arg name="web_console_launch_rosbridge" default="True" />
   <arg name="airframe" default="quad" />
 
   ###########  Parameters  ###########
@@ -98,6 +104,16 @@
     <arg name="spawn_y" value="$(arg spawn_y)" />
     <arg name="spawn_z" value="$(arg spawn_z)" />
     <arg name="spawn_yaw" value="$(arg spawn_yaw)" />
+  </include>
+
+
+  ###########  Mobile Web Console  ###########
+  <include file="$(find aerial_robot_web)/launch/web_console.launch" if="$(arg launch_web_console)">
+    <arg name="robot_ns" value="$(arg robot_ns)" />
+    <arg name="robot_type" value="gimbalrotor" />
+    <arg name="web_port" value="$(arg web_console_port)" />
+    <arg name="rosbridge_port" value="$(arg web_console_rosbridge_port)" />
+    <arg name="launch_rosbridge" value="$(arg web_console_launch_rosbridge)" />
   </include>
 
 </launch>
