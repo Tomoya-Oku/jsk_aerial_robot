@@ -164,10 +164,21 @@ def format_qr(url, auto_install):
     qr = qrcode.QRCode(border=1)
     qr.add_data(url)
     qr.make(fit=True)
-    rows = []
-    for row in qr.get_matrix():
-        rows.append("".join("██" if cell else "  " for cell in row))
-    return "\n".join(rows)
+    matrix = qr.get_matrix()
+    if len(matrix) % 2:
+        matrix.append([False] * len(matrix[0]))
+    # Half-block rendering packs two QR rows into one terminal line, so the
+    # printed code is a quarter of the plain "██" rendering.
+    glyphs = {
+        (False, False): " ",
+        (True, False): "▀",
+        (False, True): "▄",
+        (True, True): "█",
+    }
+    lines = []
+    for top, bottom in zip(matrix[0::2], matrix[1::2]):
+        lines.append("".join(glyphs[(top[i], bottom[i])] for i in range(len(top))))
+    return "\n".join(lines)
 
 
 def print_console_banner(localhost_url, host_url, web_root, bind_host, auto_install_qr):
