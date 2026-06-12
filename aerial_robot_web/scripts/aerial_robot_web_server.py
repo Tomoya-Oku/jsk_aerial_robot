@@ -99,6 +99,8 @@ def main():
     host_url = "http://{}:{}{}".format(get_host_label(host), port, query)
     rospy.loginfo("Aerial Robot Web Console ready: %s", localhost_url)
     rospy.loginfo("Aerial Robot Web Console LAN hint: %s", host_url)
+    if robot_type == "dracomancer":
+        rospy.loginfo("Dracomancer joint sliders are available in the web console.")
 
     rospy.on_shutdown(httpd.shutdown)
     rospy.spin()

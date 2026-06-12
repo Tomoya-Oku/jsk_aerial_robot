@@ -5,6 +5,7 @@
   const initialRobotNs = normalizeNs(params.get('robot_ns') || '');
   const robotType = params.get('robot_type') || 'generic';
   const RECONNECT_DELAY_MS = 3000;
+  const JOINT_PUBLISH_INTERVAL_MS = 50;
   const PREVIEW_THROTTLE_MS = 500;
   const PREVIEW_MAX_CHARS = 4000;
 
@@ -15,6 +16,42 @@
 
   function serviceName(name) {
     return name.startsWith('/') ? name : `/${name}`;
+  }
+
+  function toFixed(value) {
+    return Number(value || 0).toFixed(3);
+  }
+
+  function rosTimeNow() {
+    const now = Date.now();
+    return { secs: Math.floor(now / 1000), nsecs: (now % 1000) * 1e6 };
+  }
+
+  function parseJoints(urdfText) {
+    if (!urdfText) return [];
+    const doc = new DOMParser().parseFromString(urdfText, 'application/xml');
+    return Array.from(doc.querySelectorAll('joint'))
+      .map((joint) => {
+        const type = joint.getAttribute('type');
+        const limit = joint.querySelector('limit');
+        const lower = Number(limit?.getAttribute('lower') ?? (type === 'continuous' ? -Math.PI : -1.57));
+        const upper = Number(limit?.getAttribute('upper') ?? (type === 'continuous' ? Math.PI : 1.57));
+        return {
+          name: joint.getAttribute('name'),
+          type,
+          lower,
+          upper,
+          value: 0,
+          unit: type === 'prismatic' ? 'm' : 'rad',
+          mimic: Boolean(joint.querySelector('mimic')),
+        };
+      })
+      // Mimic joints are driven by their source joint and must not be commanded.
+      .filter((joint) => joint.name && !joint.mimic && !['fixed', 'floating', 'planar'].includes(joint.type));
+  }
+
+  function clampValue(value, lower, upper) {
+    return Math.min(upper, Math.max(lower, value));
   }
 
   function useRosConnection(url) {
@@ -63,6 +100,7 @@
     const [details, setDetails] = React.useState(null);
     const [preview, setPreview] = React.useState(null);
     const [urdf, setUrdf] = React.useState('');
+    const [joints, setJoints] = React.useState([]);
     const [lastUpdate, setLastUpdate] = React.useState('never');
     const { connected, error, ros } = useRosConnection(bridgeUrl);
 
@@ -97,6 +135,10 @@
           try { text = JSON.parse(res.value); } catch (ignore) { /* rosapi may already return a plain string */ }
           if (typeof text !== 'string') return;
           setUrdf(text);
+          setJoints((prev) => {
+            const known = new Map(prev.map((joint) => [joint.name, joint.value]));
+            return parseJoints(text).map((joint) => ({ ...joint, value: known.get(joint.name) ?? 0 }));
+          });
         })
         .catch(() => undefined);
       return () => { alive = false; };
@@ -136,8 +178,9 @@
     }, [ros, connected, selected, details]);
 
     // Drive the URDF viewer from live joint states so the model mirrors the
-    // actual robot.
+    // actual robot, not just the local sliders.
     const viewerApiRef = React.useRef(null);
+    const liveJointsRef = React.useRef({});
     React.useEffect(() => {
       if (!ros || !connected) return undefined;
       const topic = new ROSLIB.Topic({
@@ -150,14 +193,51 @@
       topic.subscribe((msg) => {
         const values = {};
         (msg.name || []).forEach((name, index) => { values[name] = msg.position?.[index] ?? 0; });
+        Object.assign(liveJointsRef.current, values);
         viewerApiRef.current?.setJointValues(values);
       });
       return () => topic.unsubscribe();
     }, [ros, connected, robotNs]);
 
+    // Advertise the joint topic once instead of per slider event.
+    const jointTopicRef = React.useRef(null);
+    React.useEffect(() => {
+      if (!ros || !connected) return undefined;
+      const topic = new ROSLIB.Topic({ ros, name: `${robotNs}/joint_states`, messageType: 'sensor_msgs/JointState' });
+      topic.advertise();
+      jointTopicRef.current = topic;
+      return () => {
+        jointTopicRef.current = null;
+        topic.unadvertise();
+      };
+    }, [ros, connected, robotNs]);
+
+    const publishState = React.useRef({ last: 0, timer: 0 });
+    const publishJoints = React.useCallback((nextJoints) => {
+      const send = () => {
+        const topic = jointTopicRef.current;
+        if (!topic) return;
+        publishState.current.last = Date.now();
+        topic.publish(new ROSLIB.Message({
+          header: { stamp: rosTimeNow(), frame_id: '' },
+          name: nextJoints.map((joint) => joint.name),
+          position: nextJoints.map((joint) => Number(joint.value)),
+          velocity: [],
+          effort: [],
+        }));
+      };
+      window.clearTimeout(publishState.current.timer);
+      if (Date.now() - publishState.current.last >= JOINT_PUBLISH_INTERVAL_MS) {
+        send();
+      } else {
+        publishState.current.timer = window.setTimeout(send, JOINT_PUBLISH_INTERVAL_MS);
+      }
+    }, []);
+
     const lowerFilter = filter.toLowerCase();
     const filteredNodes = graph.nodes.filter((name) => name.toLowerCase().includes(lowerFilter));
     const filteredTopics = graph.topics.filter((name) => name.toLowerCase().includes(lowerFilter));
+    const isDracomancer = robotType === 'dracomancer' || robotNs.includes('dracomancer');
 
     return e('main', { className: 'app' },
       e('header', { className: 'app-header' },
@@ -191,7 +271,8 @@
         e(GraphList, { title: 'Topics', items: filteredTopics, kind: 'topic', selected, setSelected, connected, loading: lastUpdate === 'never' }),
         e(DetailsCard, { selected, details, preview }),
       ),
-      e(UrdfPanel, { urdf, viewerApiRef }),
+      isDracomancer && e(JointPanel, { joints, setJoints, publishJoints, connected, liveJointsRef }),
+      e(UrdfPanel, { urdf, joints, viewerApiRef }),
     );
   }
 
@@ -254,7 +335,43 @@
     );
   }
 
-  function UrdfPanel({ urdf, viewerApiRef }) {
+  function JointPanel({ joints, setJoints, publishJoints, connected, liveJointsRef }) {
+    const update = (index, value) => {
+      const next = joints.map((joint, i) => i === index ? { ...joint, value: Number(value) } : joint);
+      setJoints(next);
+      publishJoints(next);
+    };
+    const reset = () => {
+      const next = joints.map((joint) => ({ ...joint, value: 0 }));
+      setJoints(next);
+      publishJoints(next);
+    };
+    // Copy the robot's current pose into the sliders without publishing, so
+    // the first drag does not command a jump from the real pose.
+    const syncFromRobot = () => {
+      const live = liveJointsRef.current;
+      setJoints(joints.map((joint) => live[joint.name] === undefined
+        ? joint
+        : { ...joint, value: clampValue(live[joint.name], joint.lower, joint.upper) }));
+    };
+    return e('section', { className: 'card section' },
+      e('div', { className: 'card-head' },
+        e('h2', null, 'Dracomancer Joint Input'),
+        e('div', { className: 'button-row' },
+          e('button', { className: 'secondary', onClick: syncFromRobot, disabled: !connected || !joints.length }, 'Sync from robot'),
+          e('button', { className: 'secondary', onClick: reset, disabled: !connected || !joints.length }, 'Reset to 0'),
+        ),
+      ),
+      e('p', { className: 'meta' }, 'Sliders publish sensor_msgs/JointState to the selected robot namespace. Use "Sync from robot" before dragging to start from the current pose.'),
+      joints.length ? e('div', { className: 'list' }, joints.map((joint, index) => e('div', { className: 'joint-row', key: joint.name },
+        e('div', { className: 'joint-head' }, e('strong', null, joint.name), e('span', { className: 'badge' }, `${toFixed(joint.value)} ${joint.unit}`)),
+        e('input', { type: 'range', min: joint.lower, max: joint.upper, step: 0.005, value: joint.value, disabled: !connected, onChange: (ev) => update(index, ev.target.value), 'aria-label': `${joint.name} position` }),
+        e('div', { className: 'meta' }, `${toFixed(joint.lower)} ... ${toFixed(joint.upper)} ${joint.unit}`),
+      ))) : e('div', { className: 'empty' }, 'Waiting for robot_description joint limits...'),
+    );
+  }
+
+  function UrdfPanel({ urdf, joints, viewerApiRef }) {
     const ref = React.useRef(null);
     const [message, setMessage] = React.useState('Waiting for robot_description...');
     const [meshNotice, setMeshNotice] = React.useState('');
@@ -283,9 +400,13 @@
         viewerApiRef.current = null;
       };
     }, [urdf, viewerApiRef]);
+    React.useEffect(() => {
+      if (!viewerApiRef.current || !joints.length) return;
+      viewerApiRef.current.setJointValues(Object.fromEntries(joints.map((joint) => [joint.name, joint.value])));
+    }, [joints, message, viewerApiRef]);
     return e('section', { className: 'card section' },
       e('h2', null, 'URDF Viewer'),
-      e('p', { className: 'meta' }, 'Touch-drag to orbit. The model follows live /joint_states.'),
+      e('p', { className: 'meta' }, 'Touch-drag to orbit. The model follows live /joint_states and the sliders.'),
       e('div', { className: 'viewer', ref }, message && e('div', { className: 'empty' }, message)),
       meshNotice && e('p', { className: 'meta' }, meshNotice),
     );
