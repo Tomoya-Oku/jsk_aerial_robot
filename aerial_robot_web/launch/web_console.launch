@@ -9,7 +9,7 @@
   <arg name="rosbridge_output" default="log" />
   <arg name="auto_install_qr_dependency" default="true" />
   <arg name="banner_delay" default="8.0" />
-  <arg name="rosbag_dir" default="$(env HOME)/rosbags" />
+  <arg name="rosbag_dir" default="$(optenv HOME /tmp)/rosbags" />
 
   <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" if="$(arg launch_rosbridge)">
     <arg name="port" value="$(arg rosbridge_port)" />
