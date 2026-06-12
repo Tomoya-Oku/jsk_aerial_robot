@@ -16,7 +16,7 @@ window.AerialRobotUrdfViewer = async function renderUrdfViewer(container, urdfTe
   container.replaceChildren();
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0d1426);
+  scene.background = new THREE.Color(0xf6f6f6);
   const camera = new THREE.PerspectiveCamera(45, (container.clientWidth || 320) / VIEWER_HEIGHT, 0.01, 1000);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
@@ -27,7 +27,7 @@ window.AerialRobotUrdfViewer = async function renderUrdfViewer(container, urdfTe
   const light = new THREE.DirectionalLight(0xffffff, 0.9);
   light.position.set(3, 5, 4);
   scene.add(light);
-  const grid = new THREE.GridHelper(10, 20, 0x33506c, 0x1f2a44);
+  const grid = new THREE.GridHelper(10, 20, 0x9a9a9a, 0xd6d6d6);
   scene.add(grid);
   const axes = new THREE.AxesHelper(1.0);
   scene.add(axes);

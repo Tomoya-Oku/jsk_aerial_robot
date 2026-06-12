@@ -186,7 +186,7 @@ def print_console_banner(localhost_url, host_url, web_root, bind_host, auto_inst
     lines = [
         "",
         "============================================================",
-        " Aerial Robot Web Console",
+        " DRAGON Lab Aerial Robot Web Console",
         "------------------------------------------------------------",
         " Local browser : {}".format(localhost_url),
         " Phone / LAN   : {}".format(host_url),

@@ -135,7 +135,7 @@
       if (!this.state.error) return this.props.children;
       return e('main', { className: 'app' },
         e('header', { className: 'app-header' },
-          e('h1', null, 'Aerial Robot Web Console'),
+          e('h1', null, 'DRAGON Lab Aerial Robot Web Console'),
           e('div', { className: 'status-row' },
             e(InfoPill, {
               label: 'Interface',
@@ -294,7 +294,7 @@
 
     return e('main', { className: 'app' },
       e('header', { className: 'app-header' },
-        e('h1', null, 'Aerial Robot Web Console'),
+        e('h1', null, 'DRAGON Lab Aerial Robot Web Console'),
         e('div', { className: 'status-row' },
           e(InfoPill, { label: 'ROS Bridge', value: connected ? 'connected' : (error ? `${error} (retrying...)` : 'connecting...'), tone: connected ? 'ok' : error ? 'bad' : 'warn' }),
           e(InfoPill, { label: 'Robot', value: `${robotType}${robotNs ? ` @ ${robotNs}` : ''}` }),

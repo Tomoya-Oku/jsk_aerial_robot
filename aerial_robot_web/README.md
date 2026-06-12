@@ -37,7 +37,7 @@ When enabled, the console URL and a QR code are printed near the end of the laun
 
 ```text
 ============================================================
- Aerial Robot Web Console
+ DRAGON Lab Aerial Robot Web Console
 ------------------------------------------------------------
  Local browser : http://localhost:8080?robot_ns=hydrus&robot_type=hydrus&rosbridge_port=9090
  Phone / LAN   : http://192.168.0.10:8080?robot_ns=hydrus&robot_type=hydrus&rosbridge_port=9090
