@@ -1,11 +1,23 @@
 (() => {
+  if (!window.React || !window.ReactDOM) {
+    const root = document.getElementById('root');
+    if (root) {
+      root.querySelector('.boot-hint')?.replaceChildren(
+        'React assets failed to load. Connect this device to the internet once or pre-cache the CDN assets.',
+      );
+    }
+    return;
+  }
+
+  const React = window.React;
+  const ReactDOM = window.ReactDOM;
   const e = React.createElement;
   const params = new URLSearchParams(window.location.search);
   const defaultBridgePort = params.get('rosbridge_port') || '9090';
   const initialRobotNs = normalizeNs(params.get('robot_ns') || '');
+  const initialPoseTopic = params.get('pose_topic') || nsJoin(initialRobotNs, 'ground_truth');
   const robotType = params.get('robot_type') || 'generic';
   const RECONNECT_DELAY_MS = 3000;
-  const JOINT_PUBLISH_INTERVAL_MS = 50;
   const PREVIEW_THROTTLE_MS = 500;
   const PREVIEW_MAX_CHARS = 4000;
 
@@ -18,40 +30,18 @@
     return name.startsWith('/') ? name : `/${name}`;
   }
 
-  function toFixed(value) {
-    return Number(value || 0).toFixed(3);
+  function nsJoin(ns, name) {
+    const cleanName = name.startsWith('/') ? name.slice(1) : name;
+    if (!ns) return `/${cleanName}`;
+    return `${normalizeNs(ns)}/${cleanName}`;
   }
 
-  function rosTimeNow() {
-    const now = Date.now();
-    return { secs: Math.floor(now / 1000), nsecs: (now % 1000) * 1e6 };
-  }
-
-  function parseJoints(urdfText) {
-    if (!urdfText) return [];
-    const doc = new DOMParser().parseFromString(urdfText, 'application/xml');
-    return Array.from(doc.querySelectorAll('joint'))
-      .map((joint) => {
-        const type = joint.getAttribute('type');
-        const limit = joint.querySelector('limit');
-        const lower = Number(limit?.getAttribute('lower') ?? (type === 'continuous' ? -Math.PI : -1.57));
-        const upper = Number(limit?.getAttribute('upper') ?? (type === 'continuous' ? Math.PI : 1.57));
-        return {
-          name: joint.getAttribute('name'),
-          type,
-          lower,
-          upper,
-          value: 0,
-          unit: type === 'prismatic' ? 'm' : 'rad',
-          mimic: Boolean(joint.querySelector('mimic')),
-        };
-      })
-      // Mimic joints are driven by their source joint and must not be commanded.
-      .filter((joint) => joint.name && !joint.mimic && !['fixed', 'floating', 'planar'].includes(joint.type));
-  }
-
-  function clampValue(value, lower, upper) {
-    return Math.min(upper, Math.max(lower, value));
+  function describeError(error, fallback) {
+    if (!error) return fallback;
+    if (error.message) return error.message;
+    if (error.reason) return error.reason;
+    if (error.type) return `${error.type} event`;
+    return String(error);
   }
 
   function useRosConnection(url) {
@@ -60,11 +50,34 @@
     React.useEffect(() => {
       let alive = true;
       let retryId = 0;
-      const ros = new ROSLIB.Ros({ url });
       const scheduleRetry = () => {
         window.clearTimeout(retryId);
         retryId = window.setTimeout(() => setAttempt((value) => value + 1), RECONNECT_DELAY_MS);
       };
+      if (!window.ROSLIB) {
+        setState({
+          connected: false,
+          error: 'roslib failed to load; connect this browser to the internet once or pre-cache the CDN asset',
+          ros: null,
+        });
+        scheduleRetry();
+        return () => {
+          alive = false;
+          window.clearTimeout(retryId);
+        };
+      }
+
+      let ros;
+      try {
+        ros = new window.ROSLIB.Ros({ url });
+      } catch (error) {
+        setState({ connected: false, error: describeError(error, 'connection setup failed'), ros: null });
+        scheduleRetry();
+        return () => {
+          alive = false;
+          window.clearTimeout(retryId);
+        };
+      }
       ros.on('connection', () => alive && setState({ connected: true, error: '', ros }));
       ros.on('close', () => {
         if (!alive) return;
@@ -73,12 +86,21 @@
       });
       ros.on('error', (error) => {
         if (!alive) return;
-        setState({ connected: false, error: String(error?.message || error || 'connection error'), ros });
+        setState({ connected: false, error: describeError(error, 'connection error'), ros });
       });
-      return () => {
+      const closeRos = () => {
         alive = false;
         window.clearTimeout(retryId);
-        ros.close();
+        try {
+          ros.close();
+        } catch (error) {
+          console.warn(error);
+        }
+      };
+      window.addEventListener('pagehide', closeRos, { once: true });
+      return () => {
+        window.removeEventListener('pagehide', closeRos);
+        closeRos();
       };
     }, [url, attempt]);
     return state;
@@ -86,23 +108,65 @@
 
   function callService(ros, name, type, values = {}) {
     return new Promise((resolve, reject) => {
-      const service = new ROSLIB.Service({ ros, name: serviceName(name), serviceType: type });
-      service.callService(new ROSLIB.ServiceRequest(values), resolve, reject);
+      if (!window.ROSLIB) {
+        reject(new Error('roslib is not loaded'));
+        return;
+      }
+      const service = new window.ROSLIB.Service({ ros, name: serviceName(name), serviceType: type });
+      service.callService(new window.ROSLIB.ServiceRequest(values), resolve, reject);
     });
+  }
+
+  class ErrorBoundary extends React.Component {
+    constructor(props) {
+      super(props);
+      this.state = { error: null };
+    }
+
+    static getDerivedStateFromError(error) {
+      return { error };
+    }
+
+    componentDidCatch(error, info) {
+      console.error(error, info);
+    }
+
+    render() {
+      if (!this.state.error) return this.props.children;
+      return e('main', { className: 'app' },
+        e('header', { className: 'app-header' },
+          e('h1', null, 'DRAGON Lab Aerial Robot Web Console'),
+          e('div', { className: 'status-row' },
+            e(InfoPill, {
+              label: 'Interface',
+              value: describeError(this.state.error, 'render error'),
+              tone: 'bad',
+            }),
+          ),
+        ),
+      );
+    }
   }
 
   function App() {
     const [bridgeUrl, setBridgeUrl] = React.useState(`ws://${window.location.hostname}:${defaultBridgePort}`);
     const [robotNs, setRobotNs] = React.useState(initialRobotNs);
-    const [filter, setFilter] = React.useState('');
+    const [poseTopic, setPoseTopic] = React.useState(initialPoseTopic);
     const [graph, setGraph] = React.useState({ nodes: [], topics: [] });
     const [selected, setSelected] = React.useState(null);
     const [details, setDetails] = React.useState(null);
     const [preview, setPreview] = React.useState(null);
     const [urdf, setUrdf] = React.useState('');
-    const [joints, setJoints] = React.useState([]);
+    const [basePose, setBasePose] = React.useState(null);
+    const [poseStamp, setPoseStamp] = React.useState('never');
     const [lastUpdate, setLastUpdate] = React.useState('never');
     const { connected, error, ros } = useRosConnection(bridgeUrl);
+
+    const updateRobotNs = React.useCallback((value) => {
+      const nextNs = normalizeNs(value);
+      setRobotNs(nextNs);
+      setPoseTopic(nsJoin(nextNs, 'ground_truth'));
+    }, []);
 
     const refresh = React.useCallback(async () => {
       if (!ros || !connected) return;
@@ -135,10 +199,6 @@
           try { text = JSON.parse(res.value); } catch (ignore) { /* rosapi may already return a plain string */ }
           if (typeof text !== 'string') return;
           setUrdf(text);
-          setJoints((prev) => {
-            const known = new Map(prev.map((joint) => [joint.name, joint.value]));
-            return parseJoints(text).map((joint) => ({ ...joint, value: known.get(joint.name) ?? 0 }));
-          });
         })
         .catch(() => undefined);
       return () => { alive = false; };
@@ -166,7 +226,8 @@
     React.useEffect(() => {
       setPreview(null);
       if (!ros || !connected || selected?.kind !== 'topic' || !details?.type) return undefined;
-      const topic = new ROSLIB.Topic({
+      if (!window.ROSLIB) return undefined;
+      const topic = new window.ROSLIB.Topic({
         ros,
         name: selected.name,
         messageType: details.type,
@@ -178,12 +239,12 @@
     }, [ros, connected, selected, details]);
 
     // Drive the URDF viewer from live joint states so the model mirrors the
-    // actual robot, not just the local sliders.
+    // actual robot.
     const viewerApiRef = React.useRef(null);
-    const liveJointsRef = React.useRef({});
     React.useEffect(() => {
       if (!ros || !connected) return undefined;
-      const topic = new ROSLIB.Topic({
+      if (!window.ROSLIB) return undefined;
+      const topic = new window.ROSLIB.Topic({
         ros,
         name: `${robotNs}/joint_states`,
         messageType: 'sensor_msgs/JointState',
@@ -193,58 +254,46 @@
       topic.subscribe((msg) => {
         const values = {};
         (msg.name || []).forEach((name, index) => { values[name] = msg.position?.[index] ?? 0; });
-        Object.assign(liveJointsRef.current, values);
         viewerApiRef.current?.setJointValues(values);
       });
       return () => topic.unsubscribe();
     }, [ros, connected, robotNs]);
 
-    // Advertise the joint topic once instead of per slider event.
-    const jointTopicRef = React.useRef(null);
+    // Move the whole URDF model from odometry so the browser view can be used
+    // like a lightweight Gazebo pose viewer.
     React.useEffect(() => {
-      if (!ros || !connected) return undefined;
-      const topic = new ROSLIB.Topic({ ros, name: `${robotNs}/joint_states`, messageType: 'sensor_msgs/JointState' });
-      topic.advertise();
-      jointTopicRef.current = topic;
-      return () => {
-        jointTopicRef.current = null;
-        topic.unadvertise();
-      };
-    }, [ros, connected, robotNs]);
-
-    const publishState = React.useRef({ last: 0, timer: 0 });
-    const publishJoints = React.useCallback((nextJoints) => {
-      const send = () => {
-        const topic = jointTopicRef.current;
-        if (!topic) return;
-        publishState.current.last = Date.now();
-        topic.publish(new ROSLIB.Message({
-          header: { stamp: rosTimeNow(), frame_id: '' },
-          name: nextJoints.map((joint) => joint.name),
-          position: nextJoints.map((joint) => Number(joint.value)),
-          velocity: [],
-          effort: [],
-        }));
-      };
-      window.clearTimeout(publishState.current.timer);
-      if (Date.now() - publishState.current.last >= JOINT_PUBLISH_INTERVAL_MS) {
-        send();
-      } else {
-        publishState.current.timer = window.setTimeout(send, JOINT_PUBLISH_INTERVAL_MS);
-      }
-    }, []);
-
-    const lowerFilter = filter.toLowerCase();
-    const filteredNodes = graph.nodes.filter((name) => name.toLowerCase().includes(lowerFilter));
-    const filteredTopics = graph.topics.filter((name) => name.toLowerCase().includes(lowerFilter));
-    const isDracomancer = robotType === 'dracomancer' || robotNs.includes('dracomancer');
+      setBasePose(null);
+      setPoseStamp('never');
+      if (!ros || !connected || !poseTopic) return undefined;
+      if (!window.ROSLIB) return undefined;
+      const topic = new window.ROSLIB.Topic({
+        ros,
+        name: poseTopic,
+        messageType: 'nav_msgs/Odometry',
+        throttle_rate: 50,
+        queue_length: 1,
+      });
+      topic.subscribe((msg) => {
+        const pose = msg.pose?.pose;
+        if (!pose) return;
+        setBasePose(pose);
+        const stamp = msg.header?.stamp;
+        if (stamp && Number.isFinite(stamp.secs)) {
+          setPoseStamp(`${stamp.secs}.${String(stamp.nsecs || 0).padStart(9, '0')}`);
+        } else {
+          setPoseStamp(new Date().toLocaleTimeString());
+        }
+      });
+      return () => topic.unsubscribe();
+    }, [ros, connected, poseTopic]);
 
     return e('main', { className: 'app' },
       e('header', { className: 'app-header' },
-        e('h1', null, 'Aerial Robot Web Console'),
+        e('h1', null, 'DRAGON Lab Aerial Robot Web Console'),
         e('div', { className: 'status-row' },
           e(InfoPill, { label: 'ROS Bridge', value: connected ? 'connected' : (error ? `${error} (retrying...)` : 'connecting...'), tone: connected ? 'ok' : error ? 'bad' : 'warn' }),
           e(InfoPill, { label: 'Robot', value: `${robotType}${robotNs ? ` @ ${robotNs}` : ''}` }),
+          e(InfoPill, { label: 'Pose', value: formatPose(basePose), tone: basePose ? 'ok' : 'warn' }),
           e(InfoPill, { label: 'Nodes / Topics', value: `${graph.nodes.length} / ${graph.topics.length}` }),
           e(InfoPill, { label: 'Last update', value: lastUpdate }),
         ),
@@ -257,22 +306,28 @@
           ),
           e('label', { className: 'field' },
             e('span', { className: 'label' }, 'Namespace'),
-            e('input', { value: robotNs, onChange: (ev) => setRobotNs(normalizeNs(ev.target.value)), placeholder: '/robot_ns' }),
+            e('input', { value: robotNs, onChange: (ev) => updateRobotNs(ev.target.value), placeholder: '/robot_ns' }),
           ),
           e('label', { className: 'field' },
-            e('span', { className: 'label' }, 'Filter'),
-            e('input', { value: filter, onChange: (ev) => setFilter(ev.target.value), placeholder: 'Filter nodes/topics...' }),
+            e('span', { className: 'label' }, 'Odometry Topic'),
+            e('input', { value: poseTopic, onChange: (ev) => setPoseTopic(serviceName(ev.target.value)), placeholder: '/robot/ground_truth' }),
           ),
         ),
         e('button', { onClick: refresh, disabled: !connected }, 'Refresh'),
       ),
       e('section', { className: 'cards' },
-        e(GraphList, { title: 'Nodes', items: filteredNodes, kind: 'node', selected, setSelected, connected, loading: lastUpdate === 'never' }),
-        e(GraphList, { title: 'Topics', items: filteredTopics, kind: 'topic', selected, setSelected, connected, loading: lastUpdate === 'never' }),
-        e(DetailsCard, { selected, details, preview }),
+        e(GraphList, { title: 'Nodes', items: graph.nodes, kind: 'node', selected, setSelected, connected, loading: lastUpdate === 'never' }),
+        e(GraphList, { title: 'Topics', items: graph.topics, kind: 'topic', selected, setSelected, connected, loading: lastUpdate === 'never' }),
+        e(DetailsCard, { selected, details, preview, ros, connected }),
       ),
-      isDracomancer && e(JointPanel, { joints, setJoints, publishJoints, connected, liveJointsRef }),
-      e(UrdfPanel, { urdf, joints, viewerApiRef }),
+      e(UrdfPanel, {
+        urdf, viewerApiRef, basePose, poseTopic, poseStamp,
+        jointTopic: nsJoin(robotNs, 'joint_states'),
+        controls: e('div', { className: 'control-stack' },
+          e(RosbagControl, { ros, connected, topics: graph.topics }),
+          e(FlightControl, { ros, connected, robotNs }),
+        ),
+      }),
     );
   }
 
@@ -281,9 +336,13 @@
   }
 
   function GraphList({ title, items, kind, selected, setSelected, connected, loading }) {
+    const [filter, setFilter] = React.useState('');
+    const [collapsed, setCollapsed] = React.useState(false);
+    const lowerFilter = filter.trim().toLowerCase();
+    const visible = lowerFilter ? items.filter((name) => name.toLowerCase().includes(lowerFilter)) : items;
     let body;
-    if (items.length) {
-      body = items.map((name) => e('button', {
+    if (visible.length) {
+      body = visible.map((name) => e('button', {
         key: `${kind}:${name}`,
         className: `item ${selected?.kind === kind && selected?.name === name ? 'active' : ''}`,
         onClick: () => setSelected({ kind, name }),
@@ -296,9 +355,25 @@
     } else {
       body = e('div', { className: 'empty' }, 'No matching entries');
     }
-    return e('article', { className: 'card' },
-      e('h2', null, `${title} (${items.length})`),
-      e('div', { className: 'list' }, body),
+    return e('article', { className: `card${collapsed ? ' collapsed' : ''}` },
+      e('div', { className: 'card-head list-head' },
+        e('h2', null, `${title} (${lowerFilter ? `${visible.length}/${items.length}` : items.length})`),
+        e('button', {
+          className: 'secondary toggle-btn',
+          onClick: () => setCollapsed((value) => !value),
+          'aria-expanded': !collapsed,
+          'aria-label': collapsed ? `Expand ${title.toLowerCase()} list` : `Collapse ${title.toLowerCase()} list`,
+        }, collapsed ? '▸' : '▾'),
+      ),
+      !collapsed && e(React.Fragment, null,
+        e('input', {
+          className: 'list-filter',
+          value: filter,
+          onChange: (ev) => setFilter(ev.target.value),
+          placeholder: `Filter ${title.toLowerCase()}...`,
+        }),
+        e('div', { className: 'list' }, body),
+      ),
     );
   }
 
@@ -313,11 +388,32 @@
     return text;
   }
 
-  function DetailsCard({ selected, details, preview }) {
+  function formatPose(pose) {
+    if (!pose) return 'waiting...';
+    const p = pose.position || {};
+    return `x ${formatNumber(p.x)} y ${formatNumber(p.y)} z ${formatNumber(p.z)}`;
+  }
+
+  function formatNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number.toFixed(2) : '0.00';
+  }
+
+  function DetailsCard({ selected, details, preview, ros, connected }) {
+    const [collapsed, setCollapsed] = React.useState(false);
     const list = (label, values) => e('div', { className: 'section' }, e('span', { className: 'label' }, label), (values || []).map((value) => e('div', { className: 'meta', key: value }, value)));
-    return e('article', { className: 'card' },
-      e('h2', null, 'Info / Pub-Sub'),
-      selected ? e('div', null,
+    return e('article', { className: `card${collapsed ? ' collapsed' : ''}` },
+      e('div', { className: 'card-head list-head' },
+        e('h2', null, 'Info / Pub-Sub'),
+        e('button', {
+          className: 'secondary toggle-btn',
+          onClick: () => setCollapsed((value) => !value),
+          'aria-expanded': !collapsed,
+          'aria-label': collapsed ? 'Expand info panel' : 'Collapse info panel',
+        }, collapsed ? '▸' : '▾'),
+      ),
+      !collapsed && e('div', { className: 'details-body' },
+        selected ? e('div', null,
         e('div', { className: 'topic-row' }, e('strong', null, selected.name), e('span', { className: 'badge' }, selected.kind)),
         details?.error && e('p', { className: 'value bad' }, details.error),
         !details && !preview && e('div', { className: 'empty' }, 'Loading details...'),
@@ -330,53 +426,303 @@
             e('span', { className: 'label' }, 'Latest message'),
             preview ? e('pre', { className: 'preview' }, formatPreview(preview)) : e('div', { className: 'meta' }, 'Waiting for a message...'),
           ),
+          e(PublishBox, { ros, connected, topic: selected.name, type: details.type }),
         ),
-      ) : e('div', { className: 'empty' }, 'Select a node or topic'),
+        ) : e('div', { className: 'empty' }, 'Select a node or topic'),
+      ),
     );
   }
 
-  function JointPanel({ joints, setJoints, publishJoints, connected, liveJointsRef }) {
-    const update = (index, value) => {
-      const next = joints.map((joint, i) => i === index ? { ...joint, value: Number(value) } : joint);
-      setJoints(next);
-      publishJoints(next);
+  const PRIMITIVE_TYPES = new Set([
+    'bool', 'byte', 'char',
+    'int8', 'uint8', 'int16', 'uint16', 'int32', 'uint32', 'int64', 'uint64',
+    'float32', 'float64', 'string', 'time', 'duration',
+  ]);
+
+  function primitiveTemplate(type) {
+    if (type === 'string') return '';
+    if (type === 'bool') return false;
+    if (type === 'time' || type === 'duration') return { secs: 0, nsecs: 0 };
+    return 0;
+  }
+
+  // Build an empty message skeleton from rosapi/MessageDetails typedefs so the
+  // publish box always starts from a structure that matches the topic type.
+  function buildMessageTemplate(typedefs, rootType) {
+    const byType = new Map((typedefs || []).map((def) => [def.type, def]));
+    const build = (type, depth) => {
+      if (PRIMITIVE_TYPES.has(type)) return primitiveTemplate(type);
+      const def = byType.get(type);
+      if (!def || depth > 12) return {};
+      const message = {};
+      (def.fieldnames || []).forEach((name, index) => {
+        const fieldType = def.fieldtypes?.[index] || 'string';
+        const arrayLen = def.fieldarraylen?.[index] ?? -1;
+        if (arrayLen < 0) {
+          message[name] = build(fieldType, depth + 1);
+        } else if (arrayLen === 0) {
+          message[name] = [];
+        } else {
+          message[name] = Array.from({ length: arrayLen }, () => build(fieldType, depth + 1));
+        }
+      });
+      return message;
     };
-    const reset = () => {
-      const next = joints.map((joint) => ({ ...joint, value: 0 }));
-      setJoints(next);
-      publishJoints(next);
+    return build(rootType, 0);
+  }
+
+  function PublishBox({ ros, connected, topic, type }) {
+    const [text, setText] = React.useState('');
+    const [status, setStatus] = React.useState(null);
+    const publisherRef = React.useRef(null);
+
+    React.useEffect(() => {
+      setStatus(null);
+      setText('');
+      if (!ros || !connected || !type || !window.ROSLIB) return undefined;
+      let alive = true;
+      callService(ros, '/rosapi/message_details', 'rosapi/MessageDetails', { type })
+        .then((res) => {
+          if (!alive) return;
+          setText(JSON.stringify(buildMessageTemplate(res.typedefs, type), null, 2));
+        })
+        .catch(() => alive && setText('{}'));
+      const publisher = new window.ROSLIB.Topic({ ros, name: topic, messageType: type });
+      publisherRef.current = publisher;
+      return () => {
+        alive = false;
+        publisherRef.current = null;
+        try {
+          publisher.unadvertise();
+        } catch (error) {
+          console.warn(error);
+        }
+      };
+    }, [ros, connected, topic, type]);
+
+    const publish = () => {
+      let payload;
+      try {
+        payload = JSON.parse(text);
+      } catch (error) {
+        setStatus({ tone: 'bad', text: `Invalid JSON: ${error.message}` });
+        return;
+      }
+      try {
+        publisherRef.current?.publish(new window.ROSLIB.Message(payload));
+        setStatus({ tone: 'ok', text: `Published at ${new Date().toLocaleTimeString()}` });
+      } catch (error) {
+        setStatus({ tone: 'bad', text: describeError(error, 'publish failed') });
+      }
     };
-    // Copy the robot's current pose into the sliders without publishing, so
-    // the first drag does not command a jump from the real pose.
-    const syncFromRobot = () => {
-      const live = liveJointsRef.current;
-      setJoints(joints.map((joint) => live[joint.name] === undefined
-        ? joint
-        : { ...joint, value: clampValue(live[joint.name], joint.lower, joint.upper) }));
-    };
-    return e('section', { className: 'card section' },
-      e('div', { className: 'card-head' },
-        e('h2', null, 'Dracomancer Joint Input'),
-        e('div', { className: 'button-row' },
-          e('button', { className: 'secondary', onClick: syncFromRobot, disabled: !connected || !joints.length }, 'Sync from robot'),
-          e('button', { className: 'secondary', onClick: reset, disabled: !connected || !joints.length }, 'Reset to 0'),
+
+    return e('div', { className: 'section publish-box' },
+      e('span', { className: 'label' }, `Publish (${type || 'unknown type'})`),
+      e('textarea', {
+        className: 'publish-input',
+        value: text,
+        rows: 8,
+        spellCheck: false,
+        onChange: (ev) => setText(ev.target.value),
+        placeholder: 'Loading message template...',
+      }),
+      e('div', { className: 'publish-actions' },
+        e('button', { onClick: publish, disabled: !connected || !type || !text }, 'Publish'),
+        status && e('span', { className: `value ${status.tone}` }, status.text),
+      ),
+    );
+  }
+
+  // Talks to the RosbagRecorder in aerial_robot_web_server.py over the
+  // /aerial_robot_web/rosbag/{start,stop,status} topics.
+  const ROSBAG_NS = '/aerial_robot_web/rosbag';
+
+  function publishOnce(ros, name, type, payload) {
+    const topic = new window.ROSLIB.Topic({ ros, name, messageType: type });
+    topic.publish(new window.ROSLIB.Message(payload));
+  }
+
+  function loadRosbagSettings() {
+    try {
+      return JSON.parse(window.localStorage.getItem('rosbagSettings')) || {};
+    } catch (ignore) {
+      return {};
+    }
+  }
+
+  function RosbagControl({ ros, connected, topics }) {
+    const [status, setStatus] = React.useState(null);
+    const [open, setOpen] = React.useState(false);
+    const [recordAll, setRecordAll] = React.useState(() => loadRosbagSettings().all !== false);
+    const [picked, setPicked] = React.useState(() => new Set(loadRosbagSettings().topics || []));
+    const [bagDir, setBagDir] = React.useState(() => loadRosbagSettings().bagDir || '');
+    const [pickFilter, setPickFilter] = React.useState('');
+
+    React.useEffect(() => {
+      try {
+        window.localStorage.setItem('rosbagSettings', JSON.stringify({ all: recordAll, topics: [...picked], bagDir }));
+      } catch (ignore) { /* private mode etc.; settings just stop persisting */ }
+    }, [recordAll, picked, bagDir]);
+
+    React.useEffect(() => {
+      setStatus(null);
+      if (!ros || !connected || !window.ROSLIB) return undefined;
+      const sub = new window.ROSLIB.Topic({ ros, name: `${ROSBAG_NS}/status`, messageType: 'std_msgs/String' });
+      sub.subscribe((msg) => {
+        try {
+          setStatus(JSON.parse(msg.data));
+        } catch (ignore) {
+          setStatus(null);
+        }
+      });
+      return () => sub.unsubscribe();
+    }, [ros, connected]);
+
+    const recording = Boolean(status?.recording);
+    const start = () => publishOnce(ros, `${ROSBAG_NS}/start`, 'std_msgs/String', {
+      data: JSON.stringify({ all: recordAll, topics: recordAll ? [] : [...picked], bag_dir: bagDir.trim() }),
+    });
+    const stop = () => publishOnce(ros, `${ROSBAG_NS}/stop`, 'std_msgs/Empty', {});
+
+    let statusText = recordAll ? 'ready (all topics)' : `ready (${picked.size} topic(s))`;
+    if (status?.error) statusText = status.error;
+    else if (recording) statusText = `recording ${status.all ? 'all topics' : `${status.topics.length} topic(s)`}`;
+    else if (status?.bag_path) statusText = `saved: ${status.bag_path.split('/').pop()}`;
+
+    const lowerPickFilter = pickFilter.trim().toLowerCase();
+    const pickable = lowerPickFilter ? topics.filter((name) => name.toLowerCase().includes(lowerPickFilter)) : topics;
+    const togglePick = (name) => setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+
+    return e('div', { className: 'flight-control' },
+      e('span', { className: 'label' }, 'Rosbag'),
+      e('div', { className: 'fc-row rosbag-row' },
+        recording
+          ? e('button', { className: 'fc-btn danger', onClick: stop }, '■ Stop recording')
+          : e('button', {
+            className: 'fc-btn',
+            onClick: start,
+            disabled: !connected || (!recordAll && !picked.size),
+          }, '● Record rosbag'),
+        e('button', {
+          className: 'secondary fc-btn gear-btn',
+          onClick: () => setOpen(true),
+          'aria-label': 'Rosbag settings',
+        }, '⚙'),
+      ),
+      e('p', { className: `meta fc-status${status?.error ? ' bad' : ''}` }, statusText),
+      open && e('div', { className: 'modal-overlay', onClick: () => setOpen(false) },
+        e('div', { className: 'modal', onClick: (ev) => ev.stopPropagation() },
+          e('h3', null, 'Rosbag settings'),
+          e('label', { className: 'field modal-field' },
+            e('span', { className: 'label' }, 'Bag folder (on the robot)'),
+            e('input', {
+              className: 'list-filter',
+              value: bagDir,
+              onChange: (ev) => setBagDir(ev.target.value),
+              placeholder: 'server default (~/rosbags)',
+            }),
+          ),
+          e('label', { className: 'check-row all-row' },
+            e('input', { type: 'checkbox', checked: recordAll, onChange: (ev) => setRecordAll(ev.target.checked) }),
+            e('span', null, 'Record all topics (rosbag record -a)'),
+          ),
+          !recordAll && e(React.Fragment, null,
+            e('input', {
+              className: 'list-filter',
+              value: pickFilter,
+              onChange: (ev) => setPickFilter(ev.target.value),
+              placeholder: 'Filter topics...',
+            }),
+            e('div', { className: 'modal-tools' },
+              e('button', { className: 'secondary', onClick: () => setPicked(new Set([...picked, ...pickable])) }, 'Select shown'),
+              e('button', { className: 'secondary', onClick: () => setPicked(new Set()) }, 'Clear'),
+            ),
+            e('div', { className: 'modal-list' },
+              pickable.length
+                ? pickable.map((name) => e('label', { className: 'check-row', key: name },
+                  e('input', { type: 'checkbox', checked: picked.has(name), onChange: () => togglePick(name) }),
+                  e('span', null, name)))
+                : e('div', { className: 'empty' }, 'No matching topics'),
+            ),
+          ),
+          e('div', { className: 'modal-actions' },
+            e('button', { onClick: () => setOpen(false) }, recordAll ? 'Done (all topics)' : `Done (${picked.size} selected)`),
+          ),
         ),
       ),
-      e('p', { className: 'meta' }, 'Sliders publish sensor_msgs/JointState to the selected robot namespace. Use "Sync from robot" before dragging to start from the current pose.'),
-      joints.length ? e('div', { className: 'list' }, joints.map((joint, index) => e('div', { className: 'joint-row', key: joint.name },
-        e('div', { className: 'joint-head' }, e('strong', null, joint.name), e('span', { className: 'badge' }, `${toFixed(joint.value)} ${joint.unit}`)),
-        e('input', { type: 'range', min: joint.lower, max: joint.upper, step: 0.005, value: joint.value, disabled: !connected, onChange: (ev) => update(index, ev.target.value), 'aria-label': `${joint.name} position` }),
-        e('div', { className: 'meta' }, `${toFixed(joint.lower)} ... ${toFixed(joint.upper)} ${joint.unit}`),
-      ))) : e('div', { className: 'empty' }, 'Waiting for robot_description joint limits...'),
     );
   }
 
-  function UrdfPanel({ urdf, joints, viewerApiRef }) {
-    const ref = React.useRef(null);
+  // Mirrors aerial_robot_base/scripts/keyboard_command.py: Empty teleop
+  // commands plus FlightNav velocity nudges.
+  const FLIGHT_NAV = { VEL_MODE: 1, WORLD_FRAME: 0, COG: 1 };
+  const TELEOP_XY_VEL = 0.2;
+  const TELEOP_Z_VEL = 0.2;
+  const TELEOP_YAW_VEL = 0.2;
+
+  function FlightControl({ ros, connected, robotNs }) {
+    const [status, setStatus] = React.useState('');
+    const send = (topicName, type, payload, label) => {
+      if (!ros || !connected || !window.ROSLIB) return;
+      try {
+        const topic = new window.ROSLIB.Topic({ ros, name: topicName, messageType: type });
+        topic.publish(new window.ROSLIB.Message(payload));
+        setStatus(`sent ${label}`);
+      } catch (error) {
+        setStatus(describeError(error, 'publish failed'));
+      }
+    };
+    const teleop = (command, label) => send(nsJoin(robotNs, `teleop_command/${command}`), 'std_msgs/Empty', {}, label);
+    const nav = (fields, label) => send(nsJoin(robotNs, 'uav/nav'), 'aerial_robot_msgs/FlightNav', {
+      control_frame: FLIGHT_NAV.WORLD_FRAME,
+      target: FLIGHT_NAV.COG,
+      ...fields,
+    }, label);
+    const btn = (label, onClick, extra) => e('button', {
+      className: `fc-btn${extra ? ` ${extra}` : ''}`,
+      onClick,
+      disabled: !connected,
+    }, label);
+    return e('div', { className: 'flight-control' },
+      e('span', { className: 'label' }, 'Flight Control'),
+      e('div', { className: 'fc-row fc-row-2' },
+        btn('Arm', () => teleop('start', 'arm')),
+        btn('Takeoff', () => teleop('takeoff', 'takeoff')),
+      ),
+      e('div', { className: 'fc-row fc-row-3' },
+        btn('↺ Yaw', () => nav({ yaw_nav_mode: FLIGHT_NAV.VEL_MODE, target_omega_z: TELEOP_YAW_VEL }, '+yaw vel')),
+        btn('↑ Fwd', () => nav({ pos_xy_nav_mode: FLIGHT_NAV.VEL_MODE, target_vel_x: TELEOP_XY_VEL }, '+x vel')),
+        btn('↻ Yaw', () => nav({ yaw_nav_mode: FLIGHT_NAV.VEL_MODE, target_omega_z: -TELEOP_YAW_VEL }, '-yaw vel')),
+      ),
+      e('div', { className: 'fc-row fc-row-3' },
+        btn('← Left', () => nav({ pos_xy_nav_mode: FLIGHT_NAV.VEL_MODE, target_vel_y: TELEOP_XY_VEL }, '+y vel')),
+        btn('↓ Back', () => nav({ pos_xy_nav_mode: FLIGHT_NAV.VEL_MODE, target_vel_x: -TELEOP_XY_VEL }, '-x vel')),
+        btn('→ Right', () => nav({ pos_xy_nav_mode: FLIGHT_NAV.VEL_MODE, target_vel_y: -TELEOP_XY_VEL }, '-y vel')),
+      ),
+      e('div', { className: 'fc-row fc-row-2' },
+        btn('▲ Up', () => nav({ pos_z_nav_mode: FLIGHT_NAV.VEL_MODE, target_vel_z: TELEOP_Z_VEL }, '+z vel')),
+        btn('▼ Down', () => nav({ pos_z_nav_mode: FLIGHT_NAV.VEL_MODE, target_vel_z: -TELEOP_Z_VEL }, '-z vel')),
+      ),
+      e('div', { className: 'fc-row fc-row-3' },
+        btn('Land', () => teleop('land', 'land')),
+        btn('F.Land', () => teleop('force_landing', 'force landing'), 'danger'),
+        btn('Halt', () => teleop('halt', 'halt'), 'danger'),
+      ),
+      e('p', { className: 'meta fc-status' }, status || `vel step: ${TELEOP_XY_VEL} m/s, ${TELEOP_YAW_VEL} rad/s`),
+    );
+  }
+
+  function UrdfPanel({ urdf, viewerApiRef, basePose, poseTopic, poseStamp, jointTopic, controls }) {
+    const viewerRef = React.useRef(null);
     const [message, setMessage] = React.useState('Waiting for robot_description...');
     const [meshNotice, setMeshNotice] = React.useState('');
     React.useEffect(() => {
-      if (!urdf || !ref.current) return undefined;
+      if (!urdf || !viewerRef.current) return undefined;
       if (!window.AerialRobotUrdfViewer) {
         setMessage('URDF viewer module is still loading.');
         return undefined;
@@ -386,12 +732,13 @@
       const options = {
         onMeshError: (count) => !cancelled && setMeshNotice(`${count} mesh file(s) failed to load; showing partial model.`),
       };
-      window.AerialRobotUrdfViewer(ref.current, urdf, options).then((viewer) => {
+      window.AerialRobotUrdfViewer(viewerRef.current, urdf, options).then((viewer) => {
         if (cancelled) {
           viewer.dispose();
           return;
         }
         viewerApiRef.current = viewer;
+        if (basePose) viewer.setBasePose(basePose);
         setMessage('');
       }).catch((err) => setMessage(`3D viewer unavailable: ${err.message || err}`));
       return () => {
@@ -401,16 +748,21 @@
       };
     }, [urdf, viewerApiRef]);
     React.useEffect(() => {
-      if (!viewerApiRef.current || !joints.length) return;
-      viewerApiRef.current.setJointValues(Object.fromEntries(joints.map((joint) => [joint.name, joint.value])));
-    }, [joints, message, viewerApiRef]);
+      viewerApiRef.current?.setBasePose(basePose);
+    }, [basePose, viewerApiRef]);
     return e('section', { className: 'card section' },
-      e('h2', null, 'URDF Viewer'),
-      e('p', { className: 'meta' }, 'Touch-drag to orbit. The model follows live /joint_states and the sliders.'),
-      e('div', { className: 'viewer', ref }, message && e('div', { className: 'empty' }, message)),
+      e('h2', null, 'Live Robot Model (URDF + Odometry)'),
+      e('p', { className: 'meta' }, `Touch-drag to orbit. The model follows ${poseTopic} and live ${jointTopic}. Last pose: ${poseStamp}.`),
+      e('div', { className: 'viewer-row' },
+        e('div', { className: 'viewer' },
+          e('div', { className: 'viewer-host', ref: viewerRef }),
+          message && e('div', { className: 'viewer-message' }, e('div', { className: 'empty' }, message)),
+        ),
+        controls,
+      ),
       meshNotice && e('p', { className: 'meta' }, meshNotice),
     );
   }
 
-  ReactDOM.createRoot(document.getElementById('root')).render(e(App));
+  ReactDOM.createRoot(document.getElementById('root')).render(e(ErrorBoundary, null, e(App)));
 })();

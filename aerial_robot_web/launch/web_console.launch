@@ -2,12 +2,18 @@
 <launch>
   <arg name="robot_ns" default="" />
   <arg name="robot_type" default="generic" />
+  <arg name="pose_topic" default="" />
   <arg name="web_port" default="8080" />
   <arg name="rosbridge_port" default="9090" />
   <arg name="launch_rosbridge" default="true" />
+  <arg name="rosbridge_output" default="log" />
+  <arg name="auto_install_qr_dependency" default="true" />
+  <arg name="banner_delay" default="8.0" />
+  <arg name="rosbag_dir" default="$(optenv HOME /tmp)/rosbags" />
 
   <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" if="$(arg launch_rosbridge)">
     <arg name="port" value="$(arg rosbridge_port)" />
+    <arg name="output" value="$(arg rosbridge_output)" />
   </include>
 
   <node pkg="aerial_robot_web"
@@ -16,7 +22,11 @@
         output="screen">
     <param name="port" value="$(arg web_port)" />
     <param name="rosbridge_port" value="$(arg rosbridge_port)" />
+    <param name="auto_install_qr_dependency" value="$(arg auto_install_qr_dependency)" />
+    <param name="banner_delay" value="$(arg banner_delay)" />
+    <param name="rosbag_dir" value="$(arg rosbag_dir)" />
     <param name="robot_ns" value="$(arg robot_ns)" />
     <param name="robot_type" value="$(arg robot_type)" />
+    <param name="pose_topic" value="$(arg pose_topic)" />
   </node>
 </launch>

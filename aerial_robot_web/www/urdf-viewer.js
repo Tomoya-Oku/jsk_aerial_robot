@@ -9,14 +9,14 @@ async function loadDependencies() {
   return DEPS;
 }
 
-const VIEWER_HEIGHT = 360;
+const VIEWER_HEIGHT = 500;
 
 window.AerialRobotUrdfViewer = async function renderUrdfViewer(container, urdfText, options = {}) {
   const { THREE, OrbitControls, URDFLoader } = await loadDependencies();
   container.replaceChildren();
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0d1426);
+  scene.background = new THREE.Color(0xf6f6f6);
   const camera = new THREE.PerspectiveCamera(45, (container.clientWidth || 320) / VIEWER_HEIGHT, 0.01, 1000);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
@@ -27,8 +27,10 @@ window.AerialRobotUrdfViewer = async function renderUrdfViewer(container, urdfTe
   const light = new THREE.DirectionalLight(0xffffff, 0.9);
   light.position.set(3, 5, 4);
   scene.add(light);
-  const grid = new THREE.GridHelper(4, 20, 0x33506c, 0x1f2a44);
+  const grid = new THREE.GridHelper(10, 20, 0x9a9a9a, 0xd6d6d6);
   scene.add(grid);
+  const axes = new THREE.AxesHelper(1.0);
+  scene.add(axes);
 
   // STL/DAE meshes load asynchronously through the manager; framing is
   // redone in onLoad once real geometry exists.
@@ -44,8 +46,10 @@ window.AerialRobotUrdfViewer = async function renderUrdfViewer(container, urdfTe
   // HTTP server under /pkg/<pkg>/<path>.
   loader.packages = (pkg) => `/pkg/${pkg}`;
   const robot = loader.parse(urdfText);
+  const robotRoot = new THREE.Group();
   robot.rotation.x = -Math.PI / 2;
-  scene.add(robot);
+  robotRoot.add(robot);
+  scene.add(robotRoot);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -58,12 +62,12 @@ window.AerialRobotUrdfViewer = async function renderUrdfViewer(container, urdfTe
     const size = box.getSize(new THREE.Vector3());
     robot.position.sub(center);
     const maxDim = Math.max(size.x, size.y, size.z, 0.1);
-    camera.position.set(maxDim * 1.8, maxDim * 1.6, maxDim * 1.2);
+    const distance = Math.max(maxDim * 2.4, 3.0);
+    camera.position.set(distance, distance * 0.75, distance * 0.8);
     camera.near = maxDim / 100;
-    camera.far = maxDim * 100;
+    camera.far = Math.max(maxDim * 100, 200);
     camera.updateProjectionMatrix();
-    grid.position.y = -size.y / 2;
-    controls.target.set(0, 0, 0);
+    controls.target.copy(robotRoot.position);
     controls.update();
   };
   frame();
@@ -84,13 +88,43 @@ window.AerialRobotUrdfViewer = async function renderUrdfViewer(container, urdfTe
   }
 
   let running = true;
+  let followRobot = true;
   const animate = () => {
     if (!running) return;
     requestAnimationFrame(animate);
+    if (followRobot) controls.target.lerp(robotRoot.position, 0.12);
     controls.update();
     renderer.render(scene, camera);
   };
   animate();
+
+  const rosBasis = new THREE.Matrix4().makeBasis(
+    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector3(0, 0, -1),
+    new THREE.Vector3(0, 1, 0),
+  );
+  const rosBasisInverse = rosBasis.clone().invert();
+  const rosRotation = new THREE.Matrix4();
+  const threeRotation = new THREE.Matrix4();
+
+  function applyRosPose(pose) {
+    const position = pose?.position || {};
+    const orientation = pose?.orientation || {};
+    robotRoot.position.set(
+      Number(position.x) || 0,
+      Number(position.z) || 0,
+      -(Number(position.y) || 0),
+    );
+    const q = new THREE.Quaternion(
+      Number(orientation.x) || 0,
+      Number(orientation.y) || 0,
+      Number(orientation.z) || 0,
+      Number(orientation.w) || 1,
+    ).normalize();
+    rosRotation.makeRotationFromQuaternion(q);
+    threeRotation.multiplyMatrices(rosBasis, rosRotation).multiply(rosBasisInverse);
+    robotRoot.quaternion.setFromRotationMatrix(threeRotation);
+  }
 
   return {
     setJointValues(values) {
@@ -99,6 +133,12 @@ window.AerialRobotUrdfViewer = async function renderUrdfViewer(container, urdfTe
       } else {
         Object.entries(values).forEach(([name, value]) => robot.joints?.[name]?.setJointValue(value));
       }
+    },
+    setBasePose(pose) {
+      applyRosPose(pose);
+    },
+    setFollowRobot(value) {
+      followRobot = Boolean(value);
     },
     dispose() {
       running = false;

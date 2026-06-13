@@ -34,11 +34,11 @@
   <arg name="mujoco" default="False" />
 
   ###########  Mobile Web Console  ###########
-  <arg name="launch_web_console" default="True" />
+  <arg name="web" default="False" />
+  <arg name="launch_web_console" default="$(arg web)" />
   <arg name="web_console_port" default="8080" />
   <arg name="web_console_rosbridge_port" default="9090" />
   <arg name="web_console_launch_rosbridge" default="True" />
-  <arg name="config_dir" default="$(find dragon)/config/$(arg link_num)/$(arg model_name)" />
 
   <arg name="headless" default="True" />
 
