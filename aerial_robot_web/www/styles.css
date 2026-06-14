@@ -319,3 +319,37 @@ input[type="range"]:disabled { cursor: default; }
   content: ''; position: absolute; left: calc(50% - 0.5px);
   top: 0; bottom: 0; width: 1px; background: var(--muted); z-index: 1;
 }
+
+/* ---- Servo Monitor tab ---- */
+.servo-panel { display: grid; gap: 14px; padding-bottom: 24px; }
+.servo-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.servo-toolbar .field { flex: 0 0 auto; }
+.servo-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-card); }
+.servo-table {
+  border-collapse: collapse;
+  font-family: var(--font-data); font-size: 0.78rem;
+  min-width: 820px; width: 100%;
+}
+.servo-table th,
+.servo-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: right; white-space: nowrap;
+}
+.servo-table th {
+  background: var(--surface-2); font-weight: 600;
+  text-align: center; position: sticky; top: 0; z-index: 1;
+}
+.servo-table tbody tr:hover { background: var(--surface-2); }
+.servo-table tbody tr:last-child td { border-bottom: none; }
+.servo-table td:first-child { text-align: center; padding: 3px 6px; }
+.servo-row-err { background: color-mix(in srgb, var(--bad) 8%, transparent); }
+.servo-trq-btn {
+  padding: 3px 10px; font-size: 0.72rem; font-weight: 700;
+  border-radius: 3px; cursor: pointer; min-width: 40px;
+  border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--text-dim);
+}
+.servo-trq-btn.on  { background: var(--ok);  color: #fff; border-color: var(--ok); }
+.servo-trq-btn.off { background: var(--surface-2); color: var(--text-dim); }
+.servo-trq-btn:disabled { opacity: 0.4; cursor: default; }

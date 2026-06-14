@@ -320,10 +320,13 @@
       isDracomancer && e('div', { className: 'tab-bar' },
         e('button', { className: `tab-btn${tab === 'console' ? ' active' : ''}`, onClick: () => setTab('console') }, 'Overview'),
         e('button', { className: `tab-btn${tab === 'dracomancer' ? ' active' : ''}`, onClick: () => setTab('dracomancer') }, 'Dracomancer'),
+        e('button', { className: `tab-btn${tab === 'servo' ? ' active' : ''}`, onClick: () => setTab('servo') }, 'Servo Monitor'),
       ),
       isDracomancer && tab === 'dracomancer'
         ? e(DracomancerPanel, { ros, connected, robotNs, urdf, basePose, poseTopic, poseStamp })
-        : e(React.Fragment, null,
+        : isDracomancer && tab === 'servo'
+          ? e(ServoMonitorTab, { ros, connected, robotNs })
+          : e(React.Fragment, null,
             e('section', { className: 'cards' },
               e(GraphList, { title: 'Nodes', items: graph.nodes, kind: 'node', selected, setSelected, connected, loading: lastUpdate === 'never' }),
               e(GraphList, { title: 'Topics', items: graph.topics, kind: 'topic', selected, setSelected, connected, loading: lastUpdate === 'never' }),
@@ -1079,6 +1082,140 @@
             )
           : e('div', { className: 'empty' }, `Waiting for ${nsJoin(dragonNs, 'joint_states')}...`),
       ),
+    );
+  }
+
+  // ---- Servo Monitor tab ----
+
+  function ServoMonitorTab({ ros, connected, robotNs }) {
+    const [servoNs, setServoNs] = React.useState(robotNs || '');
+    const [boardData, setBoardData] = React.useState([]);
+    const [servoStates, setServoStates] = React.useState({});
+    const [torqueStates, setTorqueStates] = React.useState({});
+    const [fetchStatus, setFetchStatus] = React.useState('');
+    const torquePubRef = React.useRef(null);
+
+    React.useEffect(() => {
+      if (!ros || !connected || !window.ROSLIB) return undefined;
+      const topic = new window.ROSLIB.Topic({
+        ros, name: nsJoin(servoNs, 'servo/states'),
+        messageType: 'spinal/ServoStates', throttle_rate: 200, queue_length: 1,
+      });
+      topic.subscribe((msg) => {
+        setServoStates((prev) => {
+          const next = { ...prev };
+          (msg.servos || []).forEach((s) => { next[s.index] = { angle: s.angle, temp: s.temp, load: s.load, error: s.error }; });
+          return next;
+        });
+      });
+      return () => topic.unsubscribe();
+    }, [ros, connected, servoNs]);
+
+    React.useEffect(() => {
+      if (!ros || !connected || !window.ROSLIB) return undefined;
+      const topic = new window.ROSLIB.Topic({
+        ros, name: nsJoin(servoNs, 'servo/torque_states'),
+        messageType: 'spinal/ServoTorqueStates', throttle_rate: 500, queue_length: 1,
+      });
+      topic.subscribe((msg) => {
+        const next = {};
+        (msg.torque_enable || []).forEach((v, i) => { next[i] = !!v; });
+        setTorqueStates(next);
+      });
+      return () => topic.unsubscribe();
+    }, [ros, connected, servoNs]);
+
+    React.useEffect(() => {
+      if (!ros || !connected || !window.ROSLIB) { torquePubRef.current = null; return undefined; }
+      const pub = new window.ROSLIB.Topic({ ros, name: nsJoin(servoNs, 'servo/torque_enable'), messageType: 'spinal/ServoTorqueCmd' });
+      torquePubRef.current = pub;
+      return () => { torquePubRef.current = null; try { pub.unadvertise(); } catch (err) { console.warn(err); } };
+    }, [ros, connected, servoNs]);
+
+    const fetchBoardInfo = React.useCallback(() => {
+      if (!ros || !connected) { setFetchStatus('Not connected'); return; }
+      setFetchStatus('Fetching...');
+      callService(ros, nsJoin(servoNs, 'get_board_info'), 'spinal/GetBoardInfo', {})
+        .then((res) => {
+          let idx = 0;
+          const rows = [];
+          (res.boards || []).forEach((b) => {
+            (b.servos || []).forEach((s, i) => {
+              rows.push({ index: idx++, boardId: b.slave_id, servoIdx: i, servoId: s.id, pGain: s.p_gain, iGain: s.i_gain, dGain: s.d_gain, profileVelocity: s.profile_velocity, currentLimit: s.current_limit, sendDataFlag: !!s.send_data_flag });
+            });
+          });
+          setBoardData(rows);
+          setFetchStatus(`Updated ${new Date().toLocaleTimeString()}`);
+        })
+        .catch((err) => setFetchStatus(describeError(err, 'get_board_info failed')));
+    }, [ros, connected, servoNs]);
+
+    React.useEffect(() => { if (connected) fetchBoardInfo(); }, [connected]);
+
+    const publishTorque = (indices, enable) => {
+      if (!torquePubRef.current || !window.ROSLIB) return;
+      torquePubRef.current.publish(new window.ROSLIB.Message({
+        index: indices.map(Number),
+        torque_enable: indices.map(() => enable ? 1 : 0),
+      }));
+    };
+
+    const decodeError = (error) => {
+      if (!error) return '—';
+      const flags = [[0x80,'Enc.Conn'],[0x40,'Resol'],[0x20,'Overload'],[0x10,'Elec.Shock'],[0x08,'MotorEnc'],[0x04,'Overheat'],[0x02,'PulleySkip'],[0x01,'VoltIn']];
+      const errs = flags.filter(([m]) => error & m).map(([,n]) => n);
+      return errs.length ? errs.join(' | ') : '—';
+    };
+
+    const COLS = ['Torque','Index','Board','Srv.Idx','ID','Angle (tick)','Temp (°C)','Load','Error','P / I / D','Prof.Vel','Cur.Lim','Send Flag'];
+
+    return e('div', { className: 'servo-panel' },
+      e('div', { className: 'servo-toolbar' },
+        e('label', { className: 'field' },
+          e('span', { className: 'label' }, 'Servo Namespace'),
+          e('input', { value: servoNs, onChange: (ev) => setServoNs(normalizeNs(ev.target.value)), placeholder: robotNs }),
+        ),
+        e('button', { onClick: fetchBoardInfo, disabled: !connected }, 'Update Board Info'),
+        e('button', { onClick: () => publishTorque(boardData.map((r) => r.index), true), disabled: !connected || !boardData.length }, 'All Torque ON'),
+        e('button', { onClick: () => publishTorque(boardData.map((r) => r.index), false), disabled: !connected || !boardData.length }, 'All Torque OFF'),
+        fetchStatus && e('span', { className: 'meta' }, fetchStatus),
+      ),
+      boardData.length === 0
+        ? e('div', { className: 'empty' }, connected ? 'No board data — click "Update Board Info" (requires rm:=true and servo bridge running).' : 'Waiting for rosbridge connection...')
+        : e('div', { className: 'servo-table-wrap' },
+            e('table', { className: 'servo-table' },
+              e('thead', null, e('tr', null, COLS.map((h) => e('th', { key: h }, h)))),
+              e('tbody', null,
+                boardData.map((row) => {
+                  const st = servoStates[row.index] || {};
+                  const torque = torqueStates[row.index];
+                  const hasError = st.error != null && st.error !== 0;
+                  const hot = st.temp != null && st.temp > 60;
+                  return e('tr', { key: row.index, className: hasError ? 'servo-row-err' : '' },
+                    e('td', null,
+                      e('button', {
+                        className: `servo-trq-btn${torque === true ? ' on' : torque === false ? ' off' : ''}`,
+                        onClick: () => publishTorque([row.index], !torque),
+                        disabled: !connected,
+                      }, torque == null ? '?' : torque ? 'ON' : 'OFF'),
+                    ),
+                    e('td', null, row.index),
+                    e('td', null, row.boardId),
+                    e('td', null, row.servoIdx),
+                    e('td', null, row.servoId),
+                    e('td', null, st.angle != null ? st.angle : '—'),
+                    e('td', { className: hot ? 'warn' : '' }, st.temp != null ? st.temp : '—'),
+                    e('td', null, st.load != null ? st.load : '—'),
+                    e('td', { className: hasError ? 'bad' : '' }, decodeError(st.error)),
+                    e('td', { className: 'meta' }, `${row.pGain} / ${row.iGain} / ${row.dGain}`),
+                    e('td', null, row.profileVelocity),
+                    e('td', null, row.currentLimit),
+                    e('td', null, String(row.sendDataFlag)),
+                  );
+                }),
+              ),
+            ),
+          ),
     );
   }
 
