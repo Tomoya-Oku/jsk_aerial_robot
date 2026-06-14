@@ -263,3 +263,59 @@ input[type="range"]:disabled { cursor: default; }
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   .skeleton-row { animation: none; background: #e9e9e9; }
 }
+
+/* ---- Tab bar ---- */
+.tab-bar { display: flex; gap: 4px; margin: 14px 0 0; }
+.tab-btn {
+  border: 1px solid var(--line); border-radius: var(--radius-control);
+  min-height: 40px; padding: 8px 18px;
+  background: var(--surface-2); color: var(--muted);
+  font-weight: 600; font-family: var(--font-data); font-size: 0.88rem; cursor: pointer;
+  transition: background 180ms ease-out, color 180ms ease-out, border-color 180ms ease-out;
+}
+.tab-btn:hover:not(:disabled) { color: var(--text); border-color: var(--ink); }
+.tab-btn.active { background: var(--ink); color: #ffffff; border-color: var(--ink); }
+
+/* ---- Dracomancer panel ---- */
+.drac-panel { display: grid; gap: 14px; margin-top: 14px; }
+.drac-ns-bar { display: flex; gap: 12px; align-items: end; }
+.drac-ns-field { min-width: 200px; }
+.drac-ns-field input {
+  width: 100%; padding: 12px 14px; border-radius: var(--radius-control);
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--text);
+  transition: border-color 180ms ease-out, box-shadow 180ms ease-out;
+}
+.drac-ns-field input:focus {
+  outline: none; border-color: var(--ink); box-shadow: 0 0 0 2px rgba(17, 17, 17, 0.12);
+}
+.drac-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; align-items: start; }
+.drac-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.drac-metric { display: grid; gap: 4px; }
+.drac-gauge-row { margin-top: 10px; display: grid; gap: 4px; }
+.drac-axes { display: grid; gap: 12px; }
+.drac-axis-row { display: grid; gap: 4px; }
+.drac-axis-head { display: flex; justify-content: space-between; align-items: center; }
+.drac-action-card { display: grid; gap: 10px; }
+.drac-joints { display: grid; gap: 10px; }
+.drac-joint-row { display: grid; gap: 4px; }
+.drac-joint-head { display: flex; justify-content: space-between; align-items: center; }
+.drac-joint-name { font-family: var(--font-data); font-size: 0.82rem; color: var(--text); }
+
+/* ---- Gauge bar (shared by joystick, joints, safety) ---- */
+.gauge-track {
+  position: relative; height: 8px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 4px; overflow: hidden;
+}
+.gauge-fill {
+  position: absolute; top: 0; height: 100%;
+  background: var(--ink); border-radius: 4px;
+  transition: width 80ms linear, left 80ms linear;
+}
+.gauge-fill.ok { background: var(--ok); }
+.gauge-fill.warn { background: var(--warn); }
+.gauge-fill.bad { background: var(--bad); }
+.gauge-track.bipolar::before {
+  content: ''; position: absolute; left: calc(50% - 0.5px);
+  top: 0; bottom: 0; width: 1px; background: var(--muted); z-index: 1;
+}

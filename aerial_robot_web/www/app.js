@@ -161,6 +161,8 @@
     const [poseStamp, setPoseStamp] = React.useState('never');
     const [lastUpdate, setLastUpdate] = React.useState('never');
     const { connected, error, ros } = useRosConnection(bridgeUrl);
+    const [tab, setTab] = React.useState('console');
+    const isDracomancer = robotType === 'dracomancer';
 
     const updateRobotNs = React.useCallback((value) => {
       const nextNs = normalizeNs(value);
@@ -315,19 +317,27 @@
         ),
         e('button', { onClick: refresh, disabled: !connected }, 'Refresh'),
       ),
-      e('section', { className: 'cards' },
-        e(GraphList, { title: 'Nodes', items: graph.nodes, kind: 'node', selected, setSelected, connected, loading: lastUpdate === 'never' }),
-        e(GraphList, { title: 'Topics', items: graph.topics, kind: 'topic', selected, setSelected, connected, loading: lastUpdate === 'never' }),
-        e(DetailsCard, { selected, details, preview, ros, connected }),
+      isDracomancer && e('div', { className: 'tab-bar' },
+        e('button', { className: `tab-btn${tab === 'console' ? ' active' : ''}`, onClick: () => setTab('console') }, 'Overview'),
+        e('button', { className: `tab-btn${tab === 'dracomancer' ? ' active' : ''}`, onClick: () => setTab('dracomancer') }, 'Dracomancer'),
       ),
-      e(UrdfPanel, {
-        urdf, viewerApiRef, basePose, poseTopic, poseStamp,
-        jointTopic: nsJoin(robotNs, 'joint_states'),
-        controls: e('div', { className: 'control-stack' },
-          e(RosbagControl, { ros, connected, topics: graph.topics }),
-          e(FlightControl, { ros, connected, robotNs }),
-        ),
-      }),
+      isDracomancer && tab === 'dracomancer'
+        ? e(DracomancerPanel, { ros, connected, robotNs, urdf, basePose, poseTopic, poseStamp })
+        : e(React.Fragment, null,
+            e('section', { className: 'cards' },
+              e(GraphList, { title: 'Nodes', items: graph.nodes, kind: 'node', selected, setSelected, connected, loading: lastUpdate === 'never' }),
+              e(GraphList, { title: 'Topics', items: graph.topics, kind: 'topic', selected, setSelected, connected, loading: lastUpdate === 'never' }),
+              e(DetailsCard, { selected, details, preview, ros, connected }),
+            ),
+            e(UrdfPanel, {
+              urdf, viewerApiRef, basePose, poseTopic, poseStamp,
+              jointTopic: nsJoin(robotNs, 'joint_states'),
+              controls: e('div', { className: 'control-stack' },
+                e(RosbagControl, { ros, connected, topics: graph.topics }),
+                e(FlightControl, { ros, connected, robotNs }),
+              ),
+            }),
+          ),
     );
   }
 
@@ -761,6 +771,314 @@
         controls,
       ),
       meshNotice && e('p', { className: 'meta' }, meshNotice),
+    );
+  }
+
+  // ---- Dracomancer tab ----
+
+  const DRACOMANCER_JOINT_NAMES = [
+    'shoulder_abduction_adduction_joint',
+    'shoulder_flexion_extension_joint',
+    'upper_arm_external_internal_rotation_joint',
+    'elbow_flexion_extension_joint',
+    'wrist_supination_joint',
+    'wrist_flexion_extension_joint',
+    'wrist_abduction_adduction_joint',
+  ];
+
+  const DRACOMANCER_JOINT_LABELS = {
+    shoulder_abduction_adduction_joint: 'Shoulder Abd/Add',
+    shoulder_flexion_extension_joint: 'Shoulder Flex/Ext',
+    upper_arm_external_internal_rotation_joint: 'Upper Arm Rot',
+    elbow_flexion_extension_joint: 'Elbow Flex/Ext',
+    wrist_supination_joint: 'Wrist Supination',
+    wrist_flexion_extension_joint: 'Wrist Flex/Ext',
+    wrist_abduction_adduction_joint: 'Wrist Abd/Add',
+  };
+
+  const JOINT_LIMIT_RAD = Math.PI / 2;
+
+  function JointControlCard({ connected, deviceNs, names, positions, onSetJoint, onResetAll }) {
+    return e('div', { className: 'flight-control' },
+      e('span', { className: 'label' }, 'Joint Control'),
+      e('p', { className: 'meta' }, `→ ${nsJoin(deviceNs, 'joint_cmd')}`),
+      e('div', { className: 'fc-row' },
+        e('button', { className: 'secondary', onClick: onResetAll, disabled: !connected }, 'Reset All to 0°'),
+      ),
+      e('div', { className: 'drac-joints', style: { marginTop: '10px' } },
+        names.map((name, i) => {
+          const val = positions[i] ?? 0;
+          const label = DRACOMANCER_JOINT_LABELS[name] || name;
+          return e('div', { className: 'drac-joint-row', key: name },
+            e('div', { className: 'drac-joint-head' },
+              e('span', { className: 'drac-joint-name' }, label),
+              e('span', { className: 'meta' }, `${(val * 180 / Math.PI).toFixed(1)}°`),
+            ),
+            e('input', {
+              type: 'range',
+              min: -JOINT_LIMIT_RAD,
+              max: JOINT_LIMIT_RAD,
+              step: 0.01,
+              value: val,
+              disabled: !connected,
+              onChange: (ev) => onSetJoint(i, Number(ev.target.value)),
+            }),
+          );
+        }),
+      ),
+    );
+  }
+
+  function DracomancerPanel({ ros, connected, robotNs, urdf, basePose, poseTopic, poseStamp }) {
+    const deviceNs = robotNs;
+    const dracomancerViewerApiRef = React.useRef(null);
+    const [dragonNs, setDragonNs] = React.useState('/dragon');
+    const [flightState, setFlightState] = React.useState(null);
+    const [shapeSafety, setShapeSafety] = React.useState(null);
+    const [joyAxes, setJoyAxes] = React.useState(null);
+    const [deviceJoints, setDeviceJoints] = React.useState(null);
+    const [dragonJoints, setDragonJoints] = React.useState(null);
+    const [recaptureStatus, setRecaptureStatus] = React.useState('');
+    const [jointPositions, setJointPositions] = React.useState(() => new Array(DRACOMANCER_JOINT_NAMES.length).fill(0));
+    const jointPubRef = React.useRef(null);
+
+    React.useEffect(() => {
+      setFlightState(null);
+      if (!ros || !connected || !window.ROSLIB) return undefined;
+      const topic = new window.ROSLIB.Topic({
+        ros, name: nsJoin(dragonNs, 'flight_state'),
+        messageType: 'std_msgs/UInt8', throttle_rate: 250, queue_length: 1,
+      });
+      topic.subscribe((msg) => setFlightState(msg.data));
+      return () => topic.unsubscribe();
+    }, [ros, connected, dragonNs]);
+
+    React.useEffect(() => {
+      setShapeSafety(null);
+      if (!ros || !connected || !window.ROSLIB) return undefined;
+      const topic = new window.ROSLIB.Topic({
+        ros, name: nsJoin(deviceNs, 'dragon_shape_safety'),
+        messageType: 'std_msgs/Float64MultiArray', throttle_rate: 100, queue_length: 1,
+      });
+      topic.subscribe((msg) => setShapeSafety(msg.data || []));
+      return () => topic.unsubscribe();
+    }, [ros, connected, deviceNs]);
+
+    React.useEffect(() => {
+      setJoyAxes(null);
+      if (!ros || !connected || !window.ROSLIB) return undefined;
+      const topic = new window.ROSLIB.Topic({
+        ros, name: nsJoin(deviceNs, 'joystick/calibrated'),
+        messageType: 'std_msgs/Float32MultiArray', throttle_rate: 100, queue_length: 1,
+      });
+      topic.subscribe((msg) => setJoyAxes(msg.data || []));
+      return () => topic.unsubscribe();
+    }, [ros, connected, deviceNs]);
+
+    React.useEffect(() => {
+      setDeviceJoints(null);
+      if (!ros || !connected || !window.ROSLIB) return undefined;
+      const topic = new window.ROSLIB.Topic({
+        ros, name: nsJoin(deviceNs, 'joint_states'),
+        messageType: 'sensor_msgs/JointState', throttle_rate: 100, queue_length: 1,
+      });
+      topic.subscribe((msg) => {
+        setDeviceJoints(msg);
+        const values = {};
+        (msg.name || []).forEach((name, i) => { values[name] = msg.position?.[i] ?? 0; });
+        dracomancerViewerApiRef.current?.setJointValues(values);
+      });
+      return () => topic.unsubscribe();
+    }, [ros, connected, deviceNs]);
+
+    React.useEffect(() => {
+      setDragonJoints(null);
+      if (!ros || !connected || !window.ROSLIB) return undefined;
+      const topic = new window.ROSLIB.Topic({
+        ros, name: nsJoin(dragonNs, 'joint_states'),
+        messageType: 'sensor_msgs/JointState', throttle_rate: 100, queue_length: 1,
+      });
+      topic.subscribe((msg) => setDragonJoints(msg));
+      return () => topic.unsubscribe();
+    }, [ros, connected, dragonNs]);
+
+    const jointNames = deviceJoints && (deviceJoints.name || []).length > 0
+      ? deviceJoints.name
+      : DRACOMANCER_JOINT_NAMES;
+
+    React.useEffect(() => {
+      setJointPositions((prev) => prev.length === jointNames.length ? prev : new Array(jointNames.length).fill(0));
+    }, [jointNames.length]);
+
+    React.useEffect(() => {
+      if (!ros || !connected || !window.ROSLIB) { jointPubRef.current = null; return undefined; }
+      const pub = new window.ROSLIB.Topic({ ros, name: nsJoin(deviceNs, 'joint_cmd'), messageType: 'sensor_msgs/JointState' });
+      jointPubRef.current = pub;
+      return () => { jointPubRef.current = null; try { pub.unadvertise(); } catch (err) { console.warn(err); } };
+    }, [ros, connected, deviceNs]);
+
+    const publishJointCmd = (pos) => {
+      if (!jointPubRef.current || !window.ROSLIB) return;
+      jointPubRef.current.publish(new window.ROSLIB.Message({
+        header: { seq: 0, stamp: { secs: 0, nsecs: 0 }, frame_id: '' },
+        name: jointNames,
+        position: pos,
+        velocity: [],
+        effort: [],
+      }));
+    };
+
+    const setJointAt = (i, val) => {
+      setJointPositions((prev) => {
+        const next = prev.slice();
+        next[i] = val;
+        publishJointCmd(next);
+        return next;
+      });
+    };
+
+    const resetJoints = () => {
+      const zeros = new Array(jointNames.length).fill(0);
+      setJointPositions(zeros);
+      publishJointCmd(zeros);
+    };
+
+    const recaptureNeutral = () => {
+      if (!ros || !connected || !window.ROSLIB) return;
+      const ns = deviceNs.replace(/^\//, '');
+      try {
+        publishOnce(ros, `/${ns}_control_pose/recapture_neutral`, 'std_msgs/Empty', {});
+        setRecaptureStatus(`sent at ${new Date().toLocaleTimeString()}`);
+      } catch (err) {
+        setRecaptureStatus(describeError(err, 'publish failed'));
+      }
+    };
+
+    const isHovering = flightState != null && flightState >= 4;
+    const isLanding = flightState === 6;
+    const stateText = flightState == null ? '—'
+      : isLanding ? `${flightState} (landing)`
+      : isHovering ? `${flightState} (hovering)`
+      : `${flightState} (grounded)`;
+
+    const safetyScale = shapeSafety != null && shapeSafety.length > 2 ? Number(shapeSafety[2]) : null;
+    const safetyCls = safetyScale == null ? '' : safetyScale >= 0.7 ? 'ok' : safetyScale >= 0.3 ? 'warn' : 'bad';
+
+    const jointRow = (name, pos, maxRad) => {
+      const clamped = Math.max(-maxRad, Math.min(maxRad, pos));
+      const pct = Math.abs(clamped) / maxRad * 50;
+      const fill = clamped >= 0
+        ? e('div', { className: 'gauge-fill', style: { left: '50%', width: `${pct.toFixed(1)}%` } })
+        : e('div', { className: 'gauge-fill', style: { left: `${(50 - pct).toFixed(1)}%`, width: `${pct.toFixed(1)}%` } });
+      return e('div', { className: 'drac-joint-row', key: name },
+        e('div', { className: 'drac-joint-head' },
+          e('span', { className: 'drac-joint-name' }, name),
+          e('span', { className: 'meta' }, `${(pos * 180 / Math.PI).toFixed(1)}°`),
+        ),
+        e('div', { className: 'gauge-track bipolar' }, fill),
+      );
+    };
+
+    return e('div', { className: 'drac-panel' },
+      e('div', { className: 'drac-ns-bar' },
+        e('label', { className: 'field drac-ns-field' },
+          e('span', { className: 'label' }, 'Dragon Namespace'),
+          e('input', {
+            value: dragonNs,
+            onChange: (ev) => setDragonNs(normalizeNs(ev.target.value)),
+            placeholder: '/dragon',
+          }),
+        ),
+      ),
+      e('div', { className: 'drac-cards' },
+        e('article', { className: 'card' },
+          e('h2', null, 'Dragon Status'),
+          e('div', { className: 'drac-metrics' },
+            e('div', { className: 'drac-metric' },
+              e('span', { className: 'label' }, 'Flight State'),
+              e('span', { className: `value ${isHovering ? 'ok' : 'warn'}` }, stateText),
+            ),
+            e('div', { className: 'drac-metric' },
+              e('span', { className: 'label' }, 'Safety Scale'),
+              e('span', { className: `value ${safetyCls}` }, safetyScale != null ? `${(safetyScale * 100).toFixed(0)}%` : '—'),
+            ),
+            e('div', { className: 'drac-metric' },
+              e('span', { className: 'label' }, 'Force Inradius'),
+              e('span', { className: 'value' }, shapeSafety != null && shapeSafety.length > 0 ? formatNumber(shapeSafety[0]) : '—'),
+            ),
+            e('div', { className: 'drac-metric' },
+              e('span', { className: 'label' }, 'Torque Inradius'),
+              e('span', { className: 'value' }, shapeSafety != null && shapeSafety.length > 1 ? formatNumber(shapeSafety[1]) : '—'),
+            ),
+          ),
+          safetyScale != null && e('div', { className: 'drac-gauge-row' },
+            e('span', { className: 'label' }, 'Shape Safety'),
+            e('div', { className: 'gauge-track' },
+              e('div', { className: `gauge-fill ${safetyCls}`, style: { width: `${(safetyScale * 100).toFixed(1)}%` } }),
+            ),
+          ),
+        ),
+        e('article', { className: 'card' },
+          e('h2', null, 'Joystick'),
+          joyAxes
+            ? e('div', { className: 'drac-axes' },
+                ['X (fwd/back)', 'Y (left/right)', 'Z (up/down)'].map((label, i) => {
+                  const val = Number(joyAxes[i] ?? 0);
+                  const pct = Math.abs(val) * 50;
+                  const fill = val >= 0
+                    ? e('div', { className: 'gauge-fill', style: { left: '50%', width: `${pct.toFixed(1)}%` } })
+                    : e('div', { className: 'gauge-fill', style: { left: `${(50 - pct).toFixed(1)}%`, width: `${pct.toFixed(1)}%` } });
+                  return e('div', { className: 'drac-axis-row', key: label },
+                    e('div', { className: 'drac-axis-head' },
+                      e('span', { className: 'label' }, label),
+                      e('span', { className: 'meta' }, formatNumber(val)),
+                    ),
+                    e('div', { className: 'gauge-track bipolar' }, fill),
+                  );
+                }),
+              )
+            : e('div', { className: 'empty' }, `Waiting for ${nsJoin(deviceNs, 'joystick/calibrated')}...`),
+        ),
+      ),
+      e(UrdfPanel, {
+        urdf,
+        viewerApiRef: dracomancerViewerApiRef,
+        basePose,
+        poseTopic,
+        poseStamp,
+        jointTopic: nsJoin(deviceNs, 'joint_states'),
+        controls: e('div', { className: 'control-stack' },
+          e(JointControlCard, { connected, deviceNs, names: jointNames, positions: jointPositions, onSetJoint: setJointAt, onResetAll: resetJoints }),
+        ),
+      }),
+      e('article', { className: 'card drac-action-card' },
+        e('h2', null, 'IMU Heading Recapture'),
+        e('p', { className: 'meta' }, `Resets the neutral heading reference for IMU-relative motion (direction_mode). Publishes to /${deviceNs.replace(/^\//, '')}_control_pose/recapture_neutral.`),
+        e('div', null,
+          e('button', { onClick: recaptureNeutral, disabled: !connected }, 'Recapture Neutral Heading'),
+        ),
+        recaptureStatus && e('p', { className: 'meta fc-status' }, recaptureStatus),
+      ),
+      e('article', { className: 'card' },
+        e('h2', null, `Device Joints (${deviceNs})`),
+        deviceJoints && (deviceJoints.name || []).length > 0
+          ? e('div', { className: 'drac-joints' },
+              (deviceJoints.name || []).map((name, i) =>
+                jointRow(name, (deviceJoints.position || [])[i] ?? 0, Math.PI / 2),
+              ),
+            )
+          : e('div', { className: 'empty' }, `Waiting for ${nsJoin(deviceNs, 'joint_states')}...`),
+      ),
+      e('article', { className: 'card' },
+        e('h2', null, `Dragon Joints (${dragonNs})`),
+        dragonJoints && (dragonJoints.name || []).length > 0
+          ? e('div', { className: 'drac-joints' },
+              (dragonJoints.name || []).map((name, i) =>
+                jointRow(name, (dragonJoints.position || [])[i] ?? 0, Math.PI / 2),
+              ),
+            )
+          : e('div', { className: 'empty' }, `Waiting for ${nsJoin(dragonNs, 'joint_states')}...`),
+      ),
     );
   }
 
