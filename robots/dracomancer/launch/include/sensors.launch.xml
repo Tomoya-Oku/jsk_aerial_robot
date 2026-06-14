@@ -1,38 +1,36 @@
 <?xml version="1.0"?>
 <launch>
-  <arg name="real_machine" default="false" />
-  <arg name="simulation" default="false" />
-  <arg name="robot_ns" default="dracomancer" />
-  <arg name="connect_fc" default="$(arg real_machine)" />
-  <arg name="fc_serial_port" default="/dev/flight_controller" />
-  <arg name="fc_serial_baud" default="921600" />
+  <arg name="real_machine"         default="false" />
+  <arg name="simulation"           default="false" />
+  <arg name="robot_ns"             default="dracomancer" />
+  <arg name="connect_fc"           default="$(arg real_machine)" />
+  <arg name="fc_serial_port"       default="/dev/flight_controller" />
+  <arg name="fc_serial_baud"       default="921600" />
   <arg name="run_servo_rough_calib" default="false" />
 
-  <group ns="$(arg robot_ns)">
+  <!--
+    Launch the spinal FC/IMU bridge whenever rm:=true (real_machine), regardless of
+    whether sim:=true or sim:=false.  The original `unless simulation` guard was
+    removed so that the combination rm:=true sim:=true works correctly (real servos
+    with RViz visualisation).
+  -->
+  <group if="$(eval arg('real_machine') and arg('connect_fc'))">
+    <group ns="$(arg robot_ns)">
+      <include file="$(find spinal)/launch/bridge.launch" >
+        <arg name="mode"         value="serial" />
+        <arg name="serial_port"  value="$(arg fc_serial_port)" />
+        <arg name="serial_baud"  value="$(arg fc_serial_baud)" />
+      </include>
 
-    <group if="$(eval arg('real_machine') and arg('connect_fc'))">
-      <group unless="$(arg simulation)">
-        <!-- fc & IMU & GPS -->
-        <include file="$(find spinal)/launch/bridge.launch" >
-          <arg name="mode" value="serial" />
-          <arg name="serial_port" value="$(arg fc_serial_port)" />
-          <arg name="serial_baud" value="$(arg fc_serial_baud)" />
-        </include>
-
-        <!-- mocap -->
-        <!-- <include file="$(find aerial_robot_base)/launch/external_module/mocap.launch" /> -->
-
-        <!-- joint rough calib -->
-        <node pkg="spinal" type="servo_rough_calib.py" name="servo_rough_calib" output="screen" if="$(arg run_servo_rough_calib)">
-          <param name="robot_ns" value="$(arg robot_ns)" />
-        </node>
-      </group>
+      <node pkg="spinal" type="servo_rough_calib.py" name="servo_rough_calib"
+            output="screen" if="$(arg run_servo_rough_calib)">
+        <param name="robot_ns" value="$(arg robot_ns)" />
+      </node>
     </group>
+  </group>
 
-    <!-- basic configuration for sensors (e.g. noise sigma) -->
+  <group ns="$(arg robot_ns)">
     <rosparam file="$(find dracomancer)/config/sensors/imu/spinal.yaml" command="load" />
-    <!-- <rosparam file="$(find aerial_robot_base)/config/sensors/mocap.yaml" command="load" /> -->
-    <!-- <param name="sensor_plugin/mocap/cutoff_vel_freq" value="20" /> -->
   </group>
 
 </launch>

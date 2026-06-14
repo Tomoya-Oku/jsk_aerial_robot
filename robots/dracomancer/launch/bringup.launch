@@ -1,100 +1,109 @@
 <?xml version="1.0"?>
 <launch>
-  ##############  Mode selection  ###########
-  <arg name="rm" default="True" />
+  ###########  Mode selection  ###########
+  <!--
+    rm  (real_machine) : true  → use real servo bridge / spinal FC
+                         false → use fake_joint_publisher (no hardware needed)
+    sim (simulation)   : true  → launch RViz for joint-angle visualisation
+                         false → headless, no RViz
+    The two flags are independent so all four combinations are valid:
+      rm:=false sim:=true  → fake publisher + RViz + joint_state_publisher_gui
+      rm:=true  sim:=true  → real servos   + RViz
+      rm:=false sim:=false → fake publisher (web GUI only, no RViz)
+      rm:=true  sim:=false → real servos,  no RViz
+  -->
+  <arg name="rm"  default="True"  />
   <arg name="sim" default="False" />
-  <arg name="real_machine" default="$(eval arg('rm') and not arg('sim'))" />
-  <arg name="simulation" default="$(arg sim)" />
+  <!-- expose the same names used by shared launch files -->
+  <arg name="real_machine" value="$(arg rm)"  />
+  <arg name="simulation"   value="$(arg sim)" />
 
-  ##############  Simulation placeholders  ###########
-  <arg name="worldtype" default="$(find aerial_robot_simulation)/gazebo_model/world/empty.world" />
-  <arg name="launch_gazebo" default="True" />
-  <arg name="spawn_x" default="0.0"/>
-  <arg name="spawn_y" default="0.0"/>
-  <arg name="spawn_z" default="0.0"/>
-  <arg name="spawn_yaw" default="0.0"/>
-  <arg name="mujoco" default="False" />
-
-  ##############  Model/RViz  ###########
-  <arg name="robot_ns" value="dracomancer" />
-
-  ###########  Mobile Web Console  ###########
-  <arg name="launch_web_console" default="True" />
-  <arg name="web_console_port" default="8080" />
-  <arg name="web_console_rosbridge_port" default="9090" />
-  <arg name="web_console_launch_rosbridge" default="True" />
-  <arg name="headless" default="True" />
-  <arg name="launch_rviz" default="False" />
-  <arg name="gui" default="False" />
-  <arg name="joint_gui" default="$(arg gui)" />
+  ###########  Model / RViz  ###########
+  <arg name="robot_ns"     value="dracomancer" />
+  <arg name="headless"     default="True" />
+  <arg name="launch_rviz"  default="$(arg sim)" />
+  <!-- model is headless when the user did not ask for RViz -->
   <arg name="model_headless" value="$(eval arg('headless') or not arg('launch_rviz'))" />
 
-  ##############  Flight controller  ###########
-  <arg name="connect_fc" default="$(arg real_machine)" />
-  <arg name="fc_serial_port" default="/dev/ttyUSB0" />
-  <arg name="fc_serial_baud" default="921600" />
+  ###########  Mobile Web Console  ###########
+  <arg name="web"                         default="False" />
+  <arg name="launch_web_console"          default="$(arg web)" />
+  <arg name="web_console_port"            default="8080" />
+  <arg name="web_console_rosbridge_port"  default="9090" />
+  <arg name="web_console_launch_rosbridge" default="True" />
+
+  ###########  Flight controller  ###########
+  <arg name="connect_fc"           default="$(arg rm)" />
+  <arg name="fc_serial_port"       default="/dev/ttyUSB0" />
+  <arg name="fc_serial_baud"       default="921600" />
   <arg name="run_servo_rough_calib" default="False" />
 
-  ##############  Servo/joint state  ###########
-  <arg name="use_servo_bridge" default="True" />
-  <arg name="use_servo_to_joint_states" default="False" />
-  <arg name="servo_topic" default="/servo/states" />
+  ###########  Servo / joint-state topics  ###########
   <arg name="joint_states_topic" default="/$(arg robot_ns)/joint_states" />
+  <arg name="servo_topic"        default="/servo/states" />
 
   ###########  Robot Model  ###########
-  <arg name="description_mode" value="urdf" unless="$(arg simulation)" />
-  <arg name="description_mode" value="gazebo" if="$(arg simulation)" />
   <include file="$(find aerial_robot_model)/launch/aerial_robot_model.launch" >
-    <arg name="headless" value="$(arg model_headless)" />
-    <arg name="robot_model" value="$(find dracomancer)/urdf/dracomancer.urdf" />
-    <arg name="robot_ns" value="$(arg robot_ns)" />
-    <arg name="rviz_config" value="$(find dracomancer)/config/rviz_config" />
+    <arg name="headless"      value="$(arg model_headless)" />
+    <arg name="robot_model"   value="$(find dracomancer)/urdf/dracomancer.urdf" />
+    <arg name="robot_ns"      value="$(arg robot_ns)" />
+    <arg name="rviz_config"   value="$(find dracomancer)/config/rviz_config" />
     <arg name="rviz_init_pose" value="$(find dracomancer)/config/RvizInit.yaml" />
-    <arg name="need_joint_state" value="false" if ="$(eval arg('simulation') or arg('real_machine'))"/>
-  </include >
+    <!-- joint states always come from our own source (servo bridge or fake publisher) -->
+    <arg name="need_joint_state" value="false" />
+  </include>
 
-  ###########  Sensors  ###########
+  ###########  Sensors (spinal FC/IMU only when rm:=true)  ###########
   <include file="$(find dracomancer)/launch/include/sensors.launch.xml" >
-    <arg name="real_machine" value="$(arg real_machine)" />
-    <arg name="simulation" value="$(arg simulation)" />
-    <arg name="robot_ns" value="$(arg robot_ns)" />
-    <arg name="connect_fc" value="$(arg connect_fc)" />
-    <arg name="fc_serial_port" value="$(arg fc_serial_port)" />
-    <arg name="fc_serial_baud" value="$(arg fc_serial_baud)" />
+    <arg name="real_machine"       value="$(arg real_machine)" />
+    <arg name="simulation"         value="$(arg simulation)" />
+    <arg name="robot_ns"           value="$(arg robot_ns)" />
+    <arg name="connect_fc"         value="$(arg connect_fc)" />
+    <arg name="fc_serial_port"     value="$(arg fc_serial_port)" />
+    <arg name="fc_serial_baud"     value="$(arg fc_serial_baud)" />
     <arg name="run_servo_rough_calib" value="$(arg run_servo_rough_calib)" />
-  </include >
+  </include>
 
   ###########  Servo Config  ###########
   <rosparam file="$(find dracomancer)/config/Servo.yaml" command="load" ns="$(arg robot_ns)" />
 
-  ###########  Servo Bridge  ###########
-  <node pkg="aerial_robot_model" type="servo_bridge_node" name="servo_bridge" output="screen" ns="$(arg robot_ns)" if="$(eval (not arg('joint_gui')) and arg('use_servo_bridge'))">
-    <param name="simulation_mode" value="$(eval arg('simulation') and not arg('real_machine'))" />
-    <param name="use_mujoco" value="true" if="$(arg mujoco)"/>
-  </node>
+  ###########  rm:=true — real servo bridge  ###########
+  <group if="$(arg rm)">
+    <node pkg="aerial_robot_model" type="servo_bridge_node" name="servo_bridge"
+          output="screen" ns="$(arg robot_ns)" />
+    <node pkg="dracomancer" type="servo_to_joint_states.py" name="servo_to_joint_states"
+          output="screen">
+      <param name="servo_topic"        value="$(arg servo_topic)" />
+      <param name="joint_states_topic" value="$(arg joint_states_topic)" />
+      <param name="rate"               value="40.0" />
+    </node>
+  </group>
 
-  ###########  Servo State to Joint State  ###########
-  <node pkg="dracomancer" type="servo_to_joint_states.py" name="servo_to_joint_states" output="screen" if="$(eval (not arg('joint_gui')) and arg('use_servo_to_joint_states'))">
-    <param name="servo_topic" value="$(arg servo_topic)"/>
-    <param name="joint_states_topic" value="$(arg joint_states_topic)"/>
-    <param name="rate" value="40.0"/>
-  </node>
+  ###########  rm:=false — fake joint publisher (no hardware needed)  ###########
+  <group unless="$(arg rm)">
+    <!-- Publishes /dracomancer/joint_states at 40 Hz from /dracomancer/joint_cmd -->
+    <node pkg="dracomancer" type="fake_joint_publisher.py" name="fake_joint_publisher"
+          output="screen">
+      <param name="joint_states_topic" value="$(arg joint_states_topic)" />
+      <param name="joint_cmd_topic"    value="/$(arg robot_ns)/joint_cmd" />
+      <param name="rate"               value="40.0" />
+    </node>
 
-  ###########  Joint State Publisher  ###########
-  <node if="$(arg joint_gui)"
-      pkg="joint_state_publisher_gui"
-      type="joint_state_publisher_gui"
-      name="joint_state_publisher_gui"
-      ns="$(arg robot_ns)">
-  </node>
-
+    <!-- sim:=true web:=false — RViz GUI slider panel (redirected to joint_cmd).
+         Suppressed when web:=true because the web console slider is the sole input. -->
+    <node pkg="joint_state_publisher_gui" type="joint_state_publisher_gui"
+          name="joint_state_publisher_gui" output="screen" ns="$(arg robot_ns)"
+          if="$(eval arg('sim') and not arg('web'))">
+      <remap from="joint_states" to="/$(arg robot_ns)/joint_cmd" />
+    </node>
+  </group>
 
   ###########  Mobile Web Console  ###########
   <include file="$(find aerial_robot_web)/launch/web_console.launch" if="$(arg launch_web_console)">
-    <arg name="robot_ns" value="$(arg robot_ns)" />
-    <arg name="robot_type" value="dracomancer" />
-    <arg name="web_port" value="$(arg web_console_port)" />
-    <arg name="rosbridge_port" value="$(arg web_console_rosbridge_port)" />
+    <arg name="robot_ns"        value="$(arg robot_ns)" />
+    <arg name="robot_type"      value="dracomancer" />
+    <arg name="web_port"        value="$(arg web_console_port)" />
+    <arg name="rosbridge_port"  value="$(arg web_console_rosbridge_port)" />
     <arg name="launch_rosbridge" value="$(arg web_console_launch_rosbridge)" />
   </include>
 
