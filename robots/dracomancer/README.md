@@ -54,6 +54,22 @@ elbow extension maps to the straight middle joint.
 These are used to gate or scale joint commands so that the robot is not forced
 into obviously infeasible shapes.  For simulation, these checks can be relaxed.
 
+Teleoperation has three runtime modes:
+
+| Mode | Pose command | Joint command | Purpose |
+| --- | --- | --- | --- |
+| `startup` | disabled | hold startup pose `[0, pi/2, 0, pi/2, 0, pi/2]` | takeoff / reset posture |
+| `precision` | disabled | map Dracomancer arm joints to DRAGON | close-range shape control |
+| `wide` | joystick + IMU relative movement | hold startup pose | large-area movement |
+
+Switch modes at runtime:
+
+```bash
+rostopic pub -1 /dracomancer/teleop_mode std_msgs/String "data: 'wide'"
+rostopic pub -1 /dracomancer/teleop_mode std_msgs/String "data: 'precision'"
+rostopic pub -1 /dracomancer/teleop_mode std_msgs/String "data: 'startup'"
+```
+
 ## Bringup Quick Reference
 
 Use `rm` and `sim` for normal operation.  `real_machine` and `simulation` are
@@ -93,16 +109,9 @@ RViz-only Dracomancer joint slider mode, without FC or simulator:
 ```bash
 roslaunch dracomancer bringup.launch \
   rm:=false \
-  sim:=false \
-  gui:=true \
+  sim:=true \
   launch_rviz:=true \
   headless:=false
-```
-
-Use servo states as Dracomancer joint states without teleoperation:
-
-```bash
-roslaunch dracomancer bringup.launch use_servo_to_joint_states:=true
 ```
 
 ### Bringup Arguments
@@ -110,24 +119,20 @@ roslaunch dracomancer bringup.launch use_servo_to_joint_states:=true
 | Group | Argument | Default | Purpose |
 | --- | --- | --- | --- |
 | Mode | `rm` | `True` | Shortcut for real-machine mode. |
-| Mode | `sim` | `False` | Shortcut for simulation mode.  When true, `real_machine` becomes false. |
-| Mode | `real_machine` | `rm && !sim` | Compatibility alias used by included launch files. |
+| Mode | `sim` | `False` | Shortcut for visualization/simulation-oriented launch behavior. |
+| Mode | `real_machine` | `rm` | Compatibility alias used by included launch files. |
 | Mode | `simulation` | `sim` | Compatibility alias used by included launch files. |
 | FC | `connect_fc` | `real_machine` | Starts the flight-controller serial bridge. |
 | FC | `fc_serial_port` | `/dev/ttyUSB0` | Serial device for the FC. |
 | FC | `fc_serial_baud` | `921600` | Serial baud rate for the FC. |
 | FC | `run_servo_rough_calib` | `False` | Runs rough servo calibration node from the sensor include. |
 | Model/RViz | `headless` | `True` | Hides RViz/model visualization unless overridden. |
-| Model/RViz | `launch_rviz` | `False` | Allows the model launch to show RViz. |
-| Model/RViz | `gui` | `False` | Shortcut for `joint_gui`. |
-| Model/RViz | `joint_gui` | `gui` | Starts `joint_state_publisher_gui` instead of servo bridge. |
+| Model/RViz | `launch_rviz` | `sim` | Allows the model launch to show RViz. |
 | Model/RViz | `robot_ns` | `dracomancer` | ROS namespace. |
-| Servo | `use_servo_bridge` | `True` | Starts `servo_bridge_node` when `joint_gui:=false`. |
-| Servo | `use_servo_to_joint_states` | `False` | Converts servo states to `/dracomancer/joint_states` in bringup. |
 | Servo | `servo_topic` | `/servo/states` | Input topic for `servo_to_joint_states.py`. |
 | Servo | `joint_states_topic` | `/dracomancer/joint_states` | Output topic from `servo_to_joint_states.py`. |
-| Simulation reserved | `mujoco` | `False` | Passes `use_mujoco` to the servo bridge. |
-| Simulation reserved | `worldtype`, `launch_gazebo`, `spawn_*` | empty world / zero pose | Kept for parity with robot bringup; this launch does not start Gazebo by itself. |
+| Web | `web` | `False` | Starts the mobile web console. |
+| Web | `web_console_port` | `8080` | Web console port. |
 
 ## Teleoperation Launch
 
@@ -136,6 +141,9 @@ Normal teleoperation:
 ```bash
 roslaunch dracomancer teleoperation.launch
 ```
+
+This starts in `startup` mode.  Switch to `wide` for joystick/IMU movement, or
+`precision` for arm-to-DRAGON shape mapping.
 
 For simulation where falling is acceptable and infeasible-pose rejection is too
 strong:
@@ -165,6 +173,8 @@ roslaunch dracomancer teleoperation.launch \
 
 - `enable_control_pose`: enables `/dragon/uav/nav` velocity commands.
 - `enable_control_joints`: enables `/dragon/joints_ctrl` shape commands.
+- `teleop_mode`: initial mode, one of `startup`, `precision`, or `wide`.
+- `mode_topic`: runtime mode switch topic. Default: `/dracomancer/teleop_mode`.
 - `enable_servo_to_joint_states`: converts Dracomancer servo state to joint
   state.
 - `servo_topic`: input servo state topic. Default:
@@ -181,6 +191,8 @@ roslaunch dracomancer teleoperation.launch \
   DRAGON is in hover or later flight states.
 - `publish_joints_before_device_ready`: allows publishing before Dracomancer
   joint state is received. Default is `false`.
+- `axis_x`, `axis_y`, `axis_z`: joystick axes. Defaults: `0`, `1`, `2`.
+- `xy_vel`, `z_vel`: joystick velocity scale. Defaults: `0.3`, `0.2`.
 
 ## Debugging
 
@@ -233,7 +245,7 @@ bringup command above:
 
 ```bash
 roslaunch dracomancer bringup.launch \
-  rm:=false sim:=false gui:=true launch_rviz:=true headless:=false
+  rm:=false sim:=true launch_rviz:=true headless:=false
 ```
 
 This does not command DRAGON.

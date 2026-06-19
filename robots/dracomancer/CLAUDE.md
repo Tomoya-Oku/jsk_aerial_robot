@@ -39,6 +39,7 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 - **spinal.msg** は `servo_to_joint_states.py` / `control_pose.py` で使用。`package.xml` に `spinal` run_depend を宣言済み。
 - **rm / sim** が通常の起動引数。`real_machine` / `simulation` は旧互換エイリアス。
 - Khadas など表示なし環境を想定し、RViz は既定で起動しない（`headless` 既定 True）。
+- `teleop_mode` は `startup` / `precision` / `wide`。実行中は `/dracomancer/teleop_mode` (`std_msgs/String`) で切り替える。
 
 ## FlightNav（aerial_robot_msgs）の要点
 
@@ -49,7 +50,7 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 
 ## control_pose.py（移動制御）の設計
 
-IMU（spinal 由来。操作者の背中に **90度傾けて** 搭載）の姿勢で、操縦桿の移動方向を
+`wide` モードでのみ `/dragon/uav/nav` を送る。IMU（spinal 由来。操作者の背中に **90度傾けて** 搭載）の姿勢で、操縦桿の移動方向を
 **操作者の向きに対する相対移動**に変換する。重心/ベースリンク切替も持つ。
 
 主なパラメータ:
@@ -59,6 +60,14 @@ IMU（spinal 由来。操作者の背中に **90度傾けて** 搭載）の姿�
 - `imu_mount_rpy`: IMU 取付け補正 [roll,pitch,yaw] rad（既定 `[0, -π/2, 0]`、実機で要調整）。
 - `recapture_on_hover`: ホバ開始時に中立姿勢を再キャプチャ（既定 true）。
 - `~recapture_neutral`(std_msgs/Empty): 中立再キャプチャのトリガ。
+- `axis_x/y/z`: 既定 `0/1/2`。既定較正は2軸なので、3軸目がなければZ速度は0。
+
+## control_joints.py（形状制御）の設計
+
+- `startup`: `startup_pose`（既定 `[0, pi/2, 0, pi/2, 0, pi/2]`）を保持。
+- `precision`: Dracomancer 腕関節を DRAGON 関節へマッピング。
+- `wide`: `wide_hold_pose`（既定 `startup_pose`）を保持し、移動は `control_pose.py` に任せる。
+- 形状安全は DRAGON の `/debug/fc_f_min` と `/debug/fc_t_min` からスケールを計算する。
 
 ### 数学的に重要な事実（変更時の注意）
 
@@ -86,6 +95,4 @@ ROS ノードの起動には spinal/aerial_robot 一式が必要。
 ## ドキュメント
 
 実装を変えたら `docs/` を更新すること（中粒度・Mermaid 図・日本語）。
-- `docs/02_dataflow.md`: トピックフロー
-- `docs/05_bringup.md`: 起動引数
-- `docs/06_imu_relative_control.md`: IMU 相対移動 / COG・baselink 切替
+- `docs/dracomancer_system.md`: システム仕様、モード、トピックフロー、起動引数
