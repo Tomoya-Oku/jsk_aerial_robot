@@ -4,7 +4,7 @@
 import math
 import rospy
 import numpy as np
-from std_msgs.msg import Float32MultiArray, UInt8, Empty
+from std_msgs.msg import Float32MultiArray, UInt8, Empty, String
 from geometry_msgs.msg import PoseStamped, Vector3Stamped
 from aerial_robot_msgs.msg import FlightNav
 from spinal.msg import Imu as SpinalImu
@@ -88,10 +88,18 @@ class ControlPose:
         rospy.init_node("control_pose")
 
         self.robot_name = rospy.get_param("~robot_name", "dragon")
+        self.device_ns = rospy.get_param("~device_ns", "/dracomancer").rstrip("/")
         self.joy_topic = rospy.get_param("~joy_topic", "/dracomancer/joystick/calibrated")
         self.imu_topic = rospy.get_param("~imu_topic", "/dracomancer/imu")
         self.rate_hz = rospy.get_param("~rate", 40.0)
         self.wait_after_hover = rospy.get_param("~wait_after_hover", 3.0)
+
+        self.teleop_mode = str(rospy.get_param("~teleop_mode", "startup")).lower()
+        self.mode_topic = rospy.get_param("~mode_topic", self.device_ns + "/teleop_mode")
+        self.valid_modes = ("startup", "precision", "wide")
+        if self.teleop_mode not in self.valid_modes:
+            rospy.logwarn("unknown teleop_mode '%s', fall back to 'startup'", self.teleop_mode)
+            self.teleop_mode = "startup"
 
         # ----- navigation target: COG or BASELINK -----
         nav_target = str(rospy.get_param("~nav_target", "cog")).lower()
@@ -147,10 +155,12 @@ class ControlPose:
         self.deadzone = rospy.get_param("~deadzone", 0.05)
         ## Buffer for latest joystick axes
         self.latest_axes = None
+        self.warned_missing_z_axis = False
         self.robot_pose = None
         self.robot_hovering = False
         self.robot_landing = False
         self.wait_flag = False
+        self.pose_active_prev = False
 
         # IMU state
         self.q_wo = None                # operator-body orientation in world
@@ -171,14 +181,31 @@ class ControlPose:
         self.js_calibrated_sub = rospy.Subscriber(self.joy_topic, Float32MultiArray, self.joystick_calib_cb, queue_size=1)
         self.imu_sub = rospy.Subscriber(self.imu_topic, SpinalImu, self.imu_cb, queue_size=1)
         self.recapture_sub = rospy.Subscriber("~recapture_neutral", Empty, self.recapture_cb, queue_size=1)
+        self.mode_sub = rospy.Subscriber(self.mode_topic, String, self.mode_cb, queue_size=1)
 
         # Logger
         rospy.loginfo("robot_name: %s", self.robot_name)
+        rospy.loginfo("teleop_mode: %s, mode_topic: %s", self.teleop_mode, self.mode_topic)
         rospy.loginfo("joy_topic: %s", self.joy_topic)
         rospy.loginfo("imu_topic: %s", self.imu_topic)
         rospy.loginfo("direction_mode: %s, nav_target: %s",
                       self.direction_mode, "baselink" if self.nav_target == FlightNav.BASELINK else "cog")
         rospy.loginfo("imu_mount_rpy: %s, recapture_on_hover: %s", mount_rpy, self.recapture_on_hover)
+
+    def mode_cb(self, msg):
+        mode = str(msg.data).strip().lower()
+        if mode not in self.valid_modes:
+            rospy.logwarn("ignore unknown teleop mode '%s'", mode)
+            return
+        if mode != self.teleop_mode:
+            old_mode = self.teleop_mode
+            rospy.loginfo("teleop mode: %s -> %s", self.teleop_mode, mode)
+            self.teleop_mode = mode
+            if mode == "wide":
+                self.want_recapture = True
+            elif old_mode == "wide":
+                self.publish_zero_nav()
+            self.latest_axes = None
 
     def robot_flight_state_cb(self, msg):
         # aerial_robot commonly uses HOVER_STATE=5 and LAND_STATE=6, but keep
@@ -231,6 +258,9 @@ class ControlPose:
 
     def get_axis(self, data, idx):
         if idx < 0 or idx >= len(data):
+            if idx == self.axis_z and not self.warned_missing_z_axis:
+                rospy.logwarn("joystick z axis index %d is not available; z command is fixed to zero", idx)
+                self.warned_missing_z_axis = True
             return 0.0
         v = float(data[idx])
         if idx == 0:
@@ -280,11 +310,36 @@ class ControlPose:
                              z_cmd * self.z_vel])
 
         world_vec = self.rotate_command(body_vec)
+        world_vec = self.limit_velocity_by_position(world_vec)
 
         self.flight_nav.target_vel_x = float(world_vec[0])
         self.flight_nav.target_vel_y = float(world_vec[1])
         self.flight_nav.target_vel_z = float(world_vec[2])
         return self.flight_nav
+
+    def publish_zero_nav(self):
+        self.flight_nav.target_vel_x = 0.0
+        self.flight_nav.target_vel_y = 0.0
+        self.flight_nav.target_vel_z = 0.0
+        self.nav_pub.publish(self.flight_nav)
+
+    def limit_velocity_axis(self, pos, vel, bounds):
+        if pos <= bounds[0] and vel < 0.0:
+            return 0.0
+        if pos >= bounds[1] and vel > 0.0:
+            return 0.0
+        return vel
+
+    def limit_velocity_by_position(self, vel):
+        if not self.pos_limit or self.robot_pose is None:
+            return vel
+
+        pos = self.robot_pose.pose.position
+        limited = np.array(vel)
+        limited[0] = self.limit_velocity_axis(pos.x, limited[0], self.LIMIT_X)
+        limited[1] = self.limit_velocity_axis(pos.y, limited[1], self.LIMIT_Y)
+        limited[2] = self.limit_velocity_axis(pos.z, limited[2], self.LIMIT_Z)
+        return limited
 
     def limit_pose(self, pos, att):
         # Limit position
@@ -305,7 +360,8 @@ class ControlPose:
         rate = rospy.Rate(self.rate_hz)
 
         while not rospy.is_shutdown():
-            if self.robot_hovering and not self.robot_landing:
+            pose_active = self.teleop_mode == "wide" and self.robot_hovering and not self.robot_landing
+            if pose_active:
                 if not self.wait_flag:
                     rospy.sleep(self.wait_after_hover)
                     self.wait_flag = True
@@ -313,7 +369,12 @@ class ControlPose:
                 self.make_nav_msg()
                 self.nav_pub.publish(self.flight_nav)
             else:
+                if self.pose_active_prev:
+                    self.publish_zero_nav()
                 self.latest_axes = None
+                if self.teleop_mode != "wide":
+                    self.wait_flag = False
+            self.pose_active_prev = pose_active
 
             rate.sleep()
 

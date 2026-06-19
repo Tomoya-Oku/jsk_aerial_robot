@@ -3,7 +3,7 @@
 
 import rospy
 import numpy as np
-from std_msgs.msg import Float64, Float64MultiArray, UInt8
+from std_msgs.msg import Float64, Float64MultiArray, UInt8, String
 from sensor_msgs.msg import JointState
 
 
@@ -13,9 +13,16 @@ class ControlJoints:
 
         # Parameters
         self.robot_name = rospy.get_param("~robot_name", "dragon")
+        self.device_ns = rospy.get_param("~device_ns", "/dracomancer").rstrip("/")
         self.device_joint_topic = rospy.get_param("~device_joint_topic", "/dracomancer/joint_states")
         self.command_topic = rospy.get_param("~command_topic", "/" + self.robot_name + "/joints_ctrl")
         self.rate_hz = rospy.get_param("~rate", 40.0)
+        self.teleop_mode = str(rospy.get_param("~teleop_mode", "startup")).lower()
+        self.mode_topic = rospy.get_param("~mode_topic", self.device_ns + "/teleop_mode")
+        self.valid_modes = ("startup", "precision", "wide")
+        if self.teleop_mode not in self.valid_modes:
+            rospy.logwarn("unknown teleop_mode '%s', fall back to 'startup'", self.teleop_mode)
+            self.teleop_mode = "startup"
 
         self.joint_names = rospy.get_param("~dragon_joint_names", [
             "joint1_pitch",
@@ -36,7 +43,9 @@ class ControlJoints:
         self.signs = rospy.get_param("~signs", [1.0, 1.0, 1.0, -1.0, 1.0, 1.0])
         self.scales = rospy.get_param("~scales", [1.0] * len(self.joint_names))
         self.offsets = rospy.get_param("~offsets", [0.0, np.pi / 2.0, 0.0, 0.0, 0.0, np.pi / 2.0])
-        self.safe_pose = rospy.get_param("~safe_pose", [0.0, np.pi / 2.0, 0.0, np.pi / 2.0, 0.0, np.pi / 2.0])
+        self.startup_pose = rospy.get_param("~startup_pose", [0.0, np.pi / 2.0, 0.0, np.pi / 2.0, 0.0, np.pi / 2.0])
+        self.wide_hold_pose = rospy.get_param("~wide_hold_pose", self.startup_pose)
+        self.safe_pose = rospy.get_param("~safe_pose", self.startup_pose)
         self.joint_limit = rospy.get_param("~joint_limit", np.pi / 2.0)
         self.max_step = rospy.get_param("~max_step", 0.04)
         self.capture_neutral = rospy.get_param("~capture_neutral_on_first_msg", False)
@@ -71,7 +80,9 @@ class ControlJoints:
         self.force_inradius_sub = rospy.Subscriber(self.force_inradius_topic, Float64, self.force_inradius_cb, queue_size=1)
         self.torque_inradius_sub = rospy.Subscriber(self.torque_inradius_topic, Float64, self.torque_inradius_cb, queue_size=1)
         self.robot_flight_state_sub = rospy.Subscriber('/' + self.robot_name + '/flight_state', UInt8, self.robot_flight_state_cb, queue_size=1)
+        self.mode_sub = rospy.Subscriber(self.mode_topic, String, self.mode_cb, queue_size=1)
 
+        rospy.loginfo("teleop_mode: %s, mode_topic: %s", self.teleop_mode, self.mode_topic)
         rospy.loginfo("device_joint_topic: %s", self.device_joint_topic)
         rospy.loginfo("command_topic: %s", self.command_topic)
         rospy.loginfo("joint mapping: %s",
@@ -90,6 +101,15 @@ class ControlJoints:
             self.enable_shape_safety, self.missing_inradius_scale, self.min_safety_scale,
             self.force_inradius_hard_min, self.force_inradius_min,
             self.torque_inradius_hard_min, self.torque_inradius_min)
+
+    def mode_cb(self, msg):
+        mode = str(msg.data).strip().lower()
+        if mode not in self.valid_modes:
+            rospy.logwarn("ignore unknown teleop mode '%s'", mode)
+            return
+        if mode != self.teleop_mode:
+            rospy.loginfo("teleop mode: %s -> %s", self.teleop_mode, mode)
+            self.teleop_mode = mode
 
     def clamp(self, x):
         return max(-self.joint_limit, min(self.joint_limit, x))
@@ -152,6 +172,13 @@ class ControlJoints:
 
         return target
 
+    def desired_target(self):
+        if self.teleop_mode == "startup":
+            return list(self.startup_pose)
+        if self.teleop_mode == "wide":
+            return list(self.wide_hold_pose)
+        return self.mapped_target()
+
     @staticmethod
     def blend(a, b, ratio):
         return [ai + ratio * (bi - ai) for ai, bi in zip(a, b)]
@@ -165,7 +192,7 @@ class ControlJoints:
 
     def make_joint_msg(self):
         scale = self.safety_scale()
-        desired = self.mapped_target()
+        desired = self.desired_target()
 
         if scale <= 0.0:
             target = list(self.safe_pose)
@@ -185,7 +212,7 @@ class ControlJoints:
     def can_publish_joint_command(self):
         if self.publish_only_when_hovering and not self.robot_hovering:
             return False
-        if not self.publish_before_device_ready and not self.latest_device_joints:
+        if self.teleop_mode == "precision" and not self.publish_before_device_ready and not self.latest_device_joints:
             return False
         return True
 
