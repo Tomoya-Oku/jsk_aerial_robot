@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="980" viewBox="0 0 1700 980" role="img" aria-labelledby="title desc">
+  <title id="title">Dracomancer Software Data Flow</title>
+  <desc id="desc">Data-flow diagram of Dracomancer ROS nodes, topics, and DRAGON command outputs.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1f4e79"/>
+    </marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/>
+    </marker>
+    <style>
+      .bg { fill: #ffffff; }
+      .title { font: 700 42px Arial, Helvetica, sans-serif; fill: #111827; }
+      .subtitle { font: 400 22px Arial, Helvetica, sans-serif; fill: #4b5563; }
+      .lane { fill: #f8fafc; stroke: #CBD5E1; stroke-width: 2; }
+      .lane-label { font: 700 22px Arial, Helvetica, sans-serif; fill: #334155; }
+      .node { fill: #ffffff; stroke: #1f2937; stroke-width: 2.1; }
+      .node-blue { fill: #eaf3fb; stroke: #1f4e79; stroke-width: 2.4; }
+      .node-green { fill: #edf7f0; stroke: #2f6f4e; stroke-width: 2.4; }
+      .node-amber { fill: #fff7e6; stroke: #9a6a00; stroke-width: 2.4; }
+      .node-red { fill: #fff0f0; stroke: #9f2d2d; stroke-width: 2.4; }
+      .label { font: 700 20px Arial, Helvetica, sans-serif; fill: #111827; }
+      .topic { font: 400 17px Consolas, Menlo, monospace; fill: #334155; }
+      .small { font: 400 16px Arial, Helvetica, sans-serif; fill: #4b5563; }
+      .arrow { fill: none; stroke: #1f4e79; stroke-width: 3.1; marker-end: url(#arrow); }
+      .arrow-gray { fill: none; stroke: #6b7280; stroke-width: 2.5; marker-end: url(#arrow-gray); stroke-dasharray: 8 7; }
+      .caption { font: 400 18px Arial, Helvetica, sans-serif; fill: #4b5563; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1700" height="980"/>
+  <text class="title" x="80" y="72">Dracomancer Software Data Flow</text>
+  <text class="subtitle" x="80" y="110">ROS topics and processing nodes for pose commands, shape commands, and safety feedback</text>
+
+  <rect class="lane" x="70" y="160" width="1560" height="170" rx="16"/>
+  <text class="lane-label" x="105" y="202">Wide-area motion command path</text>
+
+  <rect class="node-blue" x="110" y="230" width="210" height="70" rx="10"/>
+  <text class="label" x="145" y="258">Joystick serial</text>
+  <text class="topic" x="145" y="284">/joystick/raw</text>
+
+  <rect class="node" x="410" y="230" width="260" height="70" rx="10"/>
+  <text class="label" x="437" y="258">joystick_calib_publisher.py</text>
+  <text class="topic" x="455" y="284">Float32MultiArray</text>
+
+  <rect class="node-green" x="760" y="230" width="260" height="70" rx="10"/>
+  <text class="label" x="805" y="258">control_pose.py</text>
+  <text class="topic" x="795" y="284">teleop_mode = wide</text>
+
+  <rect class="node-red" x="1110" y="230" width="215" height="70" rx="10"/>
+  <text class="label" x="1153" y="258">DRAGON nav</text>
+  <text class="topic" x="1146" y="284">/dragon/uav/nav</text>
+
+  <rect class="node-amber" x="1410" y="230" width="175" height="70" rx="10"/>
+  <text class="label" x="1448" y="258">Motion</text>
+  <text class="small" x="1442" y="284">COG / baselink</text>
+
+  <path class="arrow" d="M 320 265 L 410 265"/>
+  <path class="arrow" d="M 670 265 L 760 265"/>
+  <path class="arrow" d="M 1020 265 L 1110 265"/>
+  <path class="arrow" d="M 1325 265 L 1410 265"/>
+
+  <rect class="node-blue" x="760" y="345" width="260" height="70" rx="10"/>
+  <text class="label" x="820" y="373">Back IMU</text>
+  <text class="topic" x="800" y="399">/dracomancer/imu</text>
+  <path class="arrow-gray" d="M 890 345 L 890 300"/>
+  <text class="small" x="925" y="337">operator-relative rotation</text>
+
+  <rect class="lane" x="70" y="455" width="1560" height="190" rx="16"/>
+  <text class="lane-label" x="105" y="497">Shape command path</text>
+
+  <rect class="node-blue" x="110" y="535" width="210" height="70" rx="10"/>
+  <text class="label" x="150" y="563">Servo states</text>
+  <text class="topic" x="150" y="589">/servo/states</text>
+
+  <rect class="node" x="410" y="535" width="260" height="70" rx="10"/>
+  <text class="label" x="442" y="563">servo_to_joint_states.py</text>
+  <text class="topic" x="456" y="589">JointState, IDs 0-6</text>
+
+  <rect class="node-green" x="760" y="535" width="260" height="70" rx="10"/>
+  <text class="label" x="802" y="563">control_joints.py</text>
+  <text class="topic" x="792" y="589">startup / precision / wide</text>
+
+  <rect class="node-red" x="1110" y="535" width="215" height="70" rx="10"/>
+  <text class="label" x="1145" y="563">DRAGON shape</text>
+  <text class="topic" x="1140" y="589">/dragon/joints_ctrl</text>
+
+  <rect class="node-amber" x="1410" y="535" width="175" height="70" rx="10"/>
+  <text class="label" x="1446" y="563">Shape</text>
+  <text class="small" x="1442" y="589">multi-link body</text>
+
+  <path class="arrow" d="M 320 570 L 410 570"/>
+  <path class="arrow" d="M 670 570 L 760 570"/>
+  <path class="arrow" d="M 1020 570 L 1110 570"/>
+  <path class="arrow" d="M 1325 570 L 1410 570"/>
+
+  <rect class="node-red" x="760" y="675" width="260" height="78" rx="10"/>
+  <text class="label" x="797" y="704">Feasibility metrics</text>
+  <text class="topic" x="790" y="730">/dragon/debug/fc_f_min</text>
+  <text class="topic" x="790" y="750">/dragon/debug/fc_t_min</text>
+  <path class="arrow-gray" d="M 890 675 L 890 605"/>
+
+  <rect class="node" x="1110" y="675" width="215" height="78" rx="10"/>
+  <text class="label" x="1142" y="704">Safety monitor</text>
+  <text class="topic" x="1128" y="730">/dracomancer/</text>
+  <text class="topic" x="1128" y="750">dragon_shape_safety</text>
+  <path class="arrow-gray" d="M 1020 714 L 1110 714"/>
+
+  <rect class="lane" x="70" y="800" width="1560" height="90" rx="16"/>
+  <text class="lane-label" x="105" y="850">Runtime mode switch:</text>
+  <text class="topic" x="390" y="850">/dracomancer/teleop_mode</text>
+  <text class="small" x="705" y="850">String values: startup, precision, wide</text>
+  <path class="arrow-gray" d="M 635 800 C 720 745, 790 655, 825 605"/>
+  <path class="arrow-gray" d="M 730 800 C 760 700, 805 410, 835 300"/>
+
+  <text class="caption" x="80" y="940">Caption: Dracomancer Software Data Flow</text>
+</svg>

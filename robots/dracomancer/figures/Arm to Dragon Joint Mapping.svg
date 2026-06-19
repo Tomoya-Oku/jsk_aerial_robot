@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="920" viewBox="0 0 1600 920" role="img" aria-labelledby="title desc">
+  <title id="title">Arm to Dragon Joint Mapping</title>
+  <desc id="desc">Diagram showing the mapping from Dracomancer upper-limb joints to DRAGON serial joints.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1f4e79"/>
+    </marker>
+    <style>
+      .bg { fill: #ffffff; }
+      .title { font: 700 42px Arial, Helvetica, sans-serif; fill: #111827; }
+      .subtitle { font: 400 22px Arial, Helvetica, sans-serif; fill: #4b5563; }
+      .panel { fill: #f8fafc; stroke: #1f2937; stroke-width: 2.2; }
+      .panel-title { font: 700 24px Arial, Helvetica, sans-serif; fill: #111827; }
+      .link { fill: none; stroke: #475569; stroke-width: 16; stroke-linecap: round; }
+      .joint { fill: #ffffff; stroke: #1f4e79; stroke-width: 4; }
+      .joint2 { fill: #ffffff; stroke: #2f6f4e; stroke-width: 4; }
+      .joint3 { fill: #ffffff; stroke: #9a6a00; stroke-width: 4; }
+      .label { font: 700 20px Arial, Helvetica, sans-serif; fill: #111827; }
+      .small { font: 400 17px Arial, Helvetica, sans-serif; fill: #374151; }
+      .mono { font: 400 16px Consolas, Menlo, monospace; fill: #334155; }
+      .map { fill: #ffffff; stroke: #334155; stroke-width: 1.8; }
+      .head { fill: #eaf3fb; stroke: #1f4e79; stroke-width: 1.8; }
+      .arrow { fill: none; stroke: #1f4e79; stroke-width: 3; marker-end: url(#arrow); }
+      .caption { font: 400 18px Arial, Helvetica, sans-serif; fill: #4b5563; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1600" height="920"/>
+  <text class="title" x="80" y="72">Arm to Dragon Joint Mapping</text>
+  <text class="subtitle" x="80" y="110">Precision mode maps upper-limb posture to DRAGON as a single serial arm</text>
+
+  <rect class="panel" x="80" y="165" width="640" height="360" rx="18"/>
+  <text class="panel-title" x="120" y="210">Dracomancer upper-limb joints</text>
+  <path class="link" d="M 170 410 L 270 330 L 390 340 L 515 275 L 620 285"/>
+  <circle class="joint3" cx="170" cy="410" r="26"/>
+  <circle class="joint3" cx="270" cy="330" r="26"/>
+  <circle class="joint2" cx="390" cy="340" r="26"/>
+  <circle class="joint" cx="515" cy="275" r="26"/>
+  <circle class="joint" cx="620" cy="285" r="26"/>
+  <text class="label" x="120" y="460">shoulder</text>
+  <text class="small" x="120" y="486">abduction / flexion</text>
+  <text class="label" x="340" y="392">elbow</text>
+  <text class="small" x="330" y="418">flexion-extension</text>
+  <text class="label" x="535" y="240">wrist</text>
+  <text class="small" x="535" y="218">flexion / supination</text>
+
+  <rect class="panel" x="880" y="165" width="640" height="360" rx="18"/>
+  <text class="panel-title" x="920" y="210">DRAGON serial-body joints</text>
+  <path class="link" d="M 1000 360 L 1120 300 L 1255 335 L 1390 285"/>
+  <circle class="joint" cx="1000" cy="360" r="28"/>
+  <circle class="joint2" cx="1120" cy="300" r="28"/>
+  <circle class="joint2" cx="1255" cy="335" r="28"/>
+  <circle class="joint3" cx="1390" cy="285" r="28"/>
+  <text class="label" x="950" y="415">joint1</text>
+  <text class="small" x="936" y="441">head side</text>
+  <text class="label" x="1168" y="385">joint2</text>
+  <text class="small" x="1158" y="411">middle</text>
+  <text class="label" x="1360" y="250">joint3</text>
+  <text class="small" x="1350" y="228">tail side</text>
+
+  <path class="arrow" d="M 610 305 C 720 250, 845 300, 1000 360"/>
+  <path class="arrow" d="M 395 358 C 700 520, 980 500, 1195 330"/>
+  <path class="arrow" d="M 240 410 C 610 730, 1170 670, 1390 285"/>
+
+  <rect class="map head" x="160" y="590" width="1280" height="48" rx="8"/>
+  <text class="label" x="190" y="621">DRAGON joint</text>
+  <text class="label" x="470" y="621">Dracomancer source joint</text>
+  <text class="label" x="1035" y="621">sign</text>
+  <text class="label" x="1175" y="621">offset</text>
+  <text class="label" x="1320" y="621">mode</text>
+
+  <rect class="map" x="160" y="638" width="1280" height="42"/>
+  <text class="mono" x="190" y="665">joint1_pitch</text>
+  <text class="mono" x="470" y="665">wrist_flexion_extension_joint</text>
+  <text class="mono" x="1045" y="665">+1</text>
+  <text class="mono" x="1185" y="665">0</text>
+  <text class="mono" x="1320" y="665">precision</text>
+
+  <rect class="map" x="160" y="680" width="1280" height="42"/>
+  <text class="mono" x="190" y="707">joint1_yaw</text>
+  <text class="mono" x="470" y="707">wrist_supination_joint</text>
+  <text class="mono" x="1045" y="707">+1</text>
+  <text class="mono" x="1185" y="707">pi/2</text>
+  <text class="mono" x="1320" y="707">precision</text>
+
+  <rect class="map" x="160" y="722" width="1280" height="42"/>
+  <text class="mono" x="190" y="749">joint2_pitch</text>
+  <text class="mono" x="470" y="749">upper_arm_external_internal_rotation_joint</text>
+  <text class="mono" x="1045" y="749">+1</text>
+  <text class="mono" x="1185" y="749">0</text>
+  <text class="mono" x="1320" y="749">precision</text>
+
+  <rect class="map" x="160" y="764" width="1280" height="42"/>
+  <text class="mono" x="190" y="791">joint2_yaw</text>
+  <text class="mono" x="470" y="791">elbow_flexion_extension_joint</text>
+  <text class="mono" x="1045" y="791">-1</text>
+  <text class="mono" x="1185" y="791">0</text>
+  <text class="mono" x="1320" y="791">precision</text>
+
+  <rect class="map" x="160" y="806" width="1280" height="42"/>
+  <text class="mono" x="190" y="833">joint3_pitch</text>
+  <text class="mono" x="470" y="833">shoulder_flexion_extension_joint</text>
+  <text class="mono" x="1045" y="833">+1</text>
+  <text class="mono" x="1185" y="833">0</text>
+  <text class="mono" x="1320" y="833">precision</text>
+
+  <rect class="map" x="160" y="848" width="1280" height="42"/>
+  <text class="mono" x="190" y="875">joint3_yaw</text>
+  <text class="mono" x="470" y="875">shoulder_abduction_adduction_joint</text>
+  <text class="mono" x="1045" y="875">+1</text>
+  <text class="mono" x="1185" y="875">pi/2</text>
+  <text class="mono" x="1320" y="875">precision</text>
+
+  <text class="caption" x="80" y="535">Mapping equation: target = clamp(offset + sign * scale * (source - neutral), -joint_limit, joint_limit)</text>
+  <text class="caption" x="80" y="910">Caption: Arm to Dragon Joint Mapping</text>
+</svg>
