@@ -50,7 +50,7 @@
   <text class="mono" x="965" y="405">mode = wide</text>
 
   <path class="arrow" d="M 530 590 C 665 540, 835 540, 970 590"/>
-  <text class="mono" x="664" y="532">precision <-> wide</text>
+  <text class="mono" x="664" y="532">precision and wide</text>
 
   <path class="arrow" d="M 350 500 C 410 410, 505 330, 590 270"/>
   <path class="arrow" d="M 1150 500 C 1090 410, 995 330, 910 270"/>
