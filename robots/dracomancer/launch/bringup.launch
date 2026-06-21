@@ -50,10 +50,11 @@
   <arg name="enable_shape_safety"      default="true" />
   <arg name="missing_inradius_scale"   default="1.0" />
   <arg name="min_safety_scale"         default="0.0" />
-  <arg name="force_inradius_min"       default="0.2" />
-  <arg name="torque_inradius_min"      default="0.02" />
-  <arg name="force_inradius_hard_min"  default="0.1" />
-  <arg name="torque_inradius_hard_min" default="0.01" />
+  <!-- Threshold range [hard_min, min]: force 0.0~0.6, torque 0.0~0.1. -->
+  <arg name="force_inradius_min"       default="0.6" />
+  <arg name="torque_inradius_min"      default="0.1" />
+  <arg name="force_inradius_hard_min"  default="0.0" />
+  <arg name="torque_inradius_hard_min" default="0.0" />
   <arg name="inradius_timeout"         default="0.5" />
   <arg name="safety_log_period"        default="1.0" />
   <!-- Low-pass the (noisy) measured fc_f_min / fc_t_min before the danger
