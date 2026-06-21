@@ -395,7 +395,7 @@ roslaunch dracomancer bringup.launch \
 roslaunch dracomancer rviz.launch
 ```
 
-親機PCでは `ROS_MASTER_URI` を子機PCのROS masterに向け、`ROS_IP` または `ROS_HOSTNAME` を親機PC自身の到達可能なIP/ホスト名に設定してください。
+ROS master は親機PCに固定します。子機PCでは `ROS_MASTER_URI` を親機PCに向け、親機PCでは `ROS_MASTER_URI` を自身に向けた状態で `rviz.launch` のみを起動してください。両PCで `ROS_IP` または `ROS_HOSTNAME` は、それぞれ相手PCから到達可能なIP/ホスト名に設定します。
 
 実機なしで Dracomancer 関節状態を試す:
 

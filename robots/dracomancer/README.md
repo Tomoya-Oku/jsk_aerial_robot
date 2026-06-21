@@ -111,8 +111,9 @@ roslaunch dracomancer bringup.launch \
   fc_serial_port:=/dev/flight_controller
 ```
 
-On the GUI PC, point `ROS_MASTER_URI` to the Dracomancer machine and launch only
-RViz:
+Use the GUI PC as the fixed ROS master. On the Dracomancer/Khadas side, point
+`ROS_MASTER_URI` to the GUI PC before launching bringup. On the GUI PC, keep
+`ROS_MASTER_URI` pointed at itself and launch only RViz:
 
 ```bash
 roslaunch dracomancer rviz.launch

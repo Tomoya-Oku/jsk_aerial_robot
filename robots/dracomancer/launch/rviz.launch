@@ -2,8 +2,8 @@
   <arg name="robot_ns" default="dracomancer" />
   <arg name="rviz_config" default="$(find dracomancer)/config/rviz_config" />
 
-  <!-- Run this on the GUI PC while ROS_MASTER_URI points to the machine
-       running dracomancer bringup.launch. -->
+  <!-- Run this on the GUI PC. The GUI PC is expected to provide the fixed ROS
+       master, and the Dracomancer/Khadas PC should point ROS_MASTER_URI here. -->
   <node name="$(arg robot_ns)_rviz" pkg="rviz" type="rviz"
         args="-d $(arg rviz_config)" output="screen" />
 </launch>
