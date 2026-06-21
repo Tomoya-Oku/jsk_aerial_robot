@@ -4,6 +4,6 @@
 
   <!-- Run this on the GUI PC. The GUI PC is expected to provide the fixed ROS
        master, and the Dracomancer/Khadas PC should point ROS_MASTER_URI here. -->
-  <node name="$(arg robot_ns)_rviz" pkg="rviz" type="rviz"
+  <node name="rviz" pkg="rviz" type="rviz" ns="$(arg robot_ns)"
         args="-d $(arg rviz_config)" output="screen" />
 </launch>
