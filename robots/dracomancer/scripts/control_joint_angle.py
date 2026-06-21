@@ -3,7 +3,7 @@
 
 import rospy
 import numpy as np
-from std_msgs.msg import Float64MultiArray, UInt8, String
+from std_msgs.msg import Float64, Float64MultiArray, UInt8, String
 from sensor_msgs.msg import JointState
 from dracomancer.srv import ShapeFeasibility, ShapeFeasibilityRequest
 
@@ -53,6 +53,13 @@ class ControlJoints:
         self.publish_before_device_ready = rospy.get_param("~publish_before_device_ready", False)
 
         self.shape_error_topic = rospy.get_param("~shape_error_topic", self.device_ns + "/shape_control_error")
+        # Predicted fc of the *candidate* (mapped) shape, republished from the
+        # feasibility service response (precision mode only). Useful for plotting
+        # / recording; distinct from the controlled robot's measured fc.
+        self.candidate_force_radius_topic = rospy.get_param(
+            "~candidate_force_radius_topic", self.device_ns + "/candidate/fc_f_min")
+        self.candidate_torque_radius_topic = rospy.get_param(
+            "~candidate_torque_radius_topic", self.device_ns + "/candidate/fc_t_min")
 
         # Predictive shape-feasibility gate (precision mode):
         #   candidate shape -> shape_feasibility service -> fc_f_min / fc_t_min.
@@ -88,6 +95,8 @@ class ControlJoints:
         # Publisher
         self.joints_ctrl_pub = rospy.Publisher(self.command_topic, JointState, queue_size=10)
         self.shape_error_pub = rospy.Publisher(self.shape_error_topic, Float64MultiArray, queue_size=1)
+        self.candidate_fc_f_pub = rospy.Publisher(self.candidate_force_radius_topic, Float64, queue_size=1)
+        self.candidate_fc_t_pub = rospy.Publisher(self.candidate_torque_radius_topic, Float64, queue_size=1)
 
         # Service client (persistent for rate; reconnected on failure)
         self.feasibility_srv = None
@@ -233,6 +242,10 @@ class ControlJoints:
         self.last_feasibility_eval_stamp = now
 
         feasible, fc_f, fc_t = self.evaluate_feasibility(candidate)
+        if fc_f is not None:
+            self.candidate_fc_f_pub.publish(Float64(fc_f))
+        if fc_t is not None:
+            self.candidate_fc_t_pub.publish(Float64(fc_t))
         if feasible:
             self.last_feasible_target = candidate
         # feasible False or None (service failure / invalid) -> hold last feasible.
