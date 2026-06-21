@@ -1,0 +1,10 @@
+# Evaluate the feasible-control force/torque volume radius of a candidate shape.
+# The candidate is given as the controlled robot's (e.g. DRAGON) link joint
+# angles. Gimbal joints are ignored here; the robot model fills them with its
+# nominal (hovering) angles, so this is an approximate prediction.
+string[] name        # candidate link joint names
+float64[] position   # candidate link joint angles [rad]
+---
+float64 fc_f_min     # predicted force volume inradius (nominal gimbal)
+float64 fc_t_min     # predicted torque volume inradius (nominal gimbal)
+bool valid           # false if the model could not be evaluated

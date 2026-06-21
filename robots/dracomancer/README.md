@@ -170,25 +170,23 @@ roslaunch dracomancer teleoperation.launch
 This starts in `startup` mode.  Switch to `wide` for joystick/IMU movement, or
 `precision` for arm-to-DRAGON shape mapping.
 
-For simulation where falling is acceptable and infeasible-pose rejection is too
-strong:
+For simulation where falling is acceptable and the predictive feasibility gate
+is too strong (deform freely, no rejection):
 
 ```bash
 roslaunch dracomancer teleoperation.launch \
-  enable_shape_safety:=false \
+  enable_feasibility_gate:=false \
   publish_joints_only_when_hovering:=true \
   publish_joints_before_device_ready:=false \
   max_step:=0.03
 ```
 
-For partial safety instead of disabling it completely:
+To keep the gate but relax the lower thresholds:
 
 ```bash
 roslaunch dracomancer teleoperation.launch \
-  min_safety_scale:=0.5 \
-  missing_inradius_scale:=0.5 \
-  force_inradius_min:=0.05 \
-  torque_inradius_min:=0.005 \
+  force_radius_threshold:=0.05 \
+  torque_radius_threshold:=0.005 \
   max_step:=0.03
 ```
 
@@ -223,11 +221,14 @@ roslaunch dracomancer haptics.launch \
   `/dracomancer/servo/states`.
 - `device_joint_topic`: Dracomancer joint state topic. Default:
   `/dracomancer/joint_states`.
-- `enable_shape_safety`: enables feasible-control inradius based joint command
-  scaling.
-- `missing_inradius_scale`: command scale used before `/dragon/debug/fc_*` is
-  available.
-- `min_safety_scale`: lower bound for joint command scale when inradius is low.
+- `enable_feasibility_gate`: enables the predictive shape-feasibility gate in
+  precision mode (candidate shape is evaluated before being sent).
+- `feasibility_service`: predicted-radius service name. Default:
+  `/dragon/shape_feasibility/check_shape`.
+- `force_radius_threshold` / `torque_radius_threshold`: lower bounds for the
+  predicted force / torque volume radius (fallback when the threshold topics are
+  not received).
+- `feasibility_rate`: how often the candidate shape is re-evaluated (Hz).
 - `max_step`: max joint target change per control cycle.
 - `publish_joints_only_when_hovering`: publishes `/dragon/joints_ctrl` only when
   DRAGON is in hover or later flight states.

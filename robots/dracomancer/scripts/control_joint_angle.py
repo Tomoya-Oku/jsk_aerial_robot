@@ -3,8 +3,9 @@
 
 import rospy
 import numpy as np
-from std_msgs.msg import Float64, Float64MultiArray, UInt8, String
+from std_msgs.msg import Float64MultiArray, UInt8, String
 from sensor_msgs.msg import JointState
+from dracomancer.srv import ShapeFeasibility, ShapeFeasibilityRequest
 
 class ControlJoints:
     def __init__(self):
@@ -52,30 +53,53 @@ class ControlJoints:
         self.publish_before_device_ready = rospy.get_param("~publish_before_device_ready", False)
 
         self.shape_error_topic = rospy.get_param("~shape_error_topic", self.device_ns + "/shape_control_error")
-        # Shape-safety scale is computed by volume_radius_monitor (bringup.launch) and
-        # consumed here to blend joint commands toward safe_pose. When the scale is
-        # stale/absent, missing_safety_scale (default 1.0 = no limiting) is used.
-        self.safety_scale_topic = rospy.get_param(
-            "~safety_scale_topic", self.device_ns + "/dragon_shape_safety_scale")
-        self.safety_scale_timeout = rospy.get_param("~safety_scale_timeout", 0.5)
-        self.missing_safety_scale = rospy.get_param("~missing_safety_scale", 1.0)
+
+        # Predictive shape-feasibility gate (precision mode):
+        #   candidate shape -> shape_feasibility service -> fc_f_min / fc_t_min.
+        #   Deform only when BOTH radii are at or above their lower thresholds;
+        #   otherwise hold the last feasible shape.
+        self.enable_feasibility_gate = rospy.get_param("~enable_feasibility_gate", True)
+        self.feasibility_service_name = rospy.get_param(
+            "~feasibility_service", "/" + self.robot_name + "/shape_feasibility/check_shape")
+        self.feasibility_service_timeout = rospy.get_param("~feasibility_service_timeout", 2.0)
+        # The model plugin runs a gimbal-planning optimization per call, so throttle
+        # how often the candidate is re-evaluated (Hz). Between checks the last
+        # feasible shape is held.
+        self.feasibility_rate = rospy.get_param("~feasibility_rate", 20.0)
+        # Lower thresholds (fallback params; overridden by the threshold topics below).
+        self.force_radius_threshold = rospy.get_param("~force_radius_threshold", 0.1)
+        self.torque_radius_threshold = rospy.get_param("~torque_radius_threshold", 0.01)
+        # Threshold topics carry [hard_min, min]; hard_min ([0]) is used as the gate bound.
+        self.force_threshold_topic = rospy.get_param(
+            "~force_volume_radius_threshold_topic", self.device_ns + "/force_volume_radius_threshold")
+        self.torque_threshold_topic = rospy.get_param(
+            "~torque_volume_radius_threshold_topic", self.device_ns + "/torque_volume_radius_threshold")
+        self.gate_log_period = rospy.get_param("~gate_log_period", 1.0)
 
         self.latest_device_joints = {}
         self.neutral_device_joints = {}
         self.current_target = list(self.safe_pose)
-        self.safety_scale_value = None
-        self.last_safety_scale_stamp = rospy.Time(0)
+        self.last_feasible_target = list(self.safe_pose)
         self.robot_hovering = False
+        self.last_gate_log_stamp = rospy.Time(0)
+        self.last_gate_feasible = None
+        self.last_feasibility_eval_stamp = rospy.Time(0)
 
         # Publisher
         self.joints_ctrl_pub = rospy.Publisher(self.command_topic, JointState, queue_size=10)
         self.shape_error_pub = rospy.Publisher(self.shape_error_topic, Float64MultiArray, queue_size=1)
 
+        # Service client (persistent for rate; reconnected on failure)
+        self.feasibility_srv = None
+        if self.enable_feasibility_gate:
+            self.connect_feasibility_service()
+
         # Subscriber
         self.device_joint_sub = rospy.Subscriber(self.device_joint_topic, JointState, self.device_joint_cb, queue_size=1)
-        self.safety_scale_sub = rospy.Subscriber(self.safety_scale_topic, Float64, self.safety_scale_cb, queue_size=1)
         self.robot_flight_state_sub = rospy.Subscriber('/' + self.robot_name + '/flight_state', UInt8, self.robot_flight_state_cb, queue_size=1)
         self.mode_sub = rospy.Subscriber(self.mode_topic, String, self.mode_cb, queue_size=1)
+        self.force_threshold_sub = rospy.Subscriber(self.force_threshold_topic, Float64MultiArray, self.force_threshold_cb, queue_size=1)
+        self.torque_threshold_sub = rospy.Subscriber(self.torque_threshold_topic, Float64MultiArray, self.torque_threshold_cb, queue_size=1)
 
         rospy.loginfo("teleop_mode: %s, mode_topic: %s", self.teleop_mode, self.mode_topic)
         rospy.loginfo("device_joint_topic: %s", self.device_joint_topic)
@@ -88,10 +112,22 @@ class ControlJoints:
                           name, scale, sign, offset)
                                 for name, scale, sign, offset in zip(
                                     self.joint_names, self.scales, self.signs, self.offsets)))
-        rospy.loginfo("safety scale topic: %s (timeout=%.2f, missing=%.3f)",
-                      self.safety_scale_topic, self.safety_scale_timeout, self.missing_safety_scale)
+        rospy.loginfo("feasibility gate: enable=%s, service=%s, thresholds force/torque=%.4f/%.4f",
+                      self.enable_feasibility_gate, self.feasibility_service_name,
+                      self.force_radius_threshold, self.torque_radius_threshold)
         rospy.loginfo("joint command gating: only_when_hovering=%s, before_device_ready=%s",
                       self.publish_only_when_hovering, self.publish_before_device_ready)
+
+    def connect_feasibility_service(self):
+        try:
+            rospy.wait_for_service(self.feasibility_service_name, timeout=self.feasibility_service_timeout)
+            self.feasibility_srv = rospy.ServiceProxy(self.feasibility_service_name, ShapeFeasibility, persistent=True)
+            rospy.loginfo("connected to shape feasibility service: %s", self.feasibility_service_name)
+            return True
+        except rospy.ROSException:
+            rospy.logwarn_throttle(5.0, "shape feasibility service '%s' not available", self.feasibility_service_name)
+            self.feasibility_srv = None
+            return False
 
     def mode_cb(self, msg):
         mode = str(msg.data).strip().lower()
@@ -116,31 +152,26 @@ class ControlJoints:
                 }
                 rospy.loginfo("Captured dracomancer neutral joints for DRAGON mapping")
 
-    def safety_scale_cb(self, msg):
-        self.safety_scale_value = float(msg.data)
-        self.last_safety_scale_stamp = rospy.Time.now()
-
     def robot_flight_state_cb(self, msg):
         self.robot_hovering = int(msg.data) >= 4
 
-    def safety_scale(self):
-        # Use the latest scale from volume_radius_monitor; fall back to
-        # missing_safety_scale when it is absent or stale.
-        if self.safety_scale_value is None:
-            return max(0.0, min(1.0, self.missing_safety_scale))
-        if (rospy.Time.now() - self.last_safety_scale_stamp).to_sec() > self.safety_scale_timeout:
-            return max(0.0, min(1.0, self.missing_safety_scale))
-        return max(0.0, min(1.0, self.safety_scale_value))
+    def force_threshold_cb(self, msg):
+        if len(msg.data) > 0:
+            self.force_radius_threshold = float(msg.data[0])
+
+    def torque_threshold_cb(self, msg):
+        if len(msg.data) > 0:
+            self.torque_radius_threshold = float(msg.data[0])
 
     def mapped_target(self):
         if not self.latest_device_joints:
-            return list(self.safe_pose)
+            return list(self.last_feasible_target)
 
         target = []
         for i, source_name in enumerate(self.source_joint_names):
             source = self.latest_device_joints.get(source_name)
             if source is None:
-                target.append(self.current_target[i])
+                target.append(self.last_feasible_target[i])
                 continue
 
             neutral = self.neutral_device_joints.get(source_name, 0.0)
@@ -149,16 +180,73 @@ class ControlJoints:
 
         return target
 
+    def evaluate_feasibility(self, candidate):
+        # Returns (feasible: bool, fc_f_min, fc_t_min). On service failure returns
+        # (None, ...) so the caller can hold the last feasible shape conservatively.
+        if self.feasibility_srv is None:
+            if not self.connect_feasibility_service():
+                return None, None, None
+        req = ShapeFeasibilityRequest()
+        req.name = list(self.joint_names)
+        req.position = list(candidate)
+        try:
+            res = self.feasibility_srv.call(req)
+        except (rospy.ServiceException, TypeError):
+            rospy.logwarn_throttle(5.0, "shape feasibility service call failed; reconnecting")
+            self.feasibility_srv = None
+            return None, None, None
+        if not res.valid:
+            return None, res.fc_f_min, res.fc_t_min
+        feasible = (res.fc_f_min >= self.force_radius_threshold and
+                    res.fc_t_min >= self.torque_radius_threshold)
+        return feasible, res.fc_f_min, res.fc_t_min
+
+    def log_gate(self, feasible, fc_f, fc_t):
+        if feasible != self.last_gate_feasible:
+            self.last_gate_feasible = feasible
+        now = rospy.Time.now()
+        if self.gate_log_period > 0.0 and (now - self.last_gate_log_stamp).to_sec() < self.gate_log_period:
+            return
+        self.last_gate_log_stamp = now
+        f = "n/a" if fc_f is None else "%.4f" % fc_f
+        t = "n/a" if fc_t is None else "%.4f" % fc_t
+        msg = ("shape feasibility: deform=%s fc_f_min=%s fc_t_min=%s "
+               "thresholds(force/torque)=%.4f/%.4f") % (
+            feasible, f, t, self.force_radius_threshold, self.torque_radius_threshold)
+        if feasible:
+            rospy.loginfo(msg)
+        else:
+            rospy.logwarn(msg)
+
+    def precision_target(self):
+        # Map the arm to a candidate DRAGON shape, then gate by predicted feasibility.
+        candidate = self.mapped_target()
+        if not self.enable_feasibility_gate:
+            self.last_feasible_target = candidate
+            return candidate
+
+        # Throttle the (expensive) feasibility evaluation; hold between checks.
+        now = rospy.Time.now()
+        if self.feasibility_rate > 0.0 and \
+                (now - self.last_feasibility_eval_stamp).to_sec() < 1.0 / self.feasibility_rate:
+            return list(self.last_feasible_target)
+        self.last_feasibility_eval_stamp = now
+
+        feasible, fc_f, fc_t = self.evaluate_feasibility(candidate)
+        if feasible:
+            self.last_feasible_target = candidate
+        # feasible False or None (service failure / invalid) -> hold last feasible.
+        self.log_gate(bool(feasible), fc_f, fc_t)
+        return list(self.last_feasible_target)
+
     def desired_target(self):
         if self.teleop_mode == "startup":
+            self.last_feasible_target = list(self.startup_pose)
             return list(self.startup_pose)
         if self.teleop_mode == "wide":
+            self.last_feasible_target = list(self.wide_hold_pose)
             return list(self.wide_hold_pose)
-        return self.mapped_target()
-
-    @staticmethod
-    def blend(a, b, ratio):
-        return [ai + ratio * (bi - ai) for ai, bi in zip(a, b)]
+        return self.precision_target()
 
     def rate_limit(self, target):
         limited = []
@@ -173,16 +261,9 @@ class ControlJoints:
         self.shape_error_pub.publish(msg)
 
     def make_joint_msg(self):
-        scale = self.safety_scale()
-        desired = self.desired_target()
-
-        if scale <= 0.0:
-            target = list(self.safe_pose)
-        elif scale < 1.0:
-            target = self.blend(self.safe_pose, desired, scale)
-        else:
-            target = desired
-
+        target = self.desired_target()
+        # desired (raw mapping) vs target (feasible-gated) error, for haptic feedback.
+        desired = self.mapped_target() if self.teleop_mode == "precision" else target
         self.publish_shape_error(desired, target)
         self.current_target = self.rate_limit(target)
 

@@ -15,10 +15,14 @@
   <arg name="servo_topic" default="/dracomancer/servo/states"/>
   <arg name="enable_servo_to_joint_states" default="true"/>
   <arg name="servo_to_joint_states_rate" default="40.0"/>
-  <!-- Shape-safety scale is produced by volume_radius_monitor in bringup.launch. -->
-  <arg name="safety_scale_topic" default="/$(arg device_ns)/dragon_shape_safety_scale"/>
-  <arg name="safety_scale_timeout" default="0.5"/>
-  <arg name="missing_safety_scale" default="1.0"/>
+  <!-- Predictive shape-feasibility gate (precision mode).
+       shape_feasibility_node runs in the controlled robot's namespace so its
+       robot model can read <robot_ns>/robot_description. -->
+  <arg name="enable_feasibility_gate" default="true"/>
+  <arg name="feasibility_service" default="/$(arg robot_ns)/shape_feasibility/check_shape"/>
+  <arg name="robot_model_plugin_name" default="dragon/full_vectoring_robot_model"/>
+  <arg name="force_radius_threshold" default="0.1"/>
+  <arg name="torque_radius_threshold" default="0.01"/>
   <arg name="max_step" default="0.04"/>
   <arg name="joint_limit" default="1.57079632679"/>
   <arg name="capture_neutral_on_first_msg" default="false"/>
@@ -173,8 +177,21 @@
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
     <param name="publish_only_when_hovering" value="$(arg publish_joints_only_when_hovering)"/>
     <param name="publish_before_device_ready" value="$(arg publish_joints_before_device_ready)"/>
-    <param name="safety_scale_topic" value="$(arg safety_scale_topic)"/>
-    <param name="safety_scale_timeout" value="$(arg safety_scale_timeout)"/>
-    <param name="missing_safety_scale" value="$(arg missing_safety_scale)"/>
+    <param name="enable_feasibility_gate" value="$(arg enable_feasibility_gate)"/>
+    <param name="feasibility_service" value="$(arg feasibility_service)"/>
+    <param name="force_radius_threshold" value="$(arg force_radius_threshold)"/>
+    <param name="torque_radius_threshold" value="$(arg torque_radius_threshold)"/>
+  </node>
+
+  <!-- Predictive shape-feasibility server. Runs in the controlled robot's
+       namespace so the robot model reads <robot_ns>/robot_description and rotor
+       rosparams. Requires the controlled robot (DRAGON) to be running. -->
+  <node pkg="dracomancer"
+        type="shape_feasibility_node"
+        name="shape_feasibility"
+        ns="$(arg robot_ns)"
+        output="screen"
+        if="$(arg enable_feasibility_gate)">
+    <param name="robot_model_plugin_name" value="$(arg robot_model_plugin_name)"/>
   </node>
 </launch>

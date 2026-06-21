@@ -9,8 +9,9 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 オペレータの腕の関節角と操縦桿、背中の IMU を読み取り、DRAGON の
 **移動指令（FlightNav）** と **形状指令（joints_ctrl）** に変換する。
 
-- 実体は `scripts/` 配下の **Python ノード**。
-- `src/`（`dracomancer.cpp`, `model/`, `control/`）と `include/` は**現状すべて空のプレースホルダ**。
+- 実体は主に `scripts/` 配下の **Python ノード**。
+- 例外として `src/shape_feasibility_node.cpp` は実装済みの C++ サービスノード（pluginlib で DRAGON モデルを読み込み fc 半径を予測）。
+- `src/` の `dracomancer.cpp`, `model/`, `control/` と `include/` は**空のプレースホルダ**。
   C++ プラグイン（`plugins/*.xml`）は宣言のみで中身がない。安易に「実装済み」と扱わないこと。
 
 ## ファイル構成と役割
@@ -21,8 +22,9 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 | `scripts/convert_servo_to_joint_states.py` | サーボ tick → rad の関節状態。ID0〜6 を固定マッピング |
 | `scripts/control_position.py` | 操縦桿(+IMU) → DRAGON 移動指令 `/<robot>/uav/nav` |
 | `scripts/control_orientation.py` | 操縦桿 → 姿勢指令 `/<robot>/final_target_baselink_rpy` |
-| `scripts/control_joint_angle.py` | 腕関節 → DRAGON 形状指令 `/<robot>/joints_ctrl`（安全スケールを購読して抑制） |
-| `scripts/volume_radius_monitor.py` | fc 内接半径の中継・しきい値 pub/sub・安全スケール算出（bringup で常時起動） |
+| `scripts/control_joint_angle.py` | 腕関節 → DRAGON 形状指令 `/<robot>/joints_ctrl`（候補姿勢のフィージビリティで変形可否を判定） |
+| `src/shape_feasibility_node.cpp` | 候補リンク角の force/torque volume 半径を DRAGON モデルで予測するサービス（C++） |
+| `scripts/volume_radius_monitor.py` | しきい値 pub/sub・ライブ安全スケール算出（bringup で常時起動） |
 | `scripts/control_haptic_feedback.py` | 形状抑制量 → Dracomancer 力覚提示 |
 | `launch/bringup.launch` | デバイス本体（URDF/TF/サーボ橋渡し/FC/安全半径モニタ） |
 | `launch/teleoperation.launch` | 位置・姿勢・関節角制御ノード群 |
@@ -70,10 +72,12 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 ## control_joint_angle.py（形状制御）の設計
 
 - `startup`: `startup_pose`（既定 `[0, pi/2, 0, pi/2, 0, pi/2]`）を保持。
-- `precision`: Dracomancer 腕関節を DRAGON 関節へマッピング。
+- `precision`: Dracomancer 腕関節を DRAGON 関節へマッピングし、**候補姿勢のフィージビリティで変形可否を判定**する。
 - `wide`: `wide_hold_pose`（既定 `startup_pose`）を保持し、移動は `control_position.py` に任せる。
-- 形状安全は **`volume_radius_monitor.py`（bringup.launch）** が DRAGON の `/debug/fc_f_min` と `/debug/fc_t_min` からスケールを計算し `/dracomancer/dragon_shape_safety_scale` に publish。`control_joint_angle.py` はこれを購読して関節指令を抑制する。半径しきい値は `*_volume_radius_threshold` で常時 pub、`*_volume_radius_threshold_cmd`（`[hard_min, min]`）で実行時更新できる。
+- **予測フィージビリティ・ゲート（主機構）**: 候補 DRAGON 形状を `shape_feasibility_node`（C++、`dragon/full_vectoring_robot_model` を pluginlib で読み込み、`ns=dragon` で起動）の `check_shape` サービスに渡し `fc_f_min`/`fc_t_min` を予測。force・torque 両方が下限しきい値以上なら変形（採用・記憶）、未満／サービス失敗なら直前可行姿勢で停止。下限しきい値は `*_volume_radius_threshold`（`[hard_min, min]` の `hard_min`）を購読、未受信時は `force_radius_threshold`/`torque_radius_threshold` パラメータ。
+- **ライブ監視（情報提供）**: `volume_radius_monitor.py`（bringup.launch）が実機現在状態の fc からライブスケールを `/dracomancer/dragon_shape_safety_scale` に publish（web UI 用、ゲートとは独立）。しきい値の所有・pub/sub もここ。
 - 位置・姿勢・関節角操作はいずれもホバリング（`flight_state>=4`）時のみ出力する（`publish_joints_only_when_hovering` 既定 true）。
+- `shape_feasibility_node` は DRAGON のモデル/パラメータを使うため **DRAGON 起動が前提**。`dragon` を run_depend に追加済み。
 
 ### 数学的に重要な事実（変更時の注意）
 

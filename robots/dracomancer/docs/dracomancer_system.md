@@ -40,8 +40,9 @@ flowchart TB
 | `convert_servo_to_joint_states.py` | サーボtickをラジアンの関節状態へ変換 | `/dracomancer/servo/states` | `/dracomancer/joint_states` |
 | `control_position.py` | 操縦桿とIMUから DRAGON の速度指令を生成 | joystick, IMU, flight_state | `/dragon/uav/nav` |
 | `control_orientation.py` | 操縦桿から姿勢指令を生成 | joystick, flight_state | `/dragon/final_target_baselink_rpy` |
-| `control_joint_angle.py` | 腕関節から DRAGON の形状指令を生成（安全スケールを購読して抑制） | joint_states, safety_scale, flight_state | `/dragon/joints_ctrl`, `/dracomancer/shape_control_error` |
-| `volume_radius_monitor.py` | しきい値 pub/sub・安全スケール算出（bringup.launch で常時起動。fc 内接半径は再 pub しない） | fc inradius, threshold cmd | `*_volume_radius_threshold`, `/dracomancer/dragon_shape_safety_scale` |
+| `control_joint_angle.py` | 腕関節から DRAGON の形状指令を生成（候補姿勢のフィージビリティで変形可否を判定） | joint_states, shape_feasibility, threshold, flight_state | `/dragon/joints_ctrl`, `/dracomancer/shape_control_error` |
+| `shape_feasibility_node`（C++） | 候補リンク角の force/torque volume 半径を DRAGON モデルで予測するサービス | candidate joints | `~check_shape`（fc_f_min, fc_t_min） |
+| `volume_radius_monitor.py` | しきい値 pub/sub・ライブ安全スケール算出（bringup.launch で常時起動。fc 内接半径は再 pub しない） | fc inradius, threshold cmd | `*_volume_radius_threshold`, `/dracomancer/dragon_shape_safety_scale` |
 | `control_haptic_feedback.py` | 抑制された形状入力から力覚提示を生成 | joint_states, shape_control_error, mode | `/dracomancer/haptic_torque`, `/servo/target_current` |
 | `publish_fake_joint_states.py` | 実機なしで Dracomancer 関節状態を生成 | `/dracomancer/joint_cmd` | `/dracomancer/joint_states` |
 
@@ -89,7 +90,7 @@ flowchart TB
 | `/dracomancer/joint_states` | `sensor_msgs/JointState` | Dracomancer の腕関節角 |
 | `/dragon/uav/nav` | `aerial_robot_msgs/FlightNav` | DRAGON の速度指令 |
 | `/dragon/joints_ctrl` | `sensor_msgs/JointState` | DRAGON の形状指令 |
-| `/dracomancer/dragon_shape_safety_scale` | `std_msgs/Float64` | 安全スケール（`volume_radius_monitor.py` が pub、`control_joint_angle.py` と web UI が購読） |
+| `/dracomancer/dragon_shape_safety_scale` | `std_msgs/Float64` | ライブ安全スケール（`volume_radius_monitor.py` が pub、web UI が購読。情報提供用） |
 | `/dracomancer/shape_control_error` | `std_msgs/Float64MultiArray` | 力覚提示用の形状抑制量 `q_des - q_tar` |
 | `/dracomancer/haptic_torque` | `sensor_msgs/JointState` | 安全スケーリングで抑制された入力差から計算した Dracomancer 7関節の提示トルク |
 
@@ -260,21 +261,34 @@ rad = (tick - 2048) * 2*pi / 4096 + offset
 
 ## 形状安全機構
 
-形状安全は **2ノード構成**です。
+形状安全は **予測フィージビリティ・ゲート**（precision モードの主機構）と **ライブ監視**（情報提供）の2層です。
 
-- `volume_radius_monitor.py`（**bringup.launch** で常時起動）: DRAGON 側の実現可能制御内接半径（feasible control inradius）を参照し、半径・しきい値・安全スケールを算出して publish。しきい値の実行時更新も受け付ける。
-- `control_joint_angle.py`（teleoperation.launch）: 安全スケールを購読し、明らかに飛行不可能な形状へ強く押し込まないよう関節指令をスケーリングする。
+### 1. 予測フィージビリティ・ゲート（precision モード）
 
-> モニタを bringup 側に置くことで、テレオペレーション（位置・姿勢・関節角操作）がホバリング以外で無効化されていても、安全半径系の pub/sub は動き続けます。
+腕関節を DRAGON 形状にマッピングした**候補姿勢**を、実際に送る前に評価します。
 
-入力となる安全指標（`volume_radius_monitor.py` が購読）:
+```mermaid
+flowchart TD
+    A["腕関節 → 候補 DRAGON 形状"] --> B["shape_feasibility サービスで予測<br/>fc_f_min, fc_t_min（DRAGONモデル）"]
+    B --> C{"fc_f_min >= force_thr<br/>かつ fc_t_min >= torque_thr ?"}
+    C -->|yes| D["変形可：候補を採用し記憶<br/>last_feasible_target = 候補"]
+    C -->|no / サービス失敗| E["変形しない：直前の可行姿勢を保持"]
+    D --> F["max_step で1周期の変化量を制限して送信"]
+    E --> F
+```
 
-| トピック | 意味 |
-| --- | --- |
-| `/dragon/debug/fc_f_min` | 力の実現可能内接半径 |
-| `/dragon/debug/fc_t_min` | トルクの実現可能内接半径 |
+- **判定基準**：force・torque **両方**の予測半径が下限しきい値以上なら変形可。
+- **NG時**：直前に可行だった形状（`last_feasible_target`）を保持し、そこから動かさない。
+- 予測はサービス `shape_feasibility/check_shape` が `dragon/full_vectoring_robot_model` プラグインで計算します。**ジンバルの公称計画を含む近似予測**で、DRAGON が実際に達成する半径に近い値です（オンラインの角度制限・ロックは無視）。
+- 最適化が毎回走るため、評価は `feasibility_rate`（既定 20Hz）にスロットルされます。
 
-内接半径そのものは **DRAGON 側の `/dragon/debug/fc_*_min` を直接購読**してください。Dracomancer では再 publish しません（重複回避）。`volume_radius_monitor.py` が Dracomancer 側へ出すのは、しきい値と安全スケールだけです。
+> `shape_feasibility_node` は DRAGON の namespace（`ns=dragon`）で起動し、モデルが `/dragon/robot_description` と機体パラメータを読みます。**DRAGON が起動している必要があります。**
+
+### 2. ライブ監視（`volume_radius_monitor.py`、bringup.launch）
+
+実機の**現在状態**の fc 内接半径からライブの安全スケールを算出して publish します（web UI 表示・記録用、ゲートとは独立）。bringup 側にあるため、テレオペレーションがホバリング以外で無効化されていても動き続けます。fc 内接半径そのものは **DRAGON の `/dragon/debug/fc_*_min` を直接購読**してください（Dracomancer では再 publish しません）。
+
+### しきい値トピック（`volume_radius_monitor.py` が所有・pub/sub、ゲートも購読）
 
 | トピック | 型 | 意味 |
 | --- | --- | --- |
@@ -283,40 +297,9 @@ rad = (tick - 2048) * 2*pi / 4096 + offset
 | `/dracomancer/force_volume_radius_threshold_cmd` | `std_msgs/Float64MultiArray` | 力のしきい値 `[hard_min, min]` を実行時に設定（subscribe） |
 | `/dracomancer/torque_volume_radius_threshold_cmd` | `std_msgs/Float64MultiArray` | トルクのしきい値 `[hard_min, min]` を実行時に設定（subscribe） |
 
-しきい値の更新は `hard_min <= min` の場合のみ反映され、要素数が 2 未満や逆転している指令は警告して無視します。
+`control_joint_angle.py` はこれらの `[hard_min, min]` の **`hard_min`（先頭）をゲートの下限しきい値**として使います。トピック未受信時は `force_radius_threshold`/`torque_radius_threshold` パラメータ（既定 `0.1`/`0.01`）を使います。しきい値更新は `hard_min <= min` の場合のみ反映します。
 
-安全スケール:
-
-```mermaid
-flowchart TD
-    START["関節指令を生成"] --> EN{"enable_shape_safety?"}
-    EN -->|false| FULL["scale = 1.0"]
-    EN -->|true| RDY{"内接半径が最新?"}
-    RDY -->|no| MISS["scale = missing_inradius_scale"]
-    RDY -->|yes| HARD{"force または torque が hard_min 以下?"}
-    HARD -->|yes| MIN["scale = min_safety_scale"]
-    HARD -->|no| MARGIN["force / torque margin の小さい方"]
-```
-
-計算:
-
-```text
-force_margin  = (force  - force_hard_min)  / (force_min  - force_hard_min)
-torque_margin = (torque - torque_hard_min) / (torque_min - torque_hard_min)
-scale = max(min_safety_scale, min(1.0, force_margin, torque_margin))
-```
-
-`volume_radius_monitor.py` は算出した scale を `/dracomancer/dragon_shape_safety_scale`（`std_msgs/Float64`）として publish し、`control_joint_angle.py` がこれを購読します。
-
-スケール適用（`control_joint_angle.py`）:
-
-- 受信した scale が古い（`safety_scale_timeout` 超過）または未受信のときは `missing_safety_scale`（既定 `1.0`＝抑制なし）を使う
-- `scale <= 0`: `safe_pose` へ戻す
-- `0 < scale < 1`: `safe_pose` とマッピング結果を線形補間
-- `scale >= 1`: マッピング結果をそのまま使う
-- 最後に `max_step` で1周期あたりの関節変化量を制限する
-
-送信ゲート（ホバリング以外では位置・姿勢・関節角操作を無効化）:
+### 送信ゲート（ホバリング以外では位置・姿勢・関節角操作を無効化）
 
 | 条件 | 既定 | 挙動 |
 | --- | --- | --- |
@@ -325,32 +308,35 @@ scale = max(min_safety_scale, min(1.0, force_margin, torque_margin))
 
 > `control_position.py`（`wide && hovering && !landing`）と `control_orientation.py`（`publish_only_when_hovering` 既定 true）も同様にホバリング時のみ出力します。
 
-主なパラメータ:
-
-`volume_radius_monitor.py`（bringup.launch）:
-
-| パラメータ | 既定 | 説明 |
-| --- | --- | --- |
-| `enable_shape_safety` | `true` | 安全スケーリングの有効化（false で scale=1.0 を pub） |
-| `force_inradius_min` | `0.2` | 力余裕の上端 |
-| `force_inradius_hard_min` | `0.1` | 力の危険しきい値 |
-| `torque_inradius_min` | `0.02` | トルク余裕の上端 |
-| `torque_inradius_hard_min` | `0.01` | トルクの危険しきい値 |
-| `missing_inradius_scale` | `1.0` | 半径未受信時のスケール |
-| `min_safety_scale` | `0.0` | スケール下限 |
-| `inradius_timeout` | `0.5` | 内接半径の有効期限 [s] |
-| `safety_log_period` | `1.0` | 危険状態・半径・スケールをログ出力する周期 |
+### 主なパラメータ
 
 `control_joint_angle.py`（teleoperation.launch）:
 
 | パラメータ | 既定 | 説明 |
 | --- | --- | --- |
-| `safety_scale_topic` | `/dracomancer/dragon_shape_safety_scale` | 購読する安全スケール |
-| `safety_scale_timeout` | `0.5` | スケールの有効期限 [s] |
-| `missing_safety_scale` | `1.0` | スケール未受信時の代替値 |
+| `enable_feasibility_gate` | `true` | 予測ゲートの有効化（false で候補をそのまま採用） |
+| `feasibility_service` | `/dragon/shape_feasibility/check_shape` | 予測サービス名 |
+| `feasibility_rate` | `20.0` | 候補評価のスロットル周波数 [Hz] |
+| `force_radius_threshold` | `0.1` | 力の下限しきい値（topic 未受信時のフォールバック） |
+| `torque_radius_threshold` | `0.01` | トルクの下限しきい値（同上） |
 | `max_step` | `0.04` | 1周期あたりの最大変化量 |
 | `startup_pose` | `[0, pi/2, 0, pi/2, 0, pi/2]` | 立ち上げ時の通常姿勢 |
 | `wide_hold_pose` | `startup_pose` | 広域移動中に保持する形状 |
+
+`shape_feasibility_node`（teleoperation.launch、`ns=dragon`）:
+
+| パラメータ | 既定 | 説明 |
+| --- | --- | --- |
+| `robot_model_plugin_name` | `dragon/full_vectoring_robot_model` | 予測に使う DRAGON モデルプラグイン |
+
+`volume_radius_monitor.py`（bringup.launch、ライブ監視）:
+
+| パラメータ | 既定 | 説明 |
+| --- | --- | --- |
+| `enable_shape_safety` | `true` | ライブスケール算出の有効化 |
+| `force_inradius_min` / `force_inradius_hard_min` | `0.2` / `0.1` | 力のしきい値（帯） |
+| `torque_inradius_min` / `torque_inradius_hard_min` | `0.02` / `0.01` | トルクのしきい値（帯） |
+| `inradius_timeout` | `0.5` | 内接半径の有効期限 [s] |
 
 モニタリング:
 
