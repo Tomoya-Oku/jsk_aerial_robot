@@ -12,6 +12,11 @@ class ServoToJointStates:
 
         # Parameters
         self.rate_hz = rospy.get_param("~rate", 40.0)
+        # Self-healing: if no servo message arrives within this timeout the
+        # subscription is re-created. This recovers from a startup TCPROS
+        # handshake race with rosserial_server (which otherwise leaves the
+        # subscription permanently dead and joint_states frozen).
+        self.resubscribe_timeout = rospy.get_param("~resubscribe_timeout", 2.0)
 
         # Topic names
         self.servo_topic = rospy.get_param("~servo_topic", "/dracomancer/servo/states")
@@ -47,6 +52,8 @@ class ServoToJointStates:
         self.latest_servo_pos = {}
         self.initial_servo_pos = {}
         self.initialized = False
+        self.last_servo_stamp = None          # 最終servo受信時刻（未受信なら None）
+        self.last_resubscribe = rospy.Time.now()
 
         # joint_states の順番
         self.ordered_ids = [0, 1, 2, 3, 4, 5, 6]
@@ -79,6 +86,25 @@ class ServoToJointStates:
                 current[sid] = float(s.angle)
 
         self.latest_servo_pos = current
+        self.last_servo_stamp = rospy.Time.now()
+
+    def servo_data_stale(self):
+        now = rospy.Time.now()
+        if self.last_servo_stamp is None:
+            # never received: measure from the last (re)subscribe
+            return (now - self.last_resubscribe).to_sec() > self.resubscribe_timeout
+        return (now - self.last_servo_stamp).to_sec() > self.resubscribe_timeout
+
+    def resubscribe(self):
+        rospy.logwarn("no servo data for >%.1fs; re-subscribing to %s",
+                      self.resubscribe_timeout, self.servo_topic)
+        try:
+            self.servo_states_sub.unregister()
+        except Exception:
+            pass
+        self.servo_states_sub = rospy.Subscriber(
+            self.servo_topic, ServoStates, self.servo_cb, queue_size=10)
+        self.last_resubscribe = rospy.Time.now()
 
     def make_joint_msg(self):
         msg = JointState()
@@ -106,6 +132,8 @@ class ServoToJointStates:
     def main(self):
         rate = rospy.Rate(self.rate_hz)
         while not rospy.is_shutdown():
+            if self.servo_data_stale():
+                self.resubscribe()
             self.joint_states_pub.publish(self.make_joint_msg())
             rate.sleep()
 
