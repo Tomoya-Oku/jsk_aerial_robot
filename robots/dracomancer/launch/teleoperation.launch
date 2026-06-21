@@ -24,7 +24,7 @@
   <!-- Gate fallback (hard_min) used only until the threshold topic arrives;
        matches volume_radius_monitor hard_min defaults (data-driven, see
        docs/fc_threshold_calibration.md). -->
-  <arg name="force_radius_threshold" default="0.06"/>
+  <arg name="force_radius_threshold" default="0.05"/>
   <arg name="torque_radius_threshold" default="0.002"/>
   <arg name="max_step" default="0.04"/>
   <arg name="joint_limit" default="1.57079632679"/>

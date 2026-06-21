@@ -50,11 +50,12 @@
   <arg name="enable_shape_safety"      default="true" />
   <arg name="missing_inradius_scale"   default="1.0" />
   <arg name="min_safety_scale"         default="0.0" />
-  <!-- Threshold range [hard_min, min], data-driven (see docs/fc_threshold_calibration.md):
-       force [0.06, 0.15], torque [0.002, 0.04] from the DRAGON fc distribution. -->
-  <arg name="force_inradius_min"       default="0.15" />
-  <arg name="torque_inradius_min"      default="0.04" />
-  <arg name="force_inradius_hard_min"  default="0.06" />
+  <!-- Threshold range [hard_min, min], data-driven (see docs/fc_threshold_calibration.md).
+       min is kept below the takeoff (circular) shape fc (fc_f=0.155, fc_t=0.022) so
+       that shape is always 'safe' (scale=1); lower-fc shapes scale down continuously. -->
+  <arg name="force_inradius_min"       default="0.12" />
+  <arg name="torque_inradius_min"      default="0.015" />
+  <arg name="force_inradius_hard_min"  default="0.05" />
   <arg name="torque_inradius_hard_min" default="0.002" />
   <arg name="inradius_timeout"         default="0.5" />
   <arg name="safety_log_period"        default="1.0" />
