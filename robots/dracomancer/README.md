@@ -253,18 +253,16 @@ rostopic echo /dragon/joints_ctrl
 Check the shape safety state:
 
 ```bash
-rostopic echo /dracomancer/dragon_shape_safety
-rostopic echo /dracomancer/force_volume_radius
-rostopic echo /dracomancer/torque_volume_radius
+rostopic echo /dracomancer/dragon_shape_safety_scale   # safety scale (0..1)
+rostopic echo /dragon/debug/fc_f_min                    # force inradius (from dragon)
+rostopic echo /dragon/debug/fc_t_min                    # torque inradius (from dragon)
 ```
 
-The safety message contains:
+The safety scale is computed by `volume_radius_monitor.py` (started in
+`bringup.launch`). The raw inradius is **not** republished under the
+`dracomancer` namespace — subscribe to the dragon topics directly.
 
-```text
-[force_inradius, torque_inradius, safety_scale]
-```
-
-`control_joint_angle.py` also logs whether the current shape is `safe`,
+`volume_radius_monitor.py` also logs whether the current shape is `safe`,
 `warning`, `danger`, or waiting for inradius input. The log period is controlled
 by `safety_log_period`.
 

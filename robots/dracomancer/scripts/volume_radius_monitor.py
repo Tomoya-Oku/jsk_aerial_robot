@@ -41,13 +41,9 @@ class VolumeRadiusMonitor:
         self.min_safety_scale = rospy.get_param("~min_safety_scale", 0.0)
         self.safety_log_period = rospy.get_param("~safety_log_period", 1.0)
 
-        # Output topics.
-        self.shape_safety_topic = rospy.get_param("~shape_safety_topic", self.device_ns + "/dragon_shape_safety")
+        # Output topics. Only dracomancer-computed quantities are published here;
+        # the raw inradius is NOT republished (consume /<robot>/debug/fc_*_min directly).
         self.safety_scale_topic = rospy.get_param("~safety_scale_topic", self.device_ns + "/dragon_shape_safety_scale")
-        self.force_volume_radius_topic = rospy.get_param(
-            "~force_volume_radius_topic", self.device_ns + "/force_volume_radius")
-        self.torque_volume_radius_topic = rospy.get_param(
-            "~torque_volume_radius_topic", self.device_ns + "/torque_volume_radius")
         self.force_volume_radius_threshold_topic = rospy.get_param(
             "~force_volume_radius_threshold_topic", self.device_ns + "/force_volume_radius_threshold")
         self.torque_volume_radius_threshold_topic = rospy.get_param(
@@ -64,10 +60,7 @@ class VolumeRadiusMonitor:
         self.last_safety_log_stamp = rospy.Time(0)
 
         # Publishers.
-        self.shape_safety_pub = rospy.Publisher(self.shape_safety_topic, Float64MultiArray, queue_size=1)
         self.safety_scale_pub = rospy.Publisher(self.safety_scale_topic, Float64, queue_size=1)
-        self.force_volume_radius_pub = rospy.Publisher(self.force_volume_radius_topic, Float64, queue_size=1)
-        self.torque_volume_radius_pub = rospy.Publisher(self.torque_volume_radius_topic, Float64, queue_size=1)
         self.force_volume_radius_threshold_pub = rospy.Publisher(
             self.force_volume_radius_threshold_topic, Float64MultiArray, queue_size=1)
         self.torque_volume_radius_threshold_pub = rospy.Publisher(
@@ -193,11 +186,7 @@ class VolumeRadiusMonitor:
         scale = float(self.safety_scale())
         state = self.safety_state(scale)
 
-        self.shape_safety_pub.publish(
-            Float64MultiArray(data=[force_radius, torque_radius, scale]))
         self.safety_scale_pub.publish(Float64(scale))
-        self.force_volume_radius_pub.publish(Float64(force_radius))
-        self.torque_volume_radius_pub.publish(Float64(torque_radius))
         self.force_volume_radius_threshold_pub.publish(
             Float64MultiArray(data=[float(self.force_inradius_hard_min), float(self.force_inradius_min)]))
         self.torque_volume_radius_threshold_pub.publish(

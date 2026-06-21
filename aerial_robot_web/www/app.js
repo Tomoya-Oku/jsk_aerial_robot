@@ -837,7 +837,9 @@
     const dracomancerViewerApiRef = React.useRef(null);
     const [dragonNs, setDragonNs] = React.useState('/dragon');
     const [flightState, setFlightState] = React.useState(null);
-    const [shapeSafety, setShapeSafety] = React.useState(null);
+    const [forceRadius, setForceRadius] = React.useState(null);
+    const [torqueRadius, setTorqueRadius] = React.useState(null);
+    const [safetyScale, setSafetyScale] = React.useState(null);
     const [joyAxes, setJoyAxes] = React.useState(null);
     const [deviceJoints, setDeviceJoints] = React.useState(null);
     const [dragonJoints, setDragonJoints] = React.useState(null);
@@ -856,14 +858,34 @@
       return () => topic.unsubscribe();
     }, [ros, connected, dragonNs]);
 
+    // Inradius comes straight from the controlled robot (dragon); dracomancer
+    // does not republish it. Only the dracomancer-computed safety scale is taken
+    // from the device namespace.
     React.useEffect(() => {
-      setShapeSafety(null);
+      setForceRadius(null);
+      setTorqueRadius(null);
+      if (!ros || !connected || !window.ROSLIB) return undefined;
+      const forceTopic = new window.ROSLIB.Topic({
+        ros, name: nsJoin(dragonNs, 'debug/fc_f_min'),
+        messageType: 'std_msgs/Float64', throttle_rate: 100, queue_length: 1,
+      });
+      const torqueTopic = new window.ROSLIB.Topic({
+        ros, name: nsJoin(dragonNs, 'debug/fc_t_min'),
+        messageType: 'std_msgs/Float64', throttle_rate: 100, queue_length: 1,
+      });
+      forceTopic.subscribe((msg) => setForceRadius(Number(msg.data)));
+      torqueTopic.subscribe((msg) => setTorqueRadius(Number(msg.data)));
+      return () => { forceTopic.unsubscribe(); torqueTopic.unsubscribe(); };
+    }, [ros, connected, dragonNs]);
+
+    React.useEffect(() => {
+      setSafetyScale(null);
       if (!ros || !connected || !window.ROSLIB) return undefined;
       const topic = new window.ROSLIB.Topic({
-        ros, name: nsJoin(deviceNs, 'dragon_shape_safety'),
-        messageType: 'std_msgs/Float64MultiArray', throttle_rate: 100, queue_length: 1,
+        ros, name: nsJoin(deviceNs, 'dragon_shape_safety_scale'),
+        messageType: 'std_msgs/Float64', throttle_rate: 100, queue_length: 1,
       });
-      topic.subscribe((msg) => setShapeSafety(msg.data || []));
+      topic.subscribe((msg) => setSafetyScale(Number(msg.data)));
       return () => topic.unsubscribe();
     }, [ros, connected, deviceNs]);
 
@@ -964,7 +986,6 @@
       : isHovering ? `${flightState} (hovering)`
       : `${flightState} (grounded)`;
 
-    const safetyScale = shapeSafety != null && shapeSafety.length > 2 ? Number(shapeSafety[2]) : null;
     const safetyCls = safetyScale == null ? '' : safetyScale >= 0.7 ? 'ok' : safetyScale >= 0.3 ? 'warn' : 'bad';
 
     const jointRow = (name, pos, maxRad) => {
@@ -1007,11 +1028,11 @@
             ),
             e('div', { className: 'drac-metric' },
               e('span', { className: 'label' }, 'Force Inradius'),
-              e('span', { className: 'value' }, shapeSafety != null && shapeSafety.length > 0 ? formatNumber(shapeSafety[0]) : '—'),
+              e('span', { className: 'value' }, forceRadius != null ? formatNumber(forceRadius) : '—'),
             ),
             e('div', { className: 'drac-metric' },
               e('span', { className: 'label' }, 'Torque Inradius'),
-              e('span', { className: 'value' }, shapeSafety != null && shapeSafety.length > 1 ? formatNumber(shapeSafety[1]) : '—'),
+              e('span', { className: 'value' }, torqueRadius != null ? formatNumber(torqueRadius) : '—'),
             ),
           ),
           safetyScale != null && e('div', { className: 'drac-gauge-row' },

@@ -41,7 +41,7 @@ flowchart TB
 | `control_position.py` | 操縦桿とIMUから DRAGON の速度指令を生成 | joystick, IMU, flight_state | `/dragon/uav/nav` |
 | `control_orientation.py` | 操縦桿から姿勢指令を生成 | joystick, flight_state | `/dragon/final_target_baselink_rpy` |
 | `control_joint_angle.py` | 腕関節から DRAGON の形状指令を生成（安全スケールを購読して抑制） | joint_states, safety_scale, flight_state | `/dragon/joints_ctrl`, `/dracomancer/shape_control_error` |
-| `volume_radius_monitor.py` | fc 内接半径の中継・しきい値 pub/sub・安全スケール算出（bringup.launch で常時起動） | fc inradius, threshold cmd | `/dracomancer/force_volume_radius`, `/dracomancer/torque_volume_radius`, `*_threshold`, `/dracomancer/dragon_shape_safety`, `/dracomancer/dragon_shape_safety_scale` |
+| `volume_radius_monitor.py` | しきい値 pub/sub・安全スケール算出（bringup.launch で常時起動。fc 内接半径は再 pub しない） | fc inradius, threshold cmd | `*_volume_radius_threshold`, `/dracomancer/dragon_shape_safety_scale` |
 | `control_haptic_feedback.py` | 抑制された形状入力から力覚提示を生成 | joint_states, shape_control_error, mode | `/dracomancer/haptic_torque`, `/servo/target_current` |
 | `publish_fake_joint_states.py` | 実機なしで Dracomancer 関節状態を生成 | `/dracomancer/joint_cmd` | `/dracomancer/joint_states` |
 
@@ -89,8 +89,7 @@ flowchart TB
 | `/dracomancer/joint_states` | `sensor_msgs/JointState` | Dracomancer の腕関節角 |
 | `/dragon/uav/nav` | `aerial_robot_msgs/FlightNav` | DRAGON の速度指令 |
 | `/dragon/joints_ctrl` | `sensor_msgs/JointState` | DRAGON の形状指令 |
-| `/dracomancer/dragon_shape_safety` | `std_msgs/Float64MultiArray` | `[force_inradius, torque_inradius, safety_scale]`（`volume_radius_monitor.py` が pub） |
-| `/dracomancer/dragon_shape_safety_scale` | `std_msgs/Float64` | 安全スケール（`control_joint_angle.py` が購読） |
+| `/dracomancer/dragon_shape_safety_scale` | `std_msgs/Float64` | 安全スケール（`volume_radius_monitor.py` が pub、`control_joint_angle.py` と web UI が購読） |
 | `/dracomancer/shape_control_error` | `std_msgs/Float64MultiArray` | 力覚提示用の形状抑制量 `q_des - q_tar` |
 | `/dracomancer/haptic_torque` | `sensor_msgs/JointState` | 安全スケーリングで抑制された入力差から計算した Dracomancer 7関節の提示トルク |
 
@@ -275,12 +274,10 @@ rad = (tick - 2048) * 2*pi / 4096 + offset
 | `/dragon/debug/fc_f_min` | 力の実現可能内接半径 |
 | `/dragon/debug/fc_t_min` | トルクの実現可能内接半径 |
 
-Dracomancer 側へは以下の topic でも同じ半径を出します（`volume_radius_monitor.py` が publish）。
+内接半径そのものは **DRAGON 側の `/dragon/debug/fc_*_min` を直接購読**してください。Dracomancer では再 publish しません（重複回避）。`volume_radius_monitor.py` が Dracomancer 側へ出すのは、しきい値と安全スケールだけです。
 
 | トピック | 型 | 意味 |
 | --- | --- | --- |
-| `/dracomancer/force_volume_radius` | `std_msgs/Float64` | 力の実現可能内接半径 |
-| `/dracomancer/torque_volume_radius` | `std_msgs/Float64` | トルクの実現可能内接半径 |
 | `/dracomancer/force_volume_radius_threshold` | `std_msgs/Float64MultiArray` | 力のしきい値 `[hard_min, min]`（常時 publish） |
 | `/dracomancer/torque_volume_radius_threshold` | `std_msgs/Float64MultiArray` | トルクのしきい値 `[hard_min, min]`（常時 publish） |
 | `/dracomancer/force_volume_radius_threshold_cmd` | `std_msgs/Float64MultiArray` | 力のしきい値 `[hard_min, min]` を実行時に設定（subscribe） |
@@ -358,12 +355,12 @@ scale = max(min_safety_scale, min(1.0, force_margin, torque_margin))
 モニタリング:
 
 ```bash
-rostopic echo /dracomancer/dragon_shape_safety
-rostopic echo /dracomancer/force_volume_radius
-rostopic echo /dracomancer/torque_volume_radius
+rostopic echo /dracomancer/dragon_shape_safety_scale   # 安全スケール
+rostopic echo /dragon/debug/fc_f_min                    # 力の内接半径（DRAGON 由来）
+rostopic echo /dragon/debug/fc_t_min                    # トルクの内接半径（DRAGON 由来）
 ```
 
-ログには `state=safe|warning|danger|missing_inradius|disabled`、`force_volume_radius`、`torque_volume_radius`、`safety_scale` を出力します。
+ログには `state=safe|warning|danger|missing_inradius|disabled`、`force_volume_radius`、`torque_volume_radius`、`safety_scale` を出力します（ログ内の半径値は参照用で、トピックとしては再 publish しません）。
 
 ## 力覚提示
 
@@ -538,7 +535,7 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 ```bash
 rostopic echo /dragon/uav/nav
 rostopic echo /dragon/joints_ctrl
-rostopic echo /dracomancer/dragon_shape_safety
+rostopic echo /dracomancer/dragon_shape_safety_scale
 ```
 
 DRAGON がすぐ落下する場合の切り分け:
