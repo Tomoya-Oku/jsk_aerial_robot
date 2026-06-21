@@ -51,45 +51,29 @@ class ControlJoints:
         self.publish_only_when_hovering = rospy.get_param("~publish_only_when_hovering", True)
         self.publish_before_device_ready = rospy.get_param("~publish_before_device_ready", False)
 
-        self.force_inradius_topic = rospy.get_param("~force_inradius_topic", "/" + self.robot_name + "/debug/fc_f_min")
-        self.torque_inradius_topic = rospy.get_param("~torque_inradius_topic", "/" + self.robot_name + "/debug/fc_t_min")
-        self.force_inradius_min = rospy.get_param("~force_inradius_min", 0.2)
-        self.torque_inradius_min = rospy.get_param("~torque_inradius_min", 0.02)
-        self.force_inradius_hard_min = rospy.get_param("~force_inradius_hard_min", 0.1)
-        self.torque_inradius_hard_min = rospy.get_param("~torque_inradius_hard_min", 0.01)
-        self.inradius_timeout = rospy.get_param("~inradius_timeout", 0.5)
-        self.enable_shape_safety = rospy.get_param("~enable_shape_safety", True)
-        self.missing_inradius_scale = rospy.get_param("~missing_inradius_scale", 0.0)
-        self.min_safety_scale = rospy.get_param("~min_safety_scale", 0.0)
-        self.safety_log_period = rospy.get_param("~safety_log_period", 1.0)
-
         self.shape_error_topic = rospy.get_param("~shape_error_topic", self.device_ns + "/shape_control_error")
-        self.force_volume_radius_topic = rospy.get_param(
-            "~force_volume_radius_topic", self.device_ns + "/force_volume_radius")
-        self.torque_volume_radius_topic = rospy.get_param(
-            "~torque_volume_radius_topic", self.device_ns + "/torque_volume_radius")
+        # Shape-safety scale is computed by volume_radius_monitor (bringup.launch) and
+        # consumed here to blend joint commands toward safe_pose. When the scale is
+        # stale/absent, missing_safety_scale (default 1.0 = no limiting) is used.
+        self.safety_scale_topic = rospy.get_param(
+            "~safety_scale_topic", self.device_ns + "/dragon_shape_safety_scale")
+        self.safety_scale_timeout = rospy.get_param("~safety_scale_timeout", 0.5)
+        self.missing_safety_scale = rospy.get_param("~missing_safety_scale", 1.0)
 
         self.latest_device_joints = {}
         self.neutral_device_joints = {}
         self.current_target = list(self.safe_pose)
-        self.force_inradius = None
-        self.torque_inradius = None
-        self.last_inradius_stamp = rospy.Time(0)
+        self.safety_scale_value = None
+        self.last_safety_scale_stamp = rospy.Time(0)
         self.robot_hovering = False
-        self.last_safety_state = None
-        self.last_safety_log_stamp = rospy.Time(0)
 
         # Publisher
         self.joints_ctrl_pub = rospy.Publisher(self.command_topic, JointState, queue_size=10)
-        self.safety_pub = rospy.Publisher("/dracomancer/dragon_shape_safety", Float64MultiArray, queue_size=1)
         self.shape_error_pub = rospy.Publisher(self.shape_error_topic, Float64MultiArray, queue_size=1)
-        self.force_volume_radius_pub = rospy.Publisher(self.force_volume_radius_topic, Float64, queue_size=1)
-        self.torque_volume_radius_pub = rospy.Publisher(self.torque_volume_radius_topic, Float64, queue_size=1)
 
         # Subscriber
         self.device_joint_sub = rospy.Subscriber(self.device_joint_topic, JointState, self.device_joint_cb, queue_size=1)
-        self.force_inradius_sub = rospy.Subscriber(self.force_inradius_topic, Float64, self.force_inradius_cb, queue_size=1)
-        self.torque_inradius_sub = rospy.Subscriber(self.torque_inradius_topic, Float64, self.torque_inradius_cb, queue_size=1)
+        self.safety_scale_sub = rospy.Subscriber(self.safety_scale_topic, Float64, self.safety_scale_cb, queue_size=1)
         self.robot_flight_state_sub = rospy.Subscriber('/' + self.robot_name + '/flight_state', UInt8, self.robot_flight_state_cb, queue_size=1)
         self.mode_sub = rospy.Subscriber(self.mode_topic, String, self.mode_cb, queue_size=1)
 
@@ -104,17 +88,10 @@ class ControlJoints:
                           name, scale, sign, offset)
                                 for name, scale, sign, offset in zip(
                                     self.joint_names, self.scales, self.signs, self.offsets)))
-        rospy.loginfo("force/torque inradius topics: %s, %s", self.force_inradius_topic, self.torque_inradius_topic)
+        rospy.loginfo("safety scale topic: %s (timeout=%.2f, missing=%.3f)",
+                      self.safety_scale_topic, self.safety_scale_timeout, self.missing_safety_scale)
         rospy.loginfo("joint command gating: only_when_hovering=%s, before_device_ready=%s",
                       self.publish_only_when_hovering, self.publish_before_device_ready)
-        rospy.loginfo(
-            "shape safety: enable=%s, missing_scale=%.3f, min_scale=%.3f, force=(%.3f/%.3f), torque=(%.3f/%.3f)",
-            self.enable_shape_safety, self.missing_inradius_scale, self.min_safety_scale,
-            self.force_inradius_hard_min, self.force_inradius_min,
-            self.torque_inradius_hard_min, self.torque_inradius_min)
-        rospy.loginfo("shape safety debug topics: safety=%s, shape_error=%s, force_radius=%s, torque_radius=%s",
-                      "/dracomancer/dragon_shape_safety", self.shape_error_topic,
-                      self.force_volume_radius_topic, self.torque_volume_radius_topic)
 
     def mode_cb(self, msg):
         mode = str(msg.data).strip().lower()
@@ -139,82 +116,21 @@ class ControlJoints:
                 }
                 rospy.loginfo("Captured dracomancer neutral joints for DRAGON mapping")
 
-    def force_inradius_cb(self, msg):
-        self.force_inradius = float(msg.data)
-        self.last_inradius_stamp = rospy.Time.now()
-
-    def torque_inradius_cb(self, msg):
-        self.torque_inradius = float(msg.data)
-        self.last_inradius_stamp = rospy.Time.now()
+    def safety_scale_cb(self, msg):
+        self.safety_scale_value = float(msg.data)
+        self.last_safety_scale_stamp = rospy.Time.now()
 
     def robot_flight_state_cb(self, msg):
         self.robot_hovering = int(msg.data) >= 4
 
-    def inradius_ready(self):
-        if self.force_inradius is None or self.torque_inradius is None:
-            return False
-        return (rospy.Time.now() - self.last_inradius_stamp).to_sec() <= self.inradius_timeout
-
     def safety_scale(self):
-        if not self.enable_shape_safety:
-            return 1.0
-        if not self.inradius_ready():
-            return max(0.0, min(1.0, self.missing_inradius_scale))
-        if (self.force_inradius <= self.force_inradius_hard_min or
-                self.torque_inradius <= self.torque_inradius_hard_min):
-            return max(0.0, min(1.0, self.min_safety_scale))
-        force_margin = (self.force_inradius - self.force_inradius_hard_min) / max(
-            self.force_inradius_min - self.force_inradius_hard_min, 1e-6)
-        torque_margin = (self.torque_inradius - self.torque_inradius_hard_min) / max(
-            self.torque_inradius_min - self.torque_inradius_hard_min, 1e-6)
-        return max(self.min_safety_scale, min(1.0, force_margin, torque_margin))
-
-    def safety_state(self, scale=None):
-        if not self.enable_shape_safety:
-            return "disabled"
-        if not self.inradius_ready():
-            return "missing_inradius"
-        if (self.force_inradius <= self.force_inradius_hard_min or
-                self.torque_inradius <= self.torque_inradius_hard_min):
-            return "danger"
-        if scale is None:
-            scale = self.safety_scale()
-        if scale < 1.0:
-            return "warning"
-        return "safe"
-
-    def log_safety_state(self):
-        scale = self.safety_scale()
-        state = self.safety_state(scale)
-        force_radius = self.force_inradius if self.force_inradius is not None else -1.0
-        torque_radius = self.torque_inradius if self.torque_inradius is not None else -1.0
-        can_publish = self.can_publish_joint_command()
-
-        message = (
-            "shape_safety state=%s mode=%s can_publish=%s "
-            "force_volume_radius=%.4f torque_volume_radius=%.4f safety_scale=%.3f "
-            "thresholds force(hard/min)=%.4f/%.4f torque(hard/min)=%.4f/%.4f"
-        ) % (
-            state, self.teleop_mode, can_publish,
-            force_radius, torque_radius, scale,
-            self.force_inradius_hard_min, self.force_inradius_min,
-            self.torque_inradius_hard_min, self.torque_inradius_min,
-        )
-
-        if state != self.last_safety_state:
-            self.last_safety_state = state
-
-        now = rospy.Time.now()
-        if self.safety_log_period > 0.0:
-            elapsed = (now - self.last_safety_log_stamp).to_sec()
-            if elapsed < self.safety_log_period:
-                return
-        self.last_safety_log_stamp = now
-
-        if state in ("danger", "missing_inradius"):
-            rospy.logwarn(message)
-        else:
-            rospy.loginfo(message)
+        # Use the latest scale from volume_radius_monitor; fall back to
+        # missing_safety_scale when it is absent or stale.
+        if self.safety_scale_value is None:
+            return max(0.0, min(1.0, self.missing_safety_scale))
+        if (rospy.Time.now() - self.last_safety_scale_stamp).to_sec() > self.safety_scale_timeout:
+            return max(0.0, min(1.0, self.missing_safety_scale))
+        return max(0.0, min(1.0, self.safety_scale_value))
 
     def mapped_target(self):
         if not self.latest_device_joints:
@@ -283,29 +199,12 @@ class ControlJoints:
             return False
         return True
 
-    def publish_safety(self):
-        force_radius = float(self.force_inradius if self.force_inradius is not None else -1.0)
-        torque_radius = float(self.torque_inradius if self.torque_inradius is not None else -1.0)
-
-        msg = Float64MultiArray()
-        msg.data = [
-            force_radius,
-            torque_radius,
-            float(self.safety_scale()),
-        ]
-        self.safety_pub.publish(msg)
-
-        self.force_volume_radius_pub.publish(Float64(force_radius))
-        self.torque_volume_radius_pub.publish(Float64(torque_radius))
-        self.log_safety_state()
-
     def main(self):
         rate = rospy.Rate(self.rate_hz)
 
         while not rospy.is_shutdown():
             if self.can_publish_joint_command():
                 self.joints_ctrl_pub.publish(self.make_joint_msg())
-            self.publish_safety()
             rate.sleep()
 
 

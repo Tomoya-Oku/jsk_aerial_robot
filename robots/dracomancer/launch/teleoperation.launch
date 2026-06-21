@@ -15,16 +15,10 @@
   <arg name="servo_topic" default="/dracomancer/servo/states"/>
   <arg name="enable_servo_to_joint_states" default="true"/>
   <arg name="servo_to_joint_states_rate" default="40.0"/>
-  <arg name="enable_shape_safety" default="true"/>
-  <arg name="missing_inradius_scale" default="1.0"/>
-  <arg name="min_safety_scale" default="0.0"/>
-  <arg name="force_inradius_min" default="0.2"/>
-  <arg name="torque_inradius_min" default="0.02"/>
-  <arg name="force_inradius_hard_min" default="0.1"/>
-  <arg name="torque_inradius_hard_min" default="0.01"/>
-  <arg name="safety_log_period" default="1.0"/>
-  <arg name="force_volume_radius_topic" default="/$(arg device_ns)/force_volume_radius"/>
-  <arg name="torque_volume_radius_topic" default="/$(arg device_ns)/torque_volume_radius"/>
+  <!-- Shape-safety scale is produced by volume_radius_monitor in bringup.launch. -->
+  <arg name="safety_scale_topic" default="/$(arg device_ns)/dragon_shape_safety_scale"/>
+  <arg name="safety_scale_timeout" default="0.5"/>
+  <arg name="missing_safety_scale" default="1.0"/>
   <arg name="max_step" default="0.04"/>
   <arg name="joint_limit" default="1.57079632679"/>
   <arg name="capture_neutral_on_first_msg" default="false"/>
@@ -49,7 +43,7 @@
   <arg name="imu_mount_pitch" default="-1.57079632679"/>
   <arg name="imu_mount_yaw" default="0.0"/>
   <arg name="recapture_neutral_on_hover" default="true"/>
-  <arg name="publish_joints_only_when_hovering" default="false"/>
+  <arg name="publish_joints_only_when_hovering" default="true"/>
   <arg name="publish_joints_before_device_ready" default="false"/>
   <arg name="axis_x" default="0"/>
   <arg name="axis_y" default="1"/>
@@ -179,17 +173,8 @@
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
     <param name="publish_only_when_hovering" value="$(arg publish_joints_only_when_hovering)"/>
     <param name="publish_before_device_ready" value="$(arg publish_joints_before_device_ready)"/>
-    <param name="force_inradius_topic" value="/$(arg robot_ns)/debug/fc_f_min"/>
-    <param name="torque_inradius_topic" value="/$(arg robot_ns)/debug/fc_t_min"/>
-    <param name="force_inradius_min" value="$(arg force_inradius_min)"/>
-    <param name="torque_inradius_min" value="$(arg torque_inradius_min)"/>
-    <param name="force_inradius_hard_min" value="$(arg force_inradius_hard_min)"/>
-    <param name="torque_inradius_hard_min" value="$(arg torque_inradius_hard_min)"/>
-    <param name="enable_shape_safety" value="$(arg enable_shape_safety)"/>
-    <param name="missing_inradius_scale" value="$(arg missing_inradius_scale)"/>
-    <param name="min_safety_scale" value="$(arg min_safety_scale)"/>
-    <param name="safety_log_period" value="$(arg safety_log_period)"/>
-    <param name="force_volume_radius_topic" value="$(arg force_volume_radius_topic)"/>
-    <param name="torque_volume_radius_topic" value="$(arg torque_volume_radius_topic)"/>
+    <param name="safety_scale_topic" value="$(arg safety_scale_topic)"/>
+    <param name="safety_scale_timeout" value="$(arg safety_scale_timeout)"/>
+    <param name="missing_safety_scale" value="$(arg missing_safety_scale)"/>
   </node>
 </launch>

@@ -42,6 +42,21 @@
   <arg name="joint_states_topic" default="/$(arg robot_ns)/joint_states" />
   <arg name="servo_topic"        default="/dracomancer/servo/states" />
 
+  ###########  Force/Torque volume radius monitor  ###########
+  <!-- Controlled articulated aerial robot (DRAGON etc.). Its feasible control
+       inradius (fc_f_min / fc_t_min) drives the shape-safety scale. -->
+  <arg name="controlled_robot_ns"      default="dragon" />
+  <arg name="enable_volume_radius_monitor" default="True" />
+  <arg name="enable_shape_safety"      default="true" />
+  <arg name="missing_inradius_scale"   default="1.0" />
+  <arg name="min_safety_scale"         default="0.0" />
+  <arg name="force_inradius_min"       default="0.2" />
+  <arg name="torque_inradius_min"      default="0.02" />
+  <arg name="force_inradius_hard_min"  default="0.1" />
+  <arg name="torque_inradius_hard_min" default="0.01" />
+  <arg name="inradius_timeout"         default="0.5" />
+  <arg name="safety_log_period"        default="1.0" />
+
   ###########  Robot Model  ###########
   <include file="$(find aerial_robot_model)/launch/aerial_robot_model.launch" >
     <arg name="headless"      value="$(arg model_headless)" />
@@ -97,6 +112,28 @@
       <remap from="joint_states" to="/$(arg robot_ns)/joint_cmd" />
     </node>
   </group>
+
+  ###########  Force/Torque volume radius monitor  ###########
+  <!-- Always-on safety-radius pub/sub: republishes the controlled robot's
+       feasible control inradius, publishes/accepts thresholds, and computes the
+       shape-safety scale consumed by control_joint_angle. -->
+  <node pkg="dracomancer" type="volume_radius_monitor.py" name="volume_radius_monitor"
+        output="screen" if="$(arg enable_volume_radius_monitor)">
+    <param name="robot_name"             value="$(arg controlled_robot_ns)" />
+    <param name="device_ns"              value="/$(arg robot_ns)" />
+    <param name="rate"                   value="40.0" />
+    <param name="force_inradius_topic"   value="/$(arg controlled_robot_ns)/debug/fc_f_min" />
+    <param name="torque_inradius_topic"  value="/$(arg controlled_robot_ns)/debug/fc_t_min" />
+    <param name="force_inradius_min"     value="$(arg force_inradius_min)" />
+    <param name="torque_inradius_min"    value="$(arg torque_inradius_min)" />
+    <param name="force_inradius_hard_min" value="$(arg force_inradius_hard_min)" />
+    <param name="torque_inradius_hard_min" value="$(arg torque_inradius_hard_min)" />
+    <param name="inradius_timeout"       value="$(arg inradius_timeout)" />
+    <param name="enable_shape_safety"    value="$(arg enable_shape_safety)" />
+    <param name="missing_inradius_scale" value="$(arg missing_inradius_scale)" />
+    <param name="min_safety_scale"       value="$(arg min_safety_scale)" />
+    <param name="safety_log_period"      value="$(arg safety_log_period)" />
+  </node>
 
   ###########  Mobile Web Console  ###########
   <include file="$(find aerial_robot_web)/launch/web_console.launch" if="$(arg launch_web_console)">

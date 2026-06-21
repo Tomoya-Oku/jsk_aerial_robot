@@ -21,9 +21,10 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 | `scripts/convert_servo_to_joint_states.py` | サーボ tick → rad の関節状態。ID0〜6 を固定マッピング |
 | `scripts/control_position.py` | 操縦桿(+IMU) → DRAGON 移動指令 `/<robot>/uav/nav` |
 | `scripts/control_orientation.py` | 操縦桿 → 姿勢指令 `/<robot>/final_target_baselink_rpy` |
-| `scripts/control_joint_angle.py` | 腕関節 → DRAGON 形状指令 `/<robot>/joints_ctrl`（形状安全付き） |
+| `scripts/control_joint_angle.py` | 腕関節 → DRAGON 形状指令 `/<robot>/joints_ctrl`（安全スケールを購読して抑制） |
+| `scripts/volume_radius_monitor.py` | fc 内接半径の中継・しきい値 pub/sub・安全スケール算出（bringup で常時起動） |
 | `scripts/control_haptic_feedback.py` | 形状抑制量 → Dracomancer 力覚提示 |
-| `launch/bringup.launch` | デバイス本体（URDF/TF/サーボ橋渡し/FC） |
+| `launch/bringup.launch` | デバイス本体（URDF/TF/サーボ橋渡し/FC/安全半径モニタ） |
 | `launch/teleoperation.launch` | 位置・姿勢・関節角制御ノード群 |
 | `launch/haptics.launch` | 力覚提示ノード |
 | `launch/rviz.launch` | GUI PCでRVizだけを起動 |
@@ -71,7 +72,8 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 - `startup`: `startup_pose`（既定 `[0, pi/2, 0, pi/2, 0, pi/2]`）を保持。
 - `precision`: Dracomancer 腕関節を DRAGON 関節へマッピング。
 - `wide`: `wide_hold_pose`（既定 `startup_pose`）を保持し、移動は `control_position.py` に任せる。
-- 形状安全は DRAGON の `/debug/fc_f_min` と `/debug/fc_t_min` からスケールを計算する。
+- 形状安全は **`volume_radius_monitor.py`（bringup.launch）** が DRAGON の `/debug/fc_f_min` と `/debug/fc_t_min` からスケールを計算し `/dracomancer/dragon_shape_safety_scale` に publish。`control_joint_angle.py` はこれを購読して関節指令を抑制する。半径しきい値は `*_volume_radius_threshold` で常時 pub、`*_volume_radius_threshold_cmd`（`[hard_min, min]`）で実行時更新できる。
+- 位置・姿勢・関節角操作はいずれもホバリング（`flight_state>=4`）時のみ出力する（`publish_joints_only_when_hovering` 既定 true）。
 
 ### 数学的に重要な事実（変更時の注意）
 

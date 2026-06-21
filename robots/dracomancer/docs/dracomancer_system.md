@@ -40,7 +40,8 @@ flowchart TB
 | `convert_servo_to_joint_states.py` | サーボtickをラジアンの関節状態へ変換 | `/dracomancer/servo/states` | `/dracomancer/joint_states` |
 | `control_position.py` | 操縦桿とIMUから DRAGON の速度指令を生成 | joystick, IMU, flight_state | `/dragon/uav/nav` |
 | `control_orientation.py` | 操縦桿から姿勢指令を生成 | joystick, flight_state | `/dragon/final_target_baselink_rpy` |
-| `control_joint_angle.py` | 腕関節から DRAGON の形状指令を生成 | joint_states, fc inradius, flight_state | `/dragon/joints_ctrl`, `/dracomancer/dragon_shape_safety`, `/dracomancer/shape_control_error` |
+| `control_joint_angle.py` | 腕関節から DRAGON の形状指令を生成（安全スケールを購読して抑制） | joint_states, safety_scale, flight_state | `/dragon/joints_ctrl`, `/dracomancer/shape_control_error` |
+| `volume_radius_monitor.py` | fc 内接半径の中継・しきい値 pub/sub・安全スケール算出（bringup.launch で常時起動） | fc inradius, threshold cmd | `/dracomancer/force_volume_radius`, `/dracomancer/torque_volume_radius`, `*_threshold`, `/dracomancer/dragon_shape_safety`, `/dracomancer/dragon_shape_safety_scale` |
 | `control_haptic_feedback.py` | 抑制された形状入力から力覚提示を生成 | joint_states, shape_control_error, mode | `/dracomancer/haptic_torque`, `/servo/target_current` |
 | `publish_fake_joint_states.py` | 実機なしで Dracomancer 関節状態を生成 | `/dracomancer/joint_cmd` | `/dracomancer/joint_states` |
 
@@ -88,7 +89,8 @@ flowchart TB
 | `/dracomancer/joint_states` | `sensor_msgs/JointState` | Dracomancer の腕関節角 |
 | `/dragon/uav/nav` | `aerial_robot_msgs/FlightNav` | DRAGON の速度指令 |
 | `/dragon/joints_ctrl` | `sensor_msgs/JointState` | DRAGON の形状指令 |
-| `/dracomancer/dragon_shape_safety` | `std_msgs/Float64MultiArray` | `[force_inradius, torque_inradius, safety_scale]` |
+| `/dracomancer/dragon_shape_safety` | `std_msgs/Float64MultiArray` | `[force_inradius, torque_inradius, safety_scale]`（`volume_radius_monitor.py` が pub） |
+| `/dracomancer/dragon_shape_safety_scale` | `std_msgs/Float64` | 安全スケール（`control_joint_angle.py` が購読） |
 | `/dracomancer/shape_control_error` | `std_msgs/Float64MultiArray` | 力覚提示用の形状抑制量 `q_des - q_tar` |
 | `/dracomancer/haptic_torque` | `sensor_msgs/JointState` | 安全スケーリングで抑制された入力差から計算した Dracomancer 7関節の提示トルク |
 
@@ -259,21 +261,32 @@ rad = (tick - 2048) * 2*pi / 4096 + offset
 
 ## 形状安全機構
 
-`control_joint_angle.py` は、DRAGON 側の実現可能制御内接半径（feasible control inradius）を参照し、明らかに飛行不可能な形状へ強く押し込まないよう関節指令をスケーリングします。
+形状安全は **2ノード構成**です。
 
-入力となる安全指標:
+- `volume_radius_monitor.py`（**bringup.launch** で常時起動）: DRAGON 側の実現可能制御内接半径（feasible control inradius）を参照し、半径・しきい値・安全スケールを算出して publish。しきい値の実行時更新も受け付ける。
+- `control_joint_angle.py`（teleoperation.launch）: 安全スケールを購読し、明らかに飛行不可能な形状へ強く押し込まないよう関節指令をスケーリングする。
+
+> モニタを bringup 側に置くことで、テレオペレーション（位置・姿勢・関節角操作）がホバリング以外で無効化されていても、安全半径系の pub/sub は動き続けます。
+
+入力となる安全指標（`volume_radius_monitor.py` が購読）:
 
 | トピック | 意味 |
 | --- | --- |
 | `/dragon/debug/fc_f_min` | 力の実現可能内接半径 |
 | `/dragon/debug/fc_t_min` | トルクの実現可能内接半径 |
 
-Dracomancer 側へは以下の topic でも同じ半径を出します。
+Dracomancer 側へは以下の topic でも同じ半径を出します（`volume_radius_monitor.py` が publish）。
 
 | トピック | 型 | 意味 |
 | --- | --- | --- |
 | `/dracomancer/force_volume_radius` | `std_msgs/Float64` | 力の実現可能内接半径 |
 | `/dracomancer/torque_volume_radius` | `std_msgs/Float64` | トルクの実現可能内接半径 |
+| `/dracomancer/force_volume_radius_threshold` | `std_msgs/Float64MultiArray` | 力のしきい値 `[hard_min, min]`（常時 publish） |
+| `/dracomancer/torque_volume_radius_threshold` | `std_msgs/Float64MultiArray` | トルクのしきい値 `[hard_min, min]`（常時 publish） |
+| `/dracomancer/force_volume_radius_threshold_cmd` | `std_msgs/Float64MultiArray` | 力のしきい値 `[hard_min, min]` を実行時に設定（subscribe） |
+| `/dracomancer/torque_volume_radius_threshold_cmd` | `std_msgs/Float64MultiArray` | トルクのしきい値 `[hard_min, min]` を実行時に設定（subscribe） |
+
+しきい値の更新は `hard_min <= min` の場合のみ反映され、要素数が 2 未満や逆転している指令は警告して無視します。
 
 安全スケール:
 
@@ -296,34 +309,48 @@ torque_margin = (torque - torque_hard_min) / (torque_min - torque_hard_min)
 scale = max(min_safety_scale, min(1.0, force_margin, torque_margin))
 ```
 
-スケール適用:
+`volume_radius_monitor.py` は算出した scale を `/dracomancer/dragon_shape_safety_scale`（`std_msgs/Float64`）として publish し、`control_joint_angle.py` がこれを購読します。
 
+スケール適用（`control_joint_angle.py`）:
+
+- 受信した scale が古い（`safety_scale_timeout` 超過）または未受信のときは `missing_safety_scale`（既定 `1.0`＝抑制なし）を使う
 - `scale <= 0`: `safe_pose` へ戻す
 - `0 < scale < 1`: `safe_pose` とマッピング結果を線形補間
 - `scale >= 1`: マッピング結果をそのまま使う
 - 最後に `max_step` で1周期あたりの関節変化量を制限する
 
-送信ゲート:
+送信ゲート（ホバリング以外では位置・姿勢・関節角操作を無効化）:
 
 | 条件 | 既定 | 挙動 |
 | --- | --- | --- |
-| `publish_joints_only_when_hovering` | `false` in `teleoperation.launch` | trueならホバリング前は `/dragon/joints_ctrl` を送らない |
+| `publish_joints_only_when_hovering` | `true` in `teleoperation.launch` | ホバリング前は `/dragon/joints_ctrl` を送らない |
 | `publish_joints_before_device_ready` | `false` | `precision` では false なら Dracomancer 関節状態を受け取るまで送らない |
 
-`control_joint_angle.py` 単体の既定値では `publish_only_when_hovering=true` ですが、`teleoperation.launch` では `false` を渡しています。通常運用の既定値は launch 側を基準にしてください。
+> `control_position.py`（`wide && hovering && !landing`）と `control_orientation.py`（`publish_only_when_hovering` 既定 true）も同様にホバリング時のみ出力します。
 
 主なパラメータ:
 
+`volume_radius_monitor.py`（bringup.launch）:
+
 | パラメータ | 既定 | 説明 |
 | --- | --- | --- |
-| `enable_shape_safety` | `true` | 安全スケーリングの有効化 |
+| `enable_shape_safety` | `true` | 安全スケーリングの有効化（false で scale=1.0 を pub） |
 | `force_inradius_min` | `0.2` | 力余裕の上端 |
 | `force_inradius_hard_min` | `0.1` | 力の危険しきい値 |
 | `torque_inradius_min` | `0.02` | トルク余裕の上端 |
 | `torque_inradius_hard_min` | `0.01` | トルクの危険しきい値 |
-| `missing_inradius_scale` | `1.0` in `teleoperation.launch` | 半径未受信時のスケール |
+| `missing_inradius_scale` | `1.0` | 半径未受信時のスケール |
 | `min_safety_scale` | `0.0` | スケール下限 |
+| `inradius_timeout` | `0.5` | 内接半径の有効期限 [s] |
 | `safety_log_period` | `1.0` | 危険状態・半径・スケールをログ出力する周期 |
+
+`control_joint_angle.py`（teleoperation.launch）:
+
+| パラメータ | 既定 | 説明 |
+| --- | --- | --- |
+| `safety_scale_topic` | `/dracomancer/dragon_shape_safety_scale` | 購読する安全スケール |
+| `safety_scale_timeout` | `0.5` | スケールの有効期限 [s] |
+| `missing_safety_scale` | `1.0` | スケール未受信時の代替値 |
 | `max_step` | `0.04` | 1周期あたりの最大変化量 |
 | `startup_pose` | `[0, pi/2, 0, pi/2, 0, pi/2]` | 立ち上げ時の通常姿勢 |
 | `wide_hold_pose` | `startup_pose` | 広域移動中に保持する形状 |
