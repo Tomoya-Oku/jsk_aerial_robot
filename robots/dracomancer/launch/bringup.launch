@@ -4,11 +4,11 @@
   <!--
     rm  (real_machine) : true  → use real servo bridge / spinal FC
                          false → use publish_fake_joint_states (no hardware needed)
-    sim (simulation)   : true  → launch RViz for joint-angle visualisation
-                         false → headless, no RViz
+    sim (simulation)   : true  → enable visualization-oriented helpers
+                         false → headless/device-oriented defaults
     The two flags are independent so all four combinations are valid:
-      rm:=false sim:=true  → fake publisher + RViz + joint_state_publisher_gui
-      rm:=true  sim:=true  → real servos   + RViz
+      rm:=false sim:=true  → fake publisher + joint_state_publisher_gui
+      rm:=true  sim:=true  → real servos + model/TF publishing
       rm:=false sim:=false → fake publisher (web GUI only, no RViz)
       rm:=true  sim:=false → real servos,  no RViz
   -->
@@ -22,7 +22,7 @@
   <arg name="robot_ns"     value="dracomancer" />
   <arg name="headless"     default="True" />
   <arg name="launch_rviz"  default="$(arg sim)" />
-  <!-- model is headless when the user did not ask for RViz -->
+  <!-- Keep this true on headless child PCs. Use dracomancer/rviz.launch on a GUI PC. -->
   <arg name="model_headless" value="$(eval arg('headless') or not arg('launch_rviz'))" />
 
   ###########  Mobile Web Console  ###########

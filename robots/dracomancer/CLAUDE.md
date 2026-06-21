@@ -26,6 +26,7 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 | `launch/bringup.launch` | デバイス本体（URDF/TF/サーボ橋渡し/FC） |
 | `launch/teleoperation.launch` | 位置・姿勢・関節角制御ノード群 |
 | `launch/haptics.launch` | 力覚提示ノード |
+| `launch/rviz.launch` | GUI PCでRVizだけを起動 |
 | `launch/include/sensors.launch.xml` | spinal bridge（FC/IMU）と imu 設定読込 |
 | `config/` | Servo/joystick_calibration/navigation 等の設定 |
 | `docs/` | 仕様ドキュメント（中粒度・Mermaid 図中心） |

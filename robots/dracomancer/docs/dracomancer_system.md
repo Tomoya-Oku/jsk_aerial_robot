@@ -379,6 +379,24 @@ Dracomancer / Khadas 側（FC接続）:
 roslaunch dracomancer bringup.launch rm:=true sim:=false fc_serial_port:=/dev/flight_controller
 ```
 
+Dracomancer / Khadas 側（FC接続、RVizは親機PCで表示）:
+
+```bash
+roslaunch dracomancer bringup.launch \
+  rm:=true \
+  sim:=true \
+  headless:=true \
+  fc_serial_port:=/dev/flight_controller
+```
+
+親機PC側:
+
+```bash
+roslaunch dracomancer rviz.launch
+```
+
+親機PCでは `ROS_MASTER_URI` を子機PCのROS masterに向け、`ROS_IP` または `ROS_HOSTNAME` を親機PC自身の到達可能なIP/ホスト名に設定してください。
+
 実機なしで Dracomancer 関節状態を試す:
 
 ```bash
@@ -433,6 +451,7 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | モード | `sim` | `False` | RViz表示の既定値に使う |
 | 表示 | `headless` | `True` | モデル表示を隠す |
 | 表示 | `launch_rviz` | `$(arg sim)` | RVizを起動する |
+| 表示 | `rviz.launch` | - | 親機PCなどGUI環境でRVizだけを起動する |
 | Web | `web` | `False` | Web Console を起動する |
 | Web | `web_console_port` | `8080` | Web Console のポート |
 | Web | `web_console_rosbridge_port` | `9090` | rosbridge のポート |

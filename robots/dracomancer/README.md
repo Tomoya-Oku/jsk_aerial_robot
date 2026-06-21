@@ -100,6 +100,24 @@ On the Dracomancer/Khadas side with FC connected:
 roslaunch dracomancer bringup.launch rm:=true sim:=false fc_serial_port:=/dev/flight_controller
 ```
 
+On the Dracomancer/Khadas side with FC connected while showing RViz on another
+GUI PC:
+
+```bash
+roslaunch dracomancer bringup.launch \
+  rm:=true \
+  sim:=true \
+  headless:=true \
+  fc_serial_port:=/dev/flight_controller
+```
+
+On the GUI PC, point `ROS_MASTER_URI` to the Dracomancer machine and launch only
+RViz:
+
+```bash
+roslaunch dracomancer rviz.launch
+```
+
 If the FC appears as a USB serial device, use the actual device name:
 
 ```bash
@@ -133,6 +151,7 @@ roslaunch dracomancer bringup.launch \
 | FC | `run_servo_rough_calib` | `False` | Runs rough servo calibration node from the sensor include. |
 | Model/RViz | `headless` | `True` | Hides RViz/model visualization unless overridden. |
 | Model/RViz | `launch_rviz` | `sim` | Allows the model launch to show RViz. |
+| Model/RViz | `rviz.launch` | - | Starts only RViz on a GUI PC connected to the same ROS master. |
 | Model/RViz | `robot_ns` | `dracomancer` | ROS namespace. |
 | Servo | `servo_topic` | `/servo/states` | Input topic for `convert_servo_to_joint_states.py`. |
 | Servo | `joint_states_topic` | `/dracomancer/joint_states` | Output topic from `convert_servo_to_joint_states.py`. |

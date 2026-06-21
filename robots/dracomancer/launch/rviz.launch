@@ -1,0 +1,9 @@
+<launch>
+  <arg name="robot_ns" default="dracomancer" />
+  <arg name="rviz_config" default="$(find dracomancer)/config/rviz_config" />
+
+  <!-- Run this on the GUI PC while ROS_MASTER_URI points to the machine
+       running dracomancer bringup.launch. -->
+  <node name="$(arg robot_ns)_rviz" pkg="rviz" type="rviz"
+        args="-d $(arg rviz_config)" output="screen" />
+</launch>
