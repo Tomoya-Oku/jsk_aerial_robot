@@ -37,7 +37,7 @@ flowchart TB
 | ノード | 役割 | 主な入力 | 主な出力 |
 | --- | --- | --- | --- |
 | `calibrate_joystick.py` | 操縦桿の生値を較正して正規化 | `/joystick/raw` | `/dracomancer/joystick/calibrated` |
-| `convert_servo_to_joint_states.py` | サーボtickをラジアンの関節状態へ変換 | `/servo/states` | `/dracomancer/joint_states` |
+| `convert_servo_to_joint_states.py` | サーボtickをラジアンの関節状態へ変換 | `/dracomancer/servo/states` | `/dracomancer/joint_states` |
 | `control_position.py` | 操縦桿とIMUから DRAGON の速度指令を生成 | joystick, IMU, flight_state | `/dragon/uav/nav` |
 | `control_orientation.py` | 操縦桿から姿勢指令を生成 | joystick, flight_state | `/dragon/final_target_baselink_rpy` |
 | `control_joint_angle.py` | 腕関節から DRAGON の形状指令を生成 | joint_states, fc inradius, flight_state | `/dragon/joints_ctrl`, `/dracomancer/dragon_shape_safety`, `/dracomancer/shape_control_error` |
@@ -47,7 +47,7 @@ flowchart TB
 デバイス側ハードウェア:
 
 - 腕関節サーボは ID 0-6 の 7 個（肩・上腕・肘・手首）。
-- サーボ状態は Spinal / FC 経由で `/servo/states` として扱います。
+- サーボ状態は Spinal / FC 経由で `/dracomancer/servo/states` として扱います。
 - 背中部 IMU は `/dracomancer/imu` として、操作者相対の移動方向補正に使います。
 - M5Stack / 操縦桿は `/joystick/raw` の入力元です。
 
@@ -65,7 +65,7 @@ flowchart TB
         A5 --> A6["/dragon/uav/nav"]
     end
     subgraph JOINT["形状系統（腕の動き → 機体関節）"]
-        B1["Dracomancer サーボ状態"] --> B2["/servo/states"]
+        B1["Dracomancer サーボ状態"] --> B2["/dracomancer/servo/states"]
         B2 --> B3["convert_servo_to_joint_states.py"]
         B3 --> B4["/dracomancer/joint_states"]
         B4 --> B5["control_joint_angle.py"]
@@ -83,7 +83,7 @@ flowchart TB
 | --- | --- | --- |
 | `/joystick/raw` | `std_msgs/Int16MultiArray` | 操縦桿の生値 |
 | `/dracomancer/joystick/calibrated` | `std_msgs/Float32MultiArray` | 較正済み軸値 |
-| `/servo/states` | `spinal/ServoStates` | 腕サーボの状態 |
+| `/dracomancer/servo/states` | `spinal/ServoStates` | 腕サーボの状態 |
 | `/dracomancer/imu` | `spinal/Imu` | 操作者姿勢のIMU quaternion |
 | `/dracomancer/joint_states` | `sensor_msgs/JointState` | Dracomancer の腕関節角 |
 | `/dragon/uav/nav` | `aerial_robot_msgs/FlightNav` | DRAGON の速度指令 |
@@ -459,7 +459,7 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | FC | `fc_serial_port` | `/dev/ttyUSB0` | FC のシリアルデバイス |
 | FC | `fc_serial_baud` | `921600` | FC のボーレート |
 | FC | `run_servo_rough_calib` | `False` | `servo_rough_calib.py` を起動する |
-| サーボ | `servo_topic` | `/servo/states` | `convert_servo_to_joint_states.py` の入力 |
+| サーボ | `servo_topic` | `/dracomancer/servo/states` | `convert_servo_to_joint_states.py` の入力 |
 | サーボ | `joint_states_topic` | `/dracomancer/joint_states` | Dracomancer 関節状態の出力 |
 
 `rm=true` では `servo_bridge_node` と `convert_servo_to_joint_states.py` を起動します。`rm=false` では `publish_fake_joint_states.py` を起動し、`sim=true` かつ `web=false` のとき `joint_state_publisher_gui` も起動します。

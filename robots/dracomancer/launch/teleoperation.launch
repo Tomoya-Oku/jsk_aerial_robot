@@ -12,7 +12,7 @@
   <arg name="js_raw_topic" default="/joystick/raw"/>
   <arg name="js_calibrated_topic" default="/$(arg device_ns)/joystick/calibrated"/>
   <arg name="device_joint_topic" default="/$(arg device_ns)/joint_states"/>
-  <arg name="servo_topic" default="/servo/states"/>
+  <arg name="servo_topic" default="/dracomancer/servo/states"/>
   <arg name="enable_servo_to_joint_states" default="true"/>
   <arg name="servo_to_joint_states_rate" default="40.0"/>
   <arg name="enable_shape_safety" default="true"/>

@@ -1,5 +1,5 @@
 servo_controller:
-  state_sub_topic: /servo/states
+  state_sub_topic: /dracomancer/servo/states
 
   joints:
     angle_sgn: 1

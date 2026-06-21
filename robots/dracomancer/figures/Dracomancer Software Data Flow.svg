@@ -71,7 +71,7 @@
 
   <rect class="node-blue" x="110" y="535" width="210" height="70" rx="10"/>
   <text class="label" x="150" y="563">Servo states</text>
-  <text class="topic" x="150" y="589">/servo/states</text>
+  <text class="topic" x="150" y="589">/dracomancer/servo/states</text>
 
   <rect class="node" x="410" y="535" width="260" height="70" rx="10"/>
   <text class="label" x="442" y="563">convert_servo_to_joint_states.py</text>

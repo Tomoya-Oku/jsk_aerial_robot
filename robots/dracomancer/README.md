@@ -23,7 +23,7 @@ M5/joystick serial
   -> /dragon/uav/nav
 
 Dracomancer servo states
-  -> /servo/states
+  -> /dracomancer/servo/states
   -> convert_servo_to_joint_states.py
   -> /dracomancer/joint_states
   -> control_joint_angle.py
@@ -153,7 +153,7 @@ roslaunch dracomancer bringup.launch \
 | Model/RViz | `launch_rviz` | `sim` | Allows the model launch to show RViz. |
 | Model/RViz | `rviz.launch` | - | Starts only RViz on a GUI PC connected to the same ROS master. |
 | Model/RViz | `robot_ns` | `dracomancer` | ROS namespace. |
-| Servo | `servo_topic` | `/servo/states` | Input topic for `convert_servo_to_joint_states.py`. |
+| Servo | `servo_topic` | `/dracomancer/servo/states` | Input topic for `convert_servo_to_joint_states.py`. |
 | Servo | `joint_states_topic` | `/dracomancer/joint_states` | Output topic from `convert_servo_to_joint_states.py`. |
 | Web | `web` | `False` | Starts the mobile web console. |
 | Web | `web_console_port` | `8080` | Web console port. |

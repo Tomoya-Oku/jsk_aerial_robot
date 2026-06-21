@@ -40,7 +40,7 @@
 
   ###########  Servo / joint-state topics  ###########
   <arg name="joint_states_topic" default="/$(arg robot_ns)/joint_states" />
-  <arg name="servo_topic"        default="/servo/states" />
+  <arg name="servo_topic"        default="/dracomancer/servo/states" />
 
   ###########  Robot Model  ###########
   <include file="$(find aerial_robot_model)/launch/aerial_robot_model.launch" >

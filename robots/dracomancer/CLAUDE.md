@@ -37,7 +37,7 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
   共通機能（`aerial_robot_model` 等）の変更が必要なときは事前に相談する。
 - **トピック名**
   - 操縦桿: `/joystick/raw`(Int16MultiArray) → `/dracomancer/joystick/calibrated`(Float32MultiArray)
-  - サーボ: `/servo/states`(spinal/ServoStates) → `/dracomancer/joint_states`(JointState)
+  - サーボ: `/dracomancer/servo/states`(spinal/ServoStates) → `/dracomancer/joint_states`(JointState)
   - IMU: `/dracomancer/imu`（spinal/Imu, `quaternion[x,y,z,w]`）。namespace `dracomancer` 下の spinal bridge が publish。
   - DRAGON 出力: `/dragon/uav/nav`(FlightNav), `/dragon/joints_ctrl`(JointState)
 - **spinal.msg** は `convert_servo_to_joint_states.py` / `control_position.py` / `control_haptic_feedback.py` で使用。`package.xml` に `spinal` run_depend を宣言済み。
