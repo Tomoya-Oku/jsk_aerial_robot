@@ -254,6 +254,8 @@ Check the shape safety state:
 
 ```bash
 rostopic echo /dracomancer/dragon_shape_safety
+rostopic echo /dracomancer/force_volume_radius
+rostopic echo /dracomancer/torque_volume_radius
 ```
 
 The safety message contains:
@@ -261,6 +263,10 @@ The safety message contains:
 ```text
 [force_inradius, torque_inradius, safety_scale]
 ```
+
+`control_joint_angle.py` also logs whether the current shape is `safe`,
+`warning`, `danger`, or waiting for inradius input. The log period is controlled
+by `safety_log_period`.
 
 Check haptic feedback torque computed from suppressed shape input:
 

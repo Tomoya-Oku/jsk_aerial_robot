@@ -268,6 +268,13 @@ rad = (tick - 2048) * 2*pi / 4096 + offset
 | `/dragon/debug/fc_f_min` | 力の実現可能内接半径 |
 | `/dragon/debug/fc_t_min` | トルクの実現可能内接半径 |
 
+Dracomancer 側へは以下の topic でも同じ半径を出します。
+
+| トピック | 型 | 意味 |
+| --- | --- | --- |
+| `/dracomancer/force_volume_radius` | `std_msgs/Float64` | 力の実現可能内接半径 |
+| `/dracomancer/torque_volume_radius` | `std_msgs/Float64` | トルクの実現可能内接半径 |
+
 安全スケール:
 
 ```mermaid
@@ -316,6 +323,7 @@ scale = max(min_safety_scale, min(1.0, force_margin, torque_margin))
 | `torque_inradius_hard_min` | `0.01` | トルクの危険しきい値 |
 | `missing_inradius_scale` | `1.0` in `teleoperation.launch` | 半径未受信時のスケール |
 | `min_safety_scale` | `0.0` | スケール下限 |
+| `safety_log_period` | `1.0` | 危険状態・半径・スケールをログ出力する周期 |
 | `max_step` | `0.04` | 1周期あたりの最大変化量 |
 | `startup_pose` | `[0, pi/2, 0, pi/2, 0, pi/2]` | 立ち上げ時の通常姿勢 |
 | `wide_hold_pose` | `startup_pose` | 広域移動中に保持する形状 |
@@ -324,7 +332,11 @@ scale = max(min_safety_scale, min(1.0, force_margin, torque_margin))
 
 ```bash
 rostopic echo /dracomancer/dragon_shape_safety
+rostopic echo /dracomancer/force_volume_radius
+rostopic echo /dracomancer/torque_volume_radius
 ```
+
+ログには `state=safe|warning|danger|missing_inradius|disabled`、`force_volume_radius`、`torque_volume_radius`、`safety_scale` を出力します。
 
 ## 力覚提示
 

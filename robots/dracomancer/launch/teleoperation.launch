@@ -22,6 +22,9 @@
   <arg name="torque_inradius_min" default="0.02"/>
   <arg name="force_inradius_hard_min" default="0.1"/>
   <arg name="torque_inradius_hard_min" default="0.01"/>
+  <arg name="safety_log_period" default="1.0"/>
+  <arg name="force_volume_radius_topic" default="/$(arg device_ns)/force_volume_radius"/>
+  <arg name="torque_volume_radius_topic" default="/$(arg device_ns)/torque_volume_radius"/>
   <arg name="max_step" default="0.04"/>
   <arg name="joint_limit" default="1.57079632679"/>
   <arg name="capture_neutral_on_first_msg" default="false"/>
@@ -185,5 +188,8 @@
     <param name="enable_shape_safety" value="$(arg enable_shape_safety)"/>
     <param name="missing_inradius_scale" value="$(arg missing_inradius_scale)"/>
     <param name="min_safety_scale" value="$(arg min_safety_scale)"/>
+    <param name="safety_log_period" value="$(arg safety_log_period)"/>
+    <param name="force_volume_radius_topic" value="$(arg force_volume_radius_topic)"/>
+    <param name="torque_volume_radius_topic" value="$(arg torque_volume_radius_topic)"/>
   </node>
 </launch>
