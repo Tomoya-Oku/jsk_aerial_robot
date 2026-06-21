@@ -8,7 +8,7 @@ from spinal.msg import ServoStates
 
 class ServoToJointStates:
     def __init__(self):
-        rospy.init_node("servo_to_joint_states")
+        rospy.init_node("convert_servo_to_joint_states")
 
         # Parameters
         self.rate_hz = rospy.get_param("~rate", 40.0)

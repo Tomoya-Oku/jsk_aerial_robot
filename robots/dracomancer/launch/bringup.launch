@@ -3,7 +3,7 @@
   ###########  Mode selection  ###########
   <!--
     rm  (real_machine) : true  → use real servo bridge / spinal FC
-                         false → use fake_joint_publisher (no hardware needed)
+                         false → use publish_fake_joint_states (no hardware needed)
     sim (simulation)   : true  → launch RViz for joint-angle visualisation
                          false → headless, no RViz
     The two flags are independent so all four combinations are valid:
@@ -71,7 +71,7 @@
   <group if="$(arg rm)">
     <node pkg="aerial_robot_model" type="servo_bridge_node" name="servo_bridge"
           output="screen" ns="$(arg robot_ns)" />
-    <node pkg="dracomancer" type="servo_to_joint_states.py" name="servo_to_joint_states"
+    <node pkg="dracomancer" type="convert_servo_to_joint_states.py" name="convert_servo_to_joint_states"
           output="screen">
       <param name="servo_topic"        value="$(arg servo_topic)" />
       <param name="joint_states_topic" value="$(arg joint_states_topic)" />
@@ -82,7 +82,7 @@
   ###########  rm:=false — fake joint publisher (no hardware needed)  ###########
   <group unless="$(arg rm)">
     <!-- Publishes /dracomancer/joint_states at 40 Hz from /dracomancer/joint_cmd -->
-    <node pkg="dracomancer" type="fake_joint_publisher.py" name="fake_joint_publisher"
+    <node pkg="dracomancer" type="publish_fake_joint_states.py" name="publish_fake_joint_states"
           output="screen">
       <param name="joint_states_topic" value="$(arg joint_states_topic)" />
       <param name="joint_cmd_topic"    value="/$(arg robot_ns)/joint_cmd" />

@@ -6,10 +6,9 @@ import numpy as np
 from std_msgs.msg import Float64, Float64MultiArray, UInt8, String
 from sensor_msgs.msg import JointState
 
-
 class ControlJoints:
     def __init__(self):
-        rospy.init_node("control_joints")
+        rospy.init_node("control_joint_angle")
 
         # Parameters
         self.robot_name = rospy.get_param("~robot_name", "dragon")
@@ -63,6 +62,8 @@ class ControlJoints:
         self.missing_inradius_scale = rospy.get_param("~missing_inradius_scale", 0.0)
         self.min_safety_scale = rospy.get_param("~min_safety_scale", 0.0)
 
+        self.shape_error_topic = rospy.get_param("~shape_error_topic", self.device_ns + "/shape_control_error")
+
         self.latest_device_joints = {}
         self.neutral_device_joints = {}
         self.current_target = list(self.safe_pose)
@@ -74,6 +75,7 @@ class ControlJoints:
         # Publisher
         self.joints_ctrl_pub = rospy.Publisher(self.command_topic, JointState, queue_size=10)
         self.safety_pub = rospy.Publisher("/dracomancer/dragon_shape_safety", Float64MultiArray, queue_size=1)
+        self.shape_error_pub = rospy.Publisher(self.shape_error_topic, Float64MultiArray, queue_size=1)
 
         # Subscriber
         self.device_joint_sub = rospy.Subscriber(self.device_joint_topic, JointState, self.device_joint_cb, queue_size=1)
@@ -101,6 +103,7 @@ class ControlJoints:
             self.enable_shape_safety, self.missing_inradius_scale, self.min_safety_scale,
             self.force_inradius_hard_min, self.force_inradius_min,
             self.torque_inradius_hard_min, self.torque_inradius_min)
+        rospy.loginfo("shape_error_topic: %s", self.shape_error_topic)
 
     def mode_cb(self, msg):
         mode = str(msg.data).strip().lower()
@@ -190,6 +193,11 @@ class ControlJoints:
             limited.append(cur + delta)
         return limited
 
+    def publish_shape_error(self, desired, target):
+        msg = Float64MultiArray()
+        msg.data = [float(d - t) for d, t in zip(desired, target)]
+        self.shape_error_pub.publish(msg)
+
     def make_joint_msg(self):
         scale = self.safety_scale()
         desired = self.desired_target()
@@ -201,6 +209,7 @@ class ControlJoints:
         else:
             target = desired
 
+        self.publish_shape_error(desired, target)
         self.current_target = self.rate_limit(target)
 
         msg = JointState()

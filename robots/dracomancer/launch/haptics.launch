@@ -1,0 +1,31 @@
+<launch>
+  <arg name="device_ns" default="dracomancer"/>
+
+  <arg name="device_joint_topic" default="/$(arg device_ns)/joint_states"/>
+  <arg name="shape_error_topic" default="/$(arg device_ns)/shape_control_error"/>
+  <arg name="mode_topic" default="/$(arg device_ns)/teleop_mode"/>
+  <arg name="teleop_mode" default="startup"/>
+  <arg name="rate" default="40.0"/>
+
+  <!-- Hardware current output is disabled by default. -->
+  <arg name="enable_haptic_current_command" default="false"/>
+  <arg name="haptic_current_per_nm" default="0.0"/>
+  <arg name="haptic_current_topic" default="/servo/target_current"/>
+  <arg name="haptic_debug_topic" default="/$(arg device_ns)/haptic_torque"/>
+
+  <node pkg="dracomancer"
+        type="control_haptic_feedback.py"
+        name="$(arg device_ns)_control_haptic_feedback"
+        output="screen">
+    <param name="device_ns" value="/$(arg device_ns)"/>
+    <param name="device_joint_topic" value="$(arg device_joint_topic)"/>
+    <param name="shape_error_topic" value="$(arg shape_error_topic)"/>
+    <param name="mode_topic" value="$(arg mode_topic)"/>
+    <param name="teleop_mode" value="$(arg teleop_mode)"/>
+    <param name="rate" value="$(arg rate)"/>
+    <param name="haptic_debug_topic" value="$(arg haptic_debug_topic)"/>
+    <param name="haptic_current_topic" value="$(arg haptic_current_topic)"/>
+    <param name="enable_haptic_current_command" value="$(arg enable_haptic_current_command)"/>
+    <param name="haptic_current_per_nm" value="$(arg haptic_current_per_nm)"/>
+  </node>
+</launch>

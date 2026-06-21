@@ -9,7 +9,7 @@ from std_msgs.msg import Int16MultiArray, Float32MultiArray
 
 class JoystickCalibPublisher:
     def __init__(self):
-        rospy.init_node("joystick_calib_publisher")
+        rospy.init_node("calibrate_joystick")
         self.rate_hz = rospy.get_param("~rate", 40)
 
         # Topic names

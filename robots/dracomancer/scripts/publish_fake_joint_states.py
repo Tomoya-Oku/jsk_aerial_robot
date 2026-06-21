@@ -23,7 +23,7 @@ DEFAULT_JOINT_NAMES = [
 
 class FakeJointPublisher:
     def __init__(self):
-        rospy.init_node("fake_joint_publisher")
+        rospy.init_node("publish_fake_joint_states")
 
         self.joint_names = rospy.get_param("~joint_names", DEFAULT_JOINT_NAMES)
         self.rate_hz = rospy.get_param("~rate", 40.0)
@@ -44,8 +44,8 @@ class FakeJointPublisher:
             self.joint_cmd_topic, JointState, self._cmd_cb, queue_size=1
         )
 
-        rospy.loginfo("[fake_joint_publisher] publishing  → %s", self.joint_states_topic)
-        rospy.loginfo("[fake_joint_publisher] commands    ← %s", self.joint_cmd_topic)
+        rospy.loginfo("[publish_fake_joint_states] publishing  → %s", self.joint_states_topic)
+        rospy.loginfo("[publish_fake_joint_states] commands    ← %s", self.joint_cmd_topic)
 
     def _cmd_cb(self, msg):
         for name, pos in zip(msg.name, msg.position):
@@ -74,4 +74,4 @@ if __name__ == "__main__":
     except rospy.ROSInterruptException:
         pass
     except Exception as exc:
-        rospy.logerr("[fake_joint_publisher] %s", exc)
+        rospy.logerr("[publish_fake_joint_states] %s", exc)

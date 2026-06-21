@@ -85,7 +85,7 @@ class ControlPose:
     """
 
     def __init__(self):
-        rospy.init_node("control_pose")
+        rospy.init_node("control_position")
 
         self.robot_name = rospy.get_param("~robot_name", "dragon")
         self.device_ns = rospy.get_param("~device_ns", "/dracomancer").rstrip("/")
