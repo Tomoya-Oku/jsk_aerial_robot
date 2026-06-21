@@ -40,11 +40,11 @@
   <text class="topic" x="145" y="284">/joystick/raw</text>
 
   <rect class="node" x="410" y="230" width="260" height="70" rx="10"/>
-  <text class="label" x="437" y="258">joystick_calib_publisher.py</text>
+  <text class="label" x="437" y="258">calibrate_joystick.py</text>
   <text class="topic" x="455" y="284">Float32MultiArray</text>
 
   <rect class="node-green" x="760" y="230" width="260" height="70" rx="10"/>
-  <text class="label" x="805" y="258">control_pose.py</text>
+  <text class="label" x="805" y="258">control_position.py</text>
   <text class="topic" x="795" y="284">teleop_mode = wide</text>
 
   <rect class="node-red" x="1110" y="230" width="215" height="70" rx="10"/>
@@ -74,11 +74,11 @@
   <text class="topic" x="150" y="589">/servo/states</text>
 
   <rect class="node" x="410" y="535" width="260" height="70" rx="10"/>
-  <text class="label" x="442" y="563">servo_to_joint_states.py</text>
+  <text class="label" x="442" y="563">convert_servo_to_joint_states.py</text>
   <text class="topic" x="456" y="589">JointState, IDs 0-6</text>
 
   <rect class="node-green" x="760" y="535" width="260" height="70" rx="10"/>
-  <text class="label" x="802" y="563">control_joints.py</text>
+  <text class="label" x="802" y="563">control_joint_angle.py</text>
   <text class="topic" x="792" y="589">startup / precision / wide</text>
 
   <rect class="node-red" x="1110" y="535" width="215" height="70" rx="10"/>

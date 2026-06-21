@@ -5,8 +5,10 @@ DRAGON.  The current setup has two independent parts:
 
 - `dracomancer bringup.launch`: starts the Dracomancer URDF, TF, servo bridge,
   and optional FC connection for the device itself.
-- `dracomancer teleoperation.launch`: converts Dracomancer joystick and joint
-  states into DRAGON navigation and joint commands.
+- `dracomancer teleoperation.launch`: starts position, attitude, and joint-angle
+  teleoperation nodes.
+- `dracomancer haptics.launch`: starts haptic feedback from suppressed shape
+  command error.
 
 ## Teleoperation Flow
 
@@ -15,17 +17,20 @@ Current topic flow from Dracomancer to DRAGON:
 ```text
 M5/joystick serial
   -> /dracomancer/joystick/raw
-  -> joystick_calib_publisher.py
+  -> calibrate_joystick.py
   -> /dracomancer/joystick/calibrated
-  -> control_pose.py
+  -> control_position.py
   -> /dragon/uav/nav
 
 Dracomancer servo states
   -> /servo/states
-  -> servo_to_joint_states.py
+  -> convert_servo_to_joint_states.py
   -> /dracomancer/joint_states
-  -> control_joints.py
+  -> control_joint_angle.py
   -> /dragon/joints_ctrl
+  -> /dracomancer/shape_control_error
+  -> haptics.launch / control_haptic_feedback.py
+  -> /dracomancer/haptic_torque
 ```
 
 Default joint mapping treats DRAGON as one serial arm.  DRAGON `link1` is the
@@ -45,7 +50,7 @@ The default scale is 1:1.  DRAGON yaw joints keep their nominal `pi/2` offset
 except `joint2_yaw`, where the Dracomancer elbow is inverted with no offset so
 elbow extension maps to the straight middle joint.
 
-`control_joints.py` also subscribes to:
+`control_joint_angle.py` also subscribes to:
 
 - `/dragon/flight_state`
 - `/dragon/debug/fc_f_min`
@@ -129,8 +134,8 @@ roslaunch dracomancer bringup.launch \
 | Model/RViz | `headless` | `True` | Hides RViz/model visualization unless overridden. |
 | Model/RViz | `launch_rviz` | `sim` | Allows the model launch to show RViz. |
 | Model/RViz | `robot_ns` | `dracomancer` | ROS namespace. |
-| Servo | `servo_topic` | `/servo/states` | Input topic for `servo_to_joint_states.py`. |
-| Servo | `joint_states_topic` | `/dracomancer/joint_states` | Output topic from `servo_to_joint_states.py`. |
+| Servo | `servo_topic` | `/servo/states` | Input topic for `convert_servo_to_joint_states.py`. |
+| Servo | `joint_states_topic` | `/dracomancer/joint_states` | Output topic from `convert_servo_to_joint_states.py`. |
 | Web | `web` | `False` | Starts the mobile web console. |
 | Web | `web_console_port` | `8080` | Web console port. |
 
@@ -167,12 +172,29 @@ roslaunch dracomancer teleoperation.launch \
   max_step:=0.03
 ```
 
+To compute haptic feedback torque without sending current to the device, start
+the haptics launch beside teleoperation:
+
+```bash
+roslaunch dracomancer haptics.launch
+```
+
+Publishing actual Spinal current commands requires an explicitly calibrated
+conversion:
+
+```bash
+roslaunch dracomancer haptics.launch \
+  enable_haptic_current_command:=true \
+  haptic_current_per_nm:=100.0
+```
+
 ## Useful Switches
 
 `teleoperation.launch` arguments:
 
-- `enable_control_pose`: enables `/dragon/uav/nav` velocity commands.
-- `enable_control_joints`: enables `/dragon/joints_ctrl` shape commands.
+- `enable_position_control`: enables `/dragon/uav/nav` velocity commands.
+- `enable_attitude_control`: enables attitude command publishing.
+- `enable_joint_angle_control`: enables `/dragon/joints_ctrl` shape commands.
 - `teleop_mode`: initial mode, one of `startup`, `precision`, or `wide`.
 - `mode_topic`: runtime mode switch topic. Default: `/dracomancer/teleop_mode`.
 - `enable_servo_to_joint_states`: converts Dracomancer servo state to joint
@@ -220,21 +242,34 @@ The safety message contains:
 [force_inradius, torque_inradius, safety_scale]
 ```
 
+Check haptic feedback torque computed from suppressed shape input:
+
+```bash
+rostopic echo /dracomancer/haptic_torque
+```
+
+`haptics.launch` arguments:
+
+- `enable_haptic_current_command`: publishes haptic torque as
+  `/servo/target_current`. Default is `false`.
+- `haptic_current_per_nm`: calibrated conversion from Nm to Spinal current
+  command units. Must be positive before current commands are sent.
+
 If DRAGON falls immediately, first isolate the command path:
 
 ```bash
-roslaunch dracomancer teleoperation.launch enable_control_joints:=false
+roslaunch dracomancer teleoperation.launch enable_joint_angle_control:=false
 ```
 
 If it still falls, disable both DRAGON command publishers from teleoperation:
 
 ```bash
 roslaunch dracomancer teleoperation.launch \
-  enable_control_joints:=false \
-  enable_control_pose:=false
+  enable_joint_angle_control:=false \
+  enable_position_control:=false
 ```
 
-If the robot only falls when `enable_control_joints:=true`, inspect
+If the robot only falls when `enable_joint_angle_control:=true`, inspect
 `/dragon/joints_ctrl`, reduce `max_step`, or enable more conservative shape
 safety.
 

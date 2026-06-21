@@ -17,12 +17,15 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 
 | パス | 役割 |
 | --- | --- |
-| `scripts/joystick_calib_publisher.py` | 操縦桿の生値較正 → `/dracomancer/joystick/calibrated` |
-| `scripts/servo_to_joint_states.py` | サーボ tick → rad の関節状態。ID0〜6 を固定マッピング |
-| `scripts/control_pose.py` | 操縦桿(+IMU) → DRAGON 移動指令 `/<robot>/uav/nav` |
-| `scripts/control_joints.py` | 腕関節 → DRAGON 形状指令 `/<robot>/joints_ctrl`（形状安全付き） |
+| `scripts/calibrate_joystick.py` | 操縦桿の生値較正 → `/dracomancer/joystick/calibrated` |
+| `scripts/convert_servo_to_joint_states.py` | サーボ tick → rad の関節状態。ID0〜6 を固定マッピング |
+| `scripts/control_position.py` | 操縦桿(+IMU) → DRAGON 移動指令 `/<robot>/uav/nav` |
+| `scripts/control_orientation.py` | 操縦桿 → 姿勢指令 `/<robot>/final_target_baselink_rpy` |
+| `scripts/control_joint_angle.py` | 腕関節 → DRAGON 形状指令 `/<robot>/joints_ctrl`（形状安全付き） |
+| `scripts/control_haptic_feedback.py` | 形状抑制量 → Dracomancer 力覚提示 |
 | `launch/bringup.launch` | デバイス本体（URDF/TF/サーボ橋渡し/FC） |
-| `launch/teleoperation.launch` | 操作変換ノード群。control_pose/control_joints の引数集約 |
+| `launch/teleoperation.launch` | 位置・姿勢・関節角制御ノード群 |
+| `launch/haptics.launch` | 力覚提示ノード |
 | `launch/include/sensors.launch.xml` | spinal bridge（FC/IMU）と imu 設定読込 |
 | `config/` | Servo/joystick_calibration/navigation 等の設定 |
 | `docs/` | 仕様ドキュメント（中粒度・Mermaid 図中心） |
@@ -36,7 +39,7 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
   - サーボ: `/servo/states`(spinal/ServoStates) → `/dracomancer/joint_states`(JointState)
   - IMU: `/dracomancer/imu`（spinal/Imu, `quaternion[x,y,z,w]`）。namespace `dracomancer` 下の spinal bridge が publish。
   - DRAGON 出力: `/dragon/uav/nav`(FlightNav), `/dragon/joints_ctrl`(JointState)
-- **spinal.msg** は `servo_to_joint_states.py` / `control_pose.py` で使用。`package.xml` に `spinal` run_depend を宣言済み。
+- **spinal.msg** は `convert_servo_to_joint_states.py` / `control_position.py` / `control_haptic_feedback.py` で使用。`package.xml` に `spinal` run_depend を宣言済み。
 - **rm / sim** が通常の起動引数。`real_machine` / `simulation` は旧互換エイリアス。
 - Khadas など表示なし環境を想定し、RViz は既定で起動しない（`headless` 既定 True）。
 - `teleop_mode` は `startup` / `precision` / `wide`。実行中は `/dracomancer/teleop_mode` (`std_msgs/String`) で切り替える。
@@ -46,9 +49,9 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 移動指令で使う主フィールド:
 - `control_frame`: `WORLD_FRAME(0)` / `LOCAL_FRAME(1)`
 - `target`: `BASELINK(0)` / `COG(1)`
-- `*_nav_mode`: `POS_VEL_MODE(4)` などを使用。control_pose は速度指令（`target_vel_*`）を送る。
+- `*_nav_mode`: `POS_VEL_MODE(4)` などを使用。control_position は速度指令（`target_vel_*`）を送る。
 
-## control_pose.py（移動制御）の設計
+## control_position.py（移動制御）の設計
 
 `wide` モードでのみ `/dragon/uav/nav` を送る。IMU（spinal 由来。操作者の背中に **90度傾けて** 搭載）の姿勢で、操縦桿の移動方向を
 **操作者の向きに対する相対移動**に変換する。重心/ベースリンク切替も持つ。
@@ -62,11 +65,11 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 - `~recapture_neutral`(std_msgs/Empty): 中立再キャプチャのトリガ。
 - `axis_x/y/z`: 既定 `0/1/2`。既定較正は2軸なので、3軸目がなければZ速度は0。
 
-## control_joints.py（形状制御）の設計
+## control_joint_angle.py（形状制御）の設計
 
 - `startup`: `startup_pose`（既定 `[0, pi/2, 0, pi/2, 0, pi/2]`）を保持。
 - `precision`: Dracomancer 腕関節を DRAGON 関節へマッピング。
-- `wide`: `wide_hold_pose`（既定 `startup_pose`）を保持し、移動は `control_pose.py` に任せる。
+- `wide`: `wide_hold_pose`（既定 `startup_pose`）を保持し、移動は `control_position.py` に任せる。
 - 形状安全は DRAGON の `/debug/fc_f_min` と `/debug/fc_t_min` からスケールを計算する。
 
 ### 数学的に重要な事実（変更時の注意）

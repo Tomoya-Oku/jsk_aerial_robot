@@ -3,7 +3,7 @@
 このドキュメントは、Dracomancer の現在の実装に基づくシステム仕様をまとめたものです。
 Dracomancer は、オペレータの腕に装着する上肢外骨格型遠隔操作デバイスであり、現状では主に DRAGON の移動指令と形状指令を生成します。
 
-> 現状の実装メモ: `src/` 以下の C++ ファイルはプレースホルダで、実際の処理は `scripts/` 配下の Python ノードが担っています。力覚提示制御と最適化ベースの本格的な姿勢制限は未実装です。
+> 現状の実装メモ: `src/` 以下の C++ ファイルはプレースホルダで、実際の処理は `scripts/` 配下の Python ノードが担っています。力覚提示は安全スケーリングで抑制された形状入力を関節トルクへ戻す簡易実装で、最適化ベースの本格的な姿勢制限は未実装です。
 
 ## 全体構成
 
@@ -13,29 +13,36 @@ Dracomancer は、デバイス自身の起動と DRAGON への遠隔操作変換
 flowchart TB
     subgraph BU["bringup.launch（Dracomancer 側）"]
         URDF["URDF / TF"]
-        SB["servo_bridge または fake_joint_publisher"]
+        SB["servo_bridge または publish_fake_joint_states"]
         FC["Spinal FC / IMU 接続<br/>（任意）"]
         WEB["Web Console<br/>（任意）"]
     end
     subgraph TO["teleoperation.launch（操作変換）"]
         CALIB["joystick 較正"]
         S2J["サーボ → 関節状態 変換"]
-        CP["位置指令 control_pose.py"]
-        CJ["関節指令 control_joints.py"]
+        CP["位置指令 control_position.py"]
+        AC["姿勢指令 control_orientation.py"]
+        CJ["関節角指令 control_joint_angle.py"]
+    end
+    subgraph HP["haptics.launch（力覚提示）"]
+        HF["control_haptic_feedback.py"]
     end
     BU --> TO
     TO --> DRAGON["DRAGON"]
+    TO --> HP
 ```
 
 主なノード構成:
 
 | ノード | 役割 | 主な入力 | 主な出力 |
 | --- | --- | --- | --- |
-| `joystick_calib_publisher.py` | 操縦桿の生値を較正して正規化 | `/joystick/raw` | `/dracomancer/joystick/calibrated` |
-| `servo_to_joint_states.py` | サーボtickをラジアンの関節状態へ変換 | `/servo/states` | `/dracomancer/joint_states` |
-| `control_pose.py` | 操縦桿とIMUから DRAGON の速度指令を生成 | joystick, IMU, flight_state | `/dragon/uav/nav` |
-| `control_joints.py` | 腕関節から DRAGON の形状指令を生成 | joint_states, fc inradius, flight_state | `/dragon/joints_ctrl`, `/dracomancer/dragon_shape_safety` |
-| `fake_joint_publisher.py` | 実機なしで Dracomancer 関節状態を生成 | `/dracomancer/joint_cmd` | `/dracomancer/joint_states` |
+| `calibrate_joystick.py` | 操縦桿の生値を較正して正規化 | `/joystick/raw` | `/dracomancer/joystick/calibrated` |
+| `convert_servo_to_joint_states.py` | サーボtickをラジアンの関節状態へ変換 | `/servo/states` | `/dracomancer/joint_states` |
+| `control_position.py` | 操縦桿とIMUから DRAGON の速度指令を生成 | joystick, IMU, flight_state | `/dragon/uav/nav` |
+| `control_orientation.py` | 操縦桿から姿勢指令を生成 | joystick, flight_state | `/dragon/final_target_baselink_rpy` |
+| `control_joint_angle.py` | 腕関節から DRAGON の形状指令を生成 | joint_states, fc inradius, flight_state | `/dragon/joints_ctrl`, `/dracomancer/dragon_shape_safety`, `/dracomancer/shape_control_error` |
+| `control_haptic_feedback.py` | 抑制された形状入力から力覚提示を生成 | joint_states, shape_control_error, mode | `/dracomancer/haptic_torque`, `/servo/target_current` |
+| `publish_fake_joint_states.py` | 実機なしで Dracomancer 関節状態を生成 | `/dracomancer/joint_cmd` | `/dracomancer/joint_states` |
 
 デバイス側ハードウェア:
 
@@ -52,17 +59,21 @@ Dracomancer から DRAGON への指令は、位置系統と形状系統の2つ�
 flowchart TB
     subgraph POSE["位置系統（操縦桿 → 機体移動）"]
         A1["M5 / 操縦桿"] --> A2["/joystick/raw"]
-        A2 --> A3["joystick_calib_publisher.py"]
+        A2 --> A3["calibrate_joystick.py"]
         A3 --> A4["/dracomancer/joystick/calibrated"]
-        A4 --> A5["control_pose.py"]
+        A4 --> A5["control_position.py"]
         A5 --> A6["/dragon/uav/nav"]
     end
     subgraph JOINT["形状系統（腕の動き → 機体関節）"]
         B1["Dracomancer サーボ状態"] --> B2["/servo/states"]
-        B2 --> B3["servo_to_joint_states.py"]
+        B2 --> B3["convert_servo_to_joint_states.py"]
         B3 --> B4["/dracomancer/joint_states"]
-        B4 --> B5["control_joints.py"]
+        B4 --> B5["control_joint_angle.py"]
         B5 --> B6["/dragon/joints_ctrl"]
+        B5 --> B7["/dracomancer/shape_control_error"]
+        B7 --> B8["control_haptic_feedback.py"]
+        B4 --> B8
+        B8 --> B9["/dracomancer/haptic_torque"]
     end
 ```
 
@@ -78,6 +89,8 @@ flowchart TB
 | `/dragon/uav/nav` | `aerial_robot_msgs/FlightNav` | DRAGON の速度指令 |
 | `/dragon/joints_ctrl` | `sensor_msgs/JointState` | DRAGON の形状指令 |
 | `/dracomancer/dragon_shape_safety` | `std_msgs/Float64MultiArray` | `[force_inradius, torque_inradius, safety_scale]` |
+| `/dracomancer/shape_control_error` | `std_msgs/Float64MultiArray` | 力覚提示用の形状抑制量 `q_des - q_tar` |
+| `/dracomancer/haptic_torque` | `sensor_msgs/JointState` | 安全スケーリングで抑制された入力差から計算した Dracomancer 7関節の提示トルク |
 
 ## 操作モード
 
@@ -110,7 +123,7 @@ rostopic pub -1 /dracomancer/teleop_mode std_msgs/String "data: 'startup'"
 
 ### 位置系統
 
-`control_pose.py` は、`teleop_mode=wide` のときだけ較正済み操縦桿入力を `FlightNav` の速度指令へ変換します。DRAGON がホバリング状態（`flight_state >= 4`）になってから送信し、ホバ直後は `wait_after_hover`（既定 3 秒）待機します。
+`control_position.py` は、`teleop_mode=wide` のときだけ較正済み操縦桿入力を `FlightNav` の速度指令へ変換します。DRAGON がホバリング状態（`flight_state >= 4`）になってから送信し、ホバ直後は `wait_after_hover`（既定 3 秒）待機します。
 
 ```mermaid
 flowchart LR
@@ -158,7 +171,7 @@ flowchart TB
 手動取り直し例:
 
 ```bash
-rostopic pub -1 /dracomancer_control_pose/recapture_neutral std_msgs/Empty "{}"
+rostopic pub -1 /dracomancer_control_position/recapture_neutral std_msgs/Empty "{}"
 ```
 
 移動対象は `nav_target` で切り替えます。
@@ -170,7 +183,7 @@ rostopic pub -1 /dracomancer_control_pose/recapture_neutral std_msgs/Empty "{}"
 
 ## 立ち上げ・精密・広域移動の形状制御
 
-`control_joints.py` は全モードで `/dragon/joints_ctrl` を担当します。モードごとの目標形状は以下です。
+`control_joint_angle.py` は全モードで `/dragon/joints_ctrl` を担当します。モードごとの目標形状は以下です。
 
 | モード | 目標形状 |
 | --- | --- |
@@ -246,7 +259,7 @@ rad = (tick - 2048) * 2*pi / 4096 + offset
 
 ## 形状安全機構
 
-`control_joints.py` は、DRAGON 側の実現可能制御内接半径（feasible control inradius）を参照し、明らかに飛行不可能な形状へ強く押し込まないよう関節指令をスケーリングします。
+`control_joint_angle.py` は、DRAGON 側の実現可能制御内接半径（feasible control inradius）を参照し、明らかに飛行不可能な形状へ強く押し込まないよう関節指令をスケーリングします。
 
 入力となる安全指標:
 
@@ -290,7 +303,7 @@ scale = max(min_safety_scale, min(1.0, force_margin, torque_margin))
 | `publish_joints_only_when_hovering` | `false` in `teleoperation.launch` | trueならホバリング前は `/dragon/joints_ctrl` を送らない |
 | `publish_joints_before_device_ready` | `false` | `precision` では false なら Dracomancer 関節状態を受け取るまで送らない |
 
-`control_joints.py` 単体の既定値では `publish_only_when_hovering=true` ですが、`teleoperation.launch` では `false` を渡しています。通常運用の既定値は launch 側を基準にしてください。
+`control_joint_angle.py` 単体の既定値では `publish_only_when_hovering=true` ですが、`teleoperation.launch` では `false` を渡しています。通常運用の既定値は launch 側を基準にしてください。
 
 主なパラメータ:
 
@@ -311,6 +324,39 @@ scale = max(min_safety_scale, min(1.0, force_margin, torque_margin))
 
 ```bash
 rostopic echo /dracomancer/dragon_shape_safety
+```
+
+## 力覚提示
+
+`haptics.launch` の `control_haptic_feedback.py` は、精密動作モードで安全スケーリングにより抑制された形状差を用いて、Dracomancer 側の7関節へ返す提示トルクを計算します。
+
+```text
+e_q = q_des - q_tar
+tau_q = K_q e_q
+tau_device = B^T tau_q - D_h theta_dot
+```
+
+ここで `B` は既定の腕関節から DRAGON 6関節への差分マッピングです。実装では、論文補助資料のレンチ分配問題を直接解くのではなく、まず `B^T K_q e_q` による形状空間からデバイス関節空間への直接写像として扱います。
+
+出力:
+
+| トピック | 型 | 説明 |
+| --- | --- | --- |
+| `/dracomancer/haptic_torque` | `sensor_msgs/JointState` | `effort` に7関節の提示トルクを格納 |
+| `/servo/target_current` | `spinal/ServoControlCmd` | 明示的に有効化した場合のみ、提示トルクを電流指令へ変換 |
+
+実機サーボへの電流指令は安全のため既定で無効です。有効化する場合は、少なくとも `enable_haptic_current_command=true` と `haptic_current_per_nm` を実機で較正した値に設定してください。
+
+```bash
+roslaunch dracomancer haptics.launch
+```
+
+実機電流指令まで出す例:
+
+```bash
+roslaunch dracomancer haptics.launch \
+  enable_haptic_current_command:=true \
+  haptic_current_per_nm:=100.0
 ```
 
 ## 起動方法
@@ -394,10 +440,10 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | FC | `fc_serial_port` | `/dev/ttyUSB0` | FC のシリアルデバイス |
 | FC | `fc_serial_baud` | `921600` | FC のボーレート |
 | FC | `run_servo_rough_calib` | `False` | `servo_rough_calib.py` を起動する |
-| サーボ | `servo_topic` | `/servo/states` | `servo_to_joint_states.py` の入力 |
+| サーボ | `servo_topic` | `/servo/states` | `convert_servo_to_joint_states.py` の入力 |
 | サーボ | `joint_states_topic` | `/dracomancer/joint_states` | Dracomancer 関節状態の出力 |
 
-`rm=true` では `servo_bridge_node` と `servo_to_joint_states.py` を起動します。`rm=false` では `fake_joint_publisher.py` を起動し、`sim=true` かつ `web=false` のとき `joint_state_publisher_gui` も起動します。
+`rm=true` では `servo_bridge_node` と `convert_servo_to_joint_states.py` を起動します。`rm=false` では `publish_fake_joint_states.py` を起動し、`sim=true` かつ `web=false` のとき `joint_state_publisher_gui` も起動します。
 
 ### `teleoperation.launch` の主な引数
 
@@ -409,8 +455,9 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | `js_raw_topic` | `/joystick/raw` | 操縦桿生値 |
 | `js_calibrated_topic` | `/dracomancer/joystick/calibrated` | 較正済み操縦桿 |
 | `enable_servo_to_joint_states` | `true` | サーボ状態をDracomancer関節状態へ変換する |
-| `enable_control_pose` | `true` | `/dragon/uav/nav` を送る |
-| `enable_control_joints` | `true` | `/dragon/joints_ctrl` を送る |
+| `enable_position_control` | `true` | `/dragon/uav/nav` を送る |
+| `enable_attitude_control` | `false` | `/dragon/final_target_baselink_rpy` を送る |
+| `enable_joint_angle_control` | `true` | `/dragon/joints_ctrl` を送る |
 | `teleop_mode` | `startup` | `startup` / `precision` / `wide` |
 | `mode_topic` | `/dracomancer/teleop_mode` | 実行中のモード切替トピック |
 | `nav_target` | `cog` | 移動対象 `cog` / `baselink` |
@@ -439,15 +486,15 @@ rostopic echo /dracomancer/dragon_shape_safety
 DRAGON がすぐ落下する場合の切り分け:
 
 ```bash
-roslaunch dracomancer teleoperation.launch enable_control_joints:=false
+roslaunch dracomancer teleoperation.launch enable_joint_angle_control:=false
 ```
 
 それでも落ちる場合は、移動指令も止めて確認します。
 
 ```bash
 roslaunch dracomancer teleoperation.launch \
-  enable_control_pose:=false \
-  enable_control_joints:=false
+  enable_position_control:=false \
+  enable_joint_angle_control:=false
 ```
 
 形状指令を切ると落ちない場合は、`/dragon/joints_ctrl`、`max_step`、`enable_shape_safety`、`missing_inradius_scale`、関節マッピングを確認してください。
@@ -462,7 +509,7 @@ roslaunch dracomancer teleoperation.launch \
 | 力覚提示 | 未実装。サーボを用いた反力・反トルク提示は設計段階 |
 | Force/Torque Volume に基づく厳密な姿勢制限 | DRAGON の内接半径を使ったスケーリングのみ実装 |
 | C++ controller/model/optimizer | 空のプレースホルダ |
-| ジョイスティックZ軸 | `control_pose.py` は対応。launch の既定較正は2軸のため、3軸目がなければ0 |
+| ジョイスティックZ軸 | `control_position.py` は対応。launch の既定較正は2軸のため、3軸目がなければ0 |
 | 位置リミット | `/dragon/mocap/pose` を使い、境界外へ向かう速度成分を0にする形で実装 |
 
 ## ビルド
