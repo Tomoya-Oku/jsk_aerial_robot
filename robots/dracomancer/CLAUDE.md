@@ -18,14 +18,17 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 
 | パス | 役割 |
 | --- | --- |
-| `scripts/calibrate_joystick.py` | 操縦桿の生値較正 → `/dracomancer/joystick/calibrated` |
-| `scripts/convert_servo_to_joint_states.py` | サーボ tick → rad の関節状態。ID0〜6 を固定マッピング |
-| `scripts/control_position.py` | 操縦桿(+IMU) → DRAGON 移動指令 `/<robot>/uav/nav` |
-| `scripts/control_orientation.py` | 操縦桿 → 姿勢指令 `/<robot>/final_target_baselink_rpy` |
-| `scripts/control_joint_angle.py` | 腕関節 → DRAGON 形状指令 `/<robot>/joints_ctrl`（候補姿勢のフィージビリティで変形可否を判定） |
+| `scripts/device_io/calibrate_joystick.py` | 操縦桿の生値較正 → `/dracomancer/joystick/calibrated` |
+| `scripts/device_io/convert_servo_to_joint_states.py` | サーボ tick → rad の関節状態。ID0〜6 を固定マッピング |
+| `scripts/device_io/publish_fake_joint_states.py` | rm:=false 用のダミー関節状態 publisher |
+| `scripts/control/control_position.py` | 操縦桿(+IMU) → DRAGON 移動指令 `/<robot>/uav/nav` |
+| `scripts/control/control_orientation.py` | 操縦桿 → 姿勢指令 `/<robot>/final_target_baselink_rpy` |
+| `scripts/control/control_joint_angle.py` | 腕関節 → DRAGON 形状指令 `/<robot>/joints_ctrl`（候補姿勢のフィージビリティで変形可否を判定） |
+| `scripts/control/control_haptic_feedback.py` | 形状抑制量 → Dracomancer 力覚提示 |
 | `src/shape_feasibility_node.cpp` | 候補リンク角の force/torque volume 半径を DRAGON モデルで予測するサービス（C++） |
-| `scripts/volume_radius_monitor.py` | しきい値 pub/sub・ライブ安全スケール算出（bringup で常時起動） |
-| `scripts/control_haptic_feedback.py` | 形状抑制量 → Dracomancer 力覚提示 |
+| `scripts/safety/volume_radius_monitor.py` | しきい値 pub/sub・ライブ安全スケール算出（bringup で常時起動） |
+| `scripts/safety/fc_min_lowpass.py` | 実測 fc_f_min/fc_t_min のローパス（ns=dragon、危険判定の平滑化） |
+| `scripts/experiments/` | fc しきい値較正の実験ツール（収集/外乱/解析、[docs/fc_threshold_calibration.md](docs/fc_threshold_calibration.md)） |
 | `launch/bringup.launch` | デバイス本体（URDF/TF/サーボ橋渡し/FC/安全半径モニタ） |
 | `launch/teleoperation.launch` | 位置・姿勢・関節角制御ノード群 |
 | `launch/haptics.launch` | 力覚提示ノード |

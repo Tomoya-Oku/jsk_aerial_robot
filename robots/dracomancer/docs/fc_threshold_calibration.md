@@ -1,7 +1,7 @@
 # fc 安全しきい値の較正実験
 
 DRAGON の **可制御レンチ内接半径** `fc_f_min` / `fc_t_min` に対する
-Dracomancer 安全ゲートのしきい値 `[hard_min, min]`（[volume_radius_monitor.py](../scripts/volume_radius_monitor.py)）を、
+Dracomancer 安全ゲートのしきい値 `[hard_min, min]`（[volume_radius_monitor.py](../scripts/safety/volume_radius_monitor.py)）を、
 **データに基づいて**決めるための実験手順と結果を記録する。
 
 関連: [dracomancer_system.md](dracomancer_system.md)（安全スケールの定義）。
@@ -12,7 +12,7 @@ Dracomancer 安全ゲートのしきい値 `[hard_min, min]`（[volume_radius_mo
 **可制御力／トルク凸包の内接半径**である。ロータ配置とスラスト制約のみで決まり、
 **機体形状（内部関節角）の関数**である。
 
-```
+```text
 fc_f_min[N]    = その姿勢で「あらゆる方向に保証して出せる力」の最大値
               = 最悪方向の外乱力を打ち消せる限界
 fc_t_min[N·m]  = 同上（トルク）
@@ -70,7 +70,7 @@ fc_t_min[N·m]  = 同上（トルク）
 
 [analyze_fc_data.py](../scripts/experiments/analyze_fc_data.py) で fc 分布から提案する。
 
-```
+```text
 hard_min = max(0, percentile(fc, hard_pct) × safety)   # 危険下限＝崖の手前
 min      = median(fc) × min_frac                        # 完全安全点＝典型値の一定割合
 ```
