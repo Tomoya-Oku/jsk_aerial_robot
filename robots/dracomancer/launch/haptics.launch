@@ -7,7 +7,10 @@
   <arg name="teleop_mode" default="startup"/>
   <arg name="rate" default="40.0"/>
 
-  <!-- Hardware current output is disabled by default. -->
+  <!-- Default hardware output is torque on/off for XL430-W250-T. Current output remains available for compatible servos. -->
+  <arg name="enable_haptic_torque_onoff" default="true"/>
+  <arg name="haptic_torque_on_threshold" default="0.02"/>
+  <arg name="haptic_torque_enable_topic" default="/servo/torque_enable"/>
   <arg name="enable_haptic_current_command" default="false"/>
   <arg name="haptic_current_per_nm" default="0.0"/>
   <arg name="haptic_current_topic" default="/servo/target_current"/>
@@ -24,6 +27,9 @@
     <param name="teleop_mode" value="$(arg teleop_mode)"/>
     <param name="rate" value="$(arg rate)"/>
     <param name="haptic_debug_topic" value="$(arg haptic_debug_topic)"/>
+    <param name="haptic_torque_enable_topic" value="$(arg haptic_torque_enable_topic)"/>
+    <param name="enable_haptic_torque_onoff" value="$(arg enable_haptic_torque_onoff)"/>
+    <param name="haptic_torque_on_threshold" value="$(arg haptic_torque_on_threshold)"/>
     <param name="haptic_current_topic" value="$(arg haptic_current_topic)"/>
     <param name="enable_haptic_current_command" value="$(arg enable_haptic_current_command)"/>
     <param name="haptic_current_per_nm" value="$(arg haptic_current_per_nm)"/>

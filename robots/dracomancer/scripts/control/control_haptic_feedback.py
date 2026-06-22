@@ -4,11 +4,7 @@
 import rospy
 from std_msgs.msg import Float64MultiArray, String
 from sensor_msgs.msg import JointState
-
-try:
-    from spinal.msg import ServoControlCmd
-except ImportError:
-    ServoControlCmd = None
+from spinal.msg import ServoControlCmd, ServoTorqueCmd
 
 
 class HapticFeedback:
@@ -20,9 +16,12 @@ class HapticFeedback:
         self.shape_error_topic = rospy.get_param("~shape_error_topic", self.device_ns + "/shape_control_error")
         self.mode_topic = rospy.get_param("~mode_topic", self.device_ns + "/teleop_mode")
         self.haptic_debug_topic = rospy.get_param("~haptic_debug_topic", self.device_ns + "/haptic_torque")
+        self.haptic_torque_enable_topic = rospy.get_param("~haptic_torque_enable_topic", "/servo/torque_enable")
         self.haptic_current_topic = rospy.get_param("~haptic_current_topic", "/servo/target_current")
         self.rate_hz = rospy.get_param("~rate", 40.0)
 
+        self.enable_haptic_torque_onoff = rospy.get_param("~enable_haptic_torque_onoff", True)
+        self.haptic_torque_on_threshold = rospy.get_param("~haptic_torque_on_threshold", 0.02)
         self.enable_haptic_current_command = rospy.get_param("~enable_haptic_current_command", False)
         self.haptic_current_per_nm = rospy.get_param("~haptic_current_per_nm", 0.0)
         self.haptic_stiffness = rospy.get_param("~haptic_stiffness", [0.2] * 6)
@@ -62,12 +61,13 @@ class HapticFeedback:
         self.last_device_joint_stamp = None
 
         self.haptic_debug_pub = rospy.Publisher(self.haptic_debug_topic, JointState, queue_size=1)
+        self.haptic_torque_enable_pub = None
+        if self.enable_haptic_torque_onoff:
+            self.haptic_torque_enable_pub = rospy.Publisher(
+                self.haptic_torque_enable_topic, ServoTorqueCmd, queue_size=1)
         self.haptic_current_pub = None
         if self.enable_haptic_current_command:
-            if ServoControlCmd is None:
-                rospy.logwarn("spinal/ServoControlCmd is unavailable; haptic current command is disabled")
-                self.enable_haptic_current_command = False
-            elif self.haptic_current_per_nm <= 0.0:
+            if self.haptic_current_per_nm <= 0.0:
                 rospy.logwarn("haptic_current_per_nm must be positive; haptic current command is disabled")
                 self.enable_haptic_current_command = False
             else:
@@ -80,6 +80,8 @@ class HapticFeedback:
         rospy.loginfo("device_joint_topic: %s", self.device_joint_topic)
         rospy.loginfo("shape_error_topic: %s", self.shape_error_topic)
         rospy.loginfo("haptic_debug_topic: %s", self.haptic_debug_topic)
+        rospy.loginfo("haptic torque on/off command: %s -> %s",
+                      self.enable_haptic_torque_onoff, self.haptic_torque_enable_topic)
         rospy.loginfo("haptic current command: %s -> %s",
                       self.enable_haptic_current_command, self.haptic_current_topic)
 
@@ -148,17 +150,24 @@ class HapticFeedback:
         msg.effort = list(torque)
         self.haptic_debug_pub.publish(msg)
 
-        if not self.enable_haptic_current_command or self.haptic_current_pub is None:
-            return
+        if self.enable_haptic_torque_onoff and self.haptic_torque_enable_pub is not None:
+            enable_msg = ServoTorqueCmd()
+            enable_msg.index = list(self.haptic_servo_ids)
+            enable_msg.torque_enable = [
+                1 if abs(value) >= self.haptic_torque_on_threshold else 0
+                for value in torque
+            ]
+            self.haptic_torque_enable_pub.publish(enable_msg)
 
-        current_msg = ServoControlCmd()
-        current_msg.index = list(self.haptic_servo_ids)
-        current_msg.angles = [
-            int(max(-32768, min(32767, round(value * self.haptic_current_per_nm))))
-            for value in torque
-        ]
-        current_msg.stamp = rospy.Time.now()
-        self.haptic_current_pub.publish(current_msg)
+        if self.enable_haptic_current_command and self.haptic_current_pub is not None:
+            current_msg = ServoControlCmd()
+            current_msg.index = list(self.haptic_servo_ids)
+            current_msg.angles = [
+                int(max(-32768, min(32767, round(value * self.haptic_current_per_nm))))
+                for value in torque
+            ]
+            current_msg.stamp = rospy.Time.now()
+            self.haptic_current_pub.publish(current_msg)
 
     def main(self):
         rate = rospy.Rate(self.rate_hz)

@@ -190,20 +190,18 @@ roslaunch dracomancer teleoperation.launch \
   max_step:=0.03
 ```
 
-To compute haptic feedback torque without sending current to the device, start
+To run the default Mk-I haptic output (equivalent torque plus XL430-W250-T torque ON/OFF), start
 the haptics launch beside teleoperation:
 
 ```bash
 roslaunch dracomancer haptics.launch
 ```
 
-Publishing actual Spinal current commands requires an explicitly calibrated
-conversion:
+Tune the torque ON/OFF threshold as needed:
 
 ```bash
 roslaunch dracomancer haptics.launch \
-  enable_haptic_current_command:=true \
-  haptic_current_per_nm:=100.0
+  haptic_torque_on_threshold:=0.02
 ```
 
 ## Useful Switches
@@ -275,8 +273,12 @@ rostopic echo /dracomancer/haptic_torque
 
 `haptics.launch` arguments:
 
-- `enable_haptic_current_command`: publishes haptic torque as
-  `/servo/target_current`. Default is `false`.
+- `enable_haptic_torque_onoff`: publishes binary servo torque enable commands to
+  `/servo/torque_enable`. Default is `true` for Mk-I.
+- `haptic_torque_on_threshold`: turns each servo ON when the absolute equivalent
+  torque exceeds this threshold.
+- `enable_haptic_current_command`: also publishes haptic torque as
+  `/servo/target_current` for compatible servos. Default is `false`.
 - `haptic_current_per_nm`: calibrated conversion from Nm to Spinal current
   command units. Must be positive before current commands are sent.
 

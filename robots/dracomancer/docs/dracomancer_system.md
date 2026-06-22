@@ -3,7 +3,7 @@
 このドキュメントは、Dracomancer の現在の実装に基づくシステム仕様をまとめたものです。
 Dracomancer は、オペレータの腕に装着する上肢外骨格型遠隔操作デバイスであり、現状では主に DRAGON の移動指令と形状指令を生成します。
 
-> 現状の実装メモ: `src/` 以下の C++ ファイルはプレースホルダで、実際の処理は `scripts/` 配下の Python ノードが担っています。力覚提示は安全スケーリングで抑制された形状入力を関節トルクへ戻す簡易実装で、最適化ベースの本格的な姿勢制限は未実装です。
+> 現状の実装メモ: `src/` 以下の C++ ファイルはプレースホルダで、実際の処理は `scripts/` 配下の Python ノードが担っています。力覚提示は安全スケーリングで抑制された形状入力から提示トルク相当量を計算しますが、Mk-I の XL430-W250-T では個々のサーボへ所望電流・所望トルクを入力できないため、Mk-I の既定実機出力はトルク ON/OFF です。互換サーボ向けの電流指令経路は残しています。最適化ベースの本格的な姿勢制限は未実装です。
 
 ## 全体構成
 
@@ -43,7 +43,7 @@ flowchart TB
 | `control_joint_angle.py` | 腕関節から DRAGON の形状指令を生成（候補姿勢のフィージビリティで変形可否を判定） | joint_states, shape_feasibility, threshold, flight_state | `/dragon/joints_ctrl`, `/dracomancer/shape_control_error` |
 | `shape_feasibility_node`（C++） | 候補リンク角の force/torque volume 半径を DRAGON モデルで予測するサービス | candidate joints | `~check_shape`（fc_f_min, fc_t_min） |
 | `volume_radius_monitor.py` | しきい値 pub/sub・ライブ安全スケール算出（bringup.launch で常時起動。fc 内接半径は再 pub しない） | fc inradius, threshold cmd | `*_volume_radius_threshold`, `/dracomancer/dragon_shape_safety_scale` |
-| `control_haptic_feedback.py` | 抑制された形状入力から力覚提示を生成 | joint_states, shape_control_error, mode | `/dracomancer/haptic_torque`, `/servo/target_current` |
+| `control_haptic_feedback.py` | 抑制された形状入力から提示トルク相当量を計算し、既定でサーボのトルク ON/OFF を出力し、互換サーボ向けには電流指令も任意出力 | joint_states, shape_control_error, mode | `/dracomancer/haptic_torque`, `/servo/torque_enable`, `/servo/target_current` |
 | `publish_fake_joint_states.py` | 実機なしで Dracomancer 関節状態を生成 | `/dracomancer/joint_cmd` | `/dracomancer/joint_states` |
 
 デバイス側ハードウェア:
@@ -350,7 +350,7 @@ rostopic echo /dragon/debug/fc_t_min                    # トルクの内接半�
 
 ## 力覚提示
 
-`haptics.launch` の `control_haptic_feedback.py` は、精密動作モードで安全スケーリングにより抑制された形状差を用いて、Dracomancer 側の7関節へ返す提示トルクを計算します。
+`haptics.launch` の `control_haptic_feedback.py` は、精密動作モードで安全スケーリングにより抑制された形状差を用いて、Dracomancer 側の7関節へ返す提示トルク相当量を計算します。ただし、Mk-I で使用している DYNAMIXEL XL430-W250-T は電流制御に対応しておらず、個々のサーボへ所望トルクを入力できません。そのため、Mk-I での既定の力覚提示は、連続的なトルク指令ではなく、しきい値を超えた関節のサーボトルクを ON/OFF する二値提示として扱います。互換サーボや将来機体で使うため、既存の電流指令出力は任意機能として残します。
 
 ```text
 e_q = q_des - q_tar
@@ -364,21 +364,21 @@ tau_device = B^T tau_q - D_h theta_dot
 
 | トピック | 型 | 説明 |
 | --- | --- | --- |
-| `/dracomancer/haptic_torque` | `sensor_msgs/JointState` | `effort` に7関節の提示トルクを格納 |
-| `/servo/target_current` | `spinal/ServoControlCmd` | 明示的に有効化した場合のみ、提示トルクを電流指令へ変換 |
+| `/dracomancer/haptic_torque` | `sensor_msgs/JointState` | `effort` に7関節の提示トルク相当量を格納（解析・可視化用） |
+| `/servo/torque_enable` | `spinal/ServoTorqueCmd` | 既定出力。提示トルク相当量の絶対値がしきい値以上のサーボをトルク ON |
+| `/servo/target_current` | `spinal/ServoControlCmd` | 互換サーボ向けの任意出力。明示的に有効化した場合のみ、提示トルク相当量を電流指令へ変換 |
 
-実機サーボへの電流指令は安全のため既定で無効です。有効化する場合は、少なくとも `enable_haptic_current_command=true` と `haptic_current_per_nm` を実機で較正した値に設定してください。
+実機サーボへのトルク ON/OFF 出力は既定で有効です。無効化する場合は `enable_haptic_torque_onoff=false`、ON 判定しきい値を変える場合は `haptic_torque_on_threshold` を調整してください。既存の電流指令を使う場合は、`enable_haptic_current_command=true` と `haptic_current_per_nm` を互換サーボで較正した値に設定します。
 
 ```bash
 roslaunch dracomancer haptics.launch
 ```
 
-実機電流指令まで出す例:
+実機でトルク ON/OFF まで出す例（既定）:
 
 ```bash
 roslaunch dracomancer haptics.launch \
-  enable_haptic_current_command:=true \
-  haptic_current_per_nm:=100.0
+  haptic_torque_on_threshold:=0.02
 ```
 
 ## 起動方法
@@ -547,7 +547,7 @@ roslaunch dracomancer teleoperation.launch \
 | 項目 | 現状 |
 | --- | --- |
 | 立ち上げ時の通常形状保持 | `startup` モードで実装。DRAGON 側の preflight joint control 設定に依存 |
-| 力覚提示 | 未実装。サーボを用いた反力・反トルク提示は設計段階 |
+| 力覚提示 | 提示トルク相当量の計算とトルク ON/OFF 出力のみ対応。XL430-W250-T では所望電流・所望トルク入力ができないため、Mk-Iでの連続的な反力・反トルク提示は Mk-II 以降の展望。既存の電流指令経路は互換サーボ向け任意機能として保持 |
 | Force/Torque Volume に基づく厳密な姿勢制限 | DRAGON の内接半径を使ったスケーリングのみ実装 |
 | C++ controller/model/optimizer | 空のプレースホルダ |
 | ジョイスティックZ軸 | `control_position.py` は対応。launch の既定較正は2軸のため、3軸目がなければ0 |
