@@ -197,49 +197,51 @@ rostopic pub -1 /dracomancer_control_position/recapture_neutral std_msgs/Empty "
 
 ## 関節マッピング
 
-Dracomancer の腕関節を、DRAGON を1本の直列アームとみなして対応付けます。DRAGON の `link1` が頭側、`link4` が尾側で、手首が頭側、肩が尾側に対応します。
+Dracomancer の腕関節を、DRAGON を1本の直列アームとみなして対応付けます（DRAGON は `joint*_pitch=0` で水平面に整列し、`joint*_yaw` が面内のセルペンタイン形状を作る）。`~mapping_mode` で2方式を切り替えます。
 
-```mermaid
-flowchart LR
-    subgraph DM["Dracomancer"]
-        W["手首"]
-        UA["上腕"]
-        E["肘"]
-        SH["肩"]
-    end
-    subgraph DG["DRAGON"]
-        J1["joint1（頭側）"]
-        J2["joint2"]
-        J3["joint3（尾側）"]
-    end
-    W -->|pitch / yaw| J1
-    UA -->|pitch| J2
-    E -->|yaw 反転| J2
-    SH -->|pitch / yaw| J3
-```
+| `mapping_mode` | 概要 |
+| --- | --- |
+| `joint_pairing`（**既定**） | 3つの屈曲関節を DRAGON の3つの yaw に1:1対応、pitch は 0 固定で平面保持 |
+| `geometric` | 腕の順運動学からリンク方向ベクトルを求め、面内(yaw)/面外(pitch)成分に分解 |
 
-既定の対応:
+### joint_pairing（中期方式・既定）
 
-| DRAGON 関節 | Dracomancer 関節 | sign | offset |
-| --- | --- | --- | --- |
-| `joint1_pitch` | `wrist_flexion_extension_joint` | +1 | 0 |
-| `joint1_yaw` | `wrist_supination_joint` | +1 | pi/2 |
-| `joint2_pitch` | `upper_arm_external_internal_rotation_joint` | +1 | 0 |
-| `joint2_yaw` | `elbow_flexion_extension_joint` | -1 | 0 |
-| `joint3_pitch` | `shoulder_flexion_extension_joint` | +1 | 0 |
-| `joint3_yaw` | `shoulder_abduction_adduction_joint` | +1 | pi/2 |
+屈曲関節（肩・肘・手首、すべて −X 軸）は同軸なので、これだけ動かすと腕は1平面内で曲がります。これを DRAGON の yaw に流し、pitch を 0 に固定することで「**腕の面内曲げ＝DRAGON の面内形状**」を構造的に保証します（平面平行性が動作中も保たれ、offset 調整は不要）。
 
-変換式:
+| DRAGON 関節 | Dracomancer 関節 | sign | offset | 面 |
+| --- | --- | --- | --- | --- |
+| `joint1_pitch` | （定数） | – | 0 | 面外→0 |
+| `joint1_yaw` | `wrist_flexion_extension_joint` | -1 | 0 | 面内 |
+| `joint2_pitch` | （定数） | – | 0 | 面外→0 |
+| `joint2_yaw` | `elbow_flexion_extension_joint` | -1 | 0 | 面内 |
+| `joint3_pitch` | （定数） | – | 0 | 面外→0 |
+| `joint3_yaw` | `shoulder_flexion_extension_joint` | -1 | 0 | 面内 |
 
 ```text
-mapped = offset[i] + sign[i] * scale[i] * (source - neutral)
-target = clamp(mapped, -joint_limit, joint_limit)
+source 名が空 -> その関節は定数（= offset）。pitch を 0 に保つために使用。
+それ以外      -> mapped = offset[i] + sign[i]*scale[i]*(source - neutral)
+target        = clamp(mapped, -joint_limit, joint_limit)
 ```
 
-- `scale` は既定で全関節 1.0 です。
-- `joint_limit` は既定で `pi/2` です。
-- `capture_neutral_on_first_msg=false` が既定なので、通常は neutral=0 として扱われます。
-- `joint2_yaw` は肘を反転し、オフセットなしで扱います。
+- yaw の sign は蛇の曲がり向き。DRAGON が逆向きに曲がる場合は3つ揃えて反転（`geom_yaw_sign` も合わせる）。
+- `scale=1.0`、`joint_limit=pi/2` が既定。`capture_neutral_on_first_msg=false` なので通常 neutral=0。
+- 捻り（supination, upper_arm_rotation）と外転は未使用。面外形状が必要なら pitch に source を割り当てる。
+
+### geometric（長期方式・引数で選択）
+
+`urdf/dracomancer.urdf` のリンク鎖で腕を順運動学し、上腕・前腕・手のベクトルを求め、隣接リンク間の相対回転を平面法線（既定 `geom_plane_normal=[1,0,0]`）まわりの **azimuth（→yaw）/ elevation（→pitch）** に分解します。中立姿勢を基準に差分を取るため、中立で全関節 0、屈曲を曲げると対応する1関節のみ yaw が動きます（数値検証済み）。
+
+```text
+FK -> 上腕/前腕/手の方向ベクトル
+各関節(肩→joint3, 肘→joint2, 手首→joint1)で
+  yaw   = geom_yaw_sign  * geom_yaw_scale  * (相対azimuth   - 中立azimuth)
+  pitch = geom_pitch_sign* geom_pitch_scale* (相対elevation - 中立elevation)
+```
+
+- 主用途の屈曲ベース面内整形はクリーン。外転・捻りなど面外DOFは、リンク構造オフセットの影響で遠位関節に pitch/yaw 結合が出ることがある（既知の限界、研究比較用）。
+- パラメータ: `geom_chain`, `geom_plane_normal`, `geom_yaw_sign/scale`, `geom_pitch_sign/scale`。
+
+両方式とも出力はフィージビリティ・ゲートを通って DRAGON へ送られます。
 
 サーボIDと Dracomancer 関節名:
 

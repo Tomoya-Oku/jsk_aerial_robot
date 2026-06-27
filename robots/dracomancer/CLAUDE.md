@@ -75,7 +75,7 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 ## control_joint_angle.py（形状制御）の設計
 
 - `startup`: `startup_pose`（既定 `[0, pi/2, 0, pi/2, 0, pi/2]`）を保持。
-- `precision`: Dracomancer 腕関節を DRAGON 関節へマッピングし、**候補姿勢のフィージビリティで変形可否を判定**する。
+- `precision`: Dracomancer 腕関節を DRAGON 関節へマッピングし、**候補姿勢のフィージビリティで変形可否を判定**する。マッピングは `~mapping_mode` で切替（`joint_pairing`=既定: 3屈曲関節→3 yaw・pitch=0で平面保持 / `geometric`: 腕FK→面内yaw・面外pitch分解）。詳細は [docs/dracomancer_system.md](docs/dracomancer_system.md) の関節マッピング節。
 - `wide`: `wide_hold_pose`（既定 `startup_pose`）を保持し、移動は `control_position.py` に任せる。
 - **予測フィージビリティ・ゲート（主機構）**: 候補 DRAGON 形状を `shape_feasibility_node`（C++、`dragon/full_vectoring_robot_model` を pluginlib で読み込み、`ns=dragon` で起動）の `check_shape` サービスに渡し `fc_f_min`/`fc_t_min` を予測。force・torque 両方が下限しきい値以上なら変形（採用・記憶）、未満／サービス失敗なら直前可行姿勢で停止。下限しきい値は `*_volume_radius_threshold`（`[hard_min, min]` の `hard_min`）を購読、未受信時は `force_radius_threshold`/`torque_radius_threshold` パラメータ。
 - **ライブ監視（情報提供）**: `volume_radius_monitor.py`（bringup.launch）が実機現在状態の fc からライブスケールを `/dracomancer/dragon_shape_safety_scale` に publish（web UI 用、ゲートとは独立）。しきい値の所有・pub/sub もここ。

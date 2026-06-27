@@ -32,17 +32,59 @@ class ControlJoints:
             "joint3_pitch",
             "joint3_yaw",
         ])
+        # Mapping strategy: "joint_pairing" (medium-term, default) or "geometric"
+        # (long-term, FK + plane projection). See docs/dracomancer_system.md.
+        self.mapping_mode = str(rospy.get_param("~mapping_mode", "joint_pairing")).lower()
+        if self.mapping_mode not in ("joint_pairing", "geometric"):
+            rospy.logwarn("unknown mapping_mode '%s', fall back to 'joint_pairing'", self.mapping_mode)
+            self.mapping_mode = "joint_pairing"
+
+        # --- joint_pairing (medium-term) mapping ---------------------------------
+        # The three arm flexion joints share the same -X axis, so moving only them
+        # keeps the arm in one plane. Route them to the three DRAGON yaw joints so the
+        # operator's planar arm bend becomes DRAGON's in-plane (planar) shape; keep the
+        # pitch joints at 0 (empty source name => constant = offset) so DRAGON stays
+        # planar. This preserves plane-parallelism by construction (no offset hack).
         self.source_joint_names = rospy.get_param("~source_joint_names", [
-            "wrist_flexion_extension_joint",
-            "wrist_supination_joint",
-            "upper_arm_external_internal_rotation_joint",
-            "elbow_flexion_extension_joint",
-            "shoulder_flexion_extension_joint",
-            "shoulder_abduction_adduction_joint",
+            "",                                  # joint1_pitch (constant 0)
+            "wrist_flexion_extension_joint",     # joint1_yaw
+            "",                                  # joint2_pitch (constant 0)
+            "elbow_flexion_extension_joint",     # joint2_yaw
+            "",                                  # joint3_pitch (constant 0)
+            "shoulder_flexion_extension_joint",  # joint3_yaw
         ])
-        self.signs = rospy.get_param("~signs", [1.0, 1.0, 1.0, -1.0, 1.0, 1.0])
+        # Signs of the yaw entries set the serpentine curl direction (all -1 so that
+        # the curl matches the geometric mode, keeping the two modes consistent). Flip
+        # all three together on hardware if DRAGON curls the wrong way. Pitch entries
+        # are unused (constant source).
+        self.signs = rospy.get_param("~signs", [1.0, -1.0, 1.0, -1.0, 1.0, -1.0])
         self.scales = rospy.get_param("~scales", [1.0] * len(self.joint_names))
-        self.offsets = rospy.get_param("~offsets", [0.0, np.pi / 2.0, 0.0, 0.0, 0.0, np.pi / 2.0])
+        # offset[i] is the constant value when source is empty (pitch -> 0), and the
+        # additive bias otherwise. Straight arm -> straight DRAGON, so all 0 by default.
+        self.offsets = rospy.get_param("~offsets", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+        # --- geometric (long-term) mapping ---------------------------------------
+        # Arm kinematic chain (parent->child joint origins / axes) taken from
+        # urdf/dracomancer.urdf (all joint rpy are 0). Used to forward-kinematics the
+        # arm and decompose consecutive link directions into yaw (in-plane) / pitch
+        # (out-of-plane) components about geom_plane_normal.
+        self.geom_chain = rospy.get_param("~geom_chain", [
+            ["shoulder_abduction_adduction_joint", [0.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            ["shoulder_flexion_extension_joint", [0.0925, 0.001, -0.1025], [-1.0, 0.0, 0.0]],
+            ["upper_arm_external_internal_rotation_joint", [-0.0209, 0.0, -0.09475], [0.0, 0.0, -1.0]],
+            ["elbow_flexion_extension_joint", [-0.00675, 0.0, -0.1209], [-1.0, 0.0, 0.0]],
+            ["wrist_supination_joint", [-0.0209, 0.0, -0.09475], [0.0, 0.0, -1.0]],
+            ["wrist_flexion_extension_joint", [-0.00675, 0.0, -0.1209], [-1.0, 0.0, 0.0]],
+            ["wrist_abduction_adduction_joint", [-0.03915, 0.0209, -0.0225], [0.0, 1.0, 0.0]],
+        ])
+        # The arm's natural bending plane normal (flexion joints rotate about +-X), so
+        # in-plane motion is the Y-Z plane. yaw = azimuth in that plane, pitch = tilt
+        # toward the normal. Output sign lets you flip DRAGON's curl/tilt sense.
+        self.geom_plane_normal = rospy.get_param("~geom_plane_normal", [1.0, 0.0, 0.0])
+        self.geom_yaw_sign = rospy.get_param("~geom_yaw_sign", 1.0)
+        self.geom_pitch_sign = rospy.get_param("~geom_pitch_sign", 1.0)
+        self.geom_yaw_scale = rospy.get_param("~geom_yaw_scale", 1.0)
+        self.geom_pitch_scale = rospy.get_param("~geom_pitch_scale", 1.0)
         self.startup_pose = rospy.get_param("~startup_pose", [0.0, np.pi / 2.0, 0.0, np.pi / 2.0, 0.0, np.pi / 2.0])
         self.wide_hold_pose = rospy.get_param("~wide_hold_pose", self.startup_pose)
         self.safe_pose = rospy.get_param("~safe_pose", self.startup_pose)
@@ -91,6 +133,9 @@ class ControlJoints:
         self.last_gate_log_stamp = rospy.Time(0)
         self.last_gate_feasible = None
         self.last_feasibility_eval_stamp = rospy.Time(0)
+        # Geometric-mode reference (neutral) relative angles, computed lazily so a
+        # captured neutral pose can be used if available.
+        self.geom_ref = None
 
         # Publisher
         self.joints_ctrl_pub = rospy.Publisher(self.command_topic, JointState, queue_size=10)
@@ -113,6 +158,7 @@ class ControlJoints:
         rospy.loginfo("teleop_mode: %s, mode_topic: %s", self.teleop_mode, self.mode_topic)
         rospy.loginfo("device_joint_topic: %s", self.device_joint_topic)
         rospy.loginfo("command_topic: %s", self.command_topic)
+        rospy.loginfo("mapping_mode: %s", self.mapping_mode)
         rospy.loginfo("joint mapping: %s",
                       ", ".join("{}<-{}".format(dst, src)
                                 for dst, src in zip(self.joint_names, self.source_joint_names)))
@@ -155,9 +201,14 @@ class ControlJoints:
             name: float(pos) for name, pos in zip(msg.name, msg.position)
         }
         if self.capture_neutral and not self.neutral_device_joints:
-            if all(name in self.latest_device_joints for name in self.source_joint_names):
+            # Capture the joints actually used as mapping sources. In joint_pairing the
+            # empty (constant) entries are skipped; in geometric every chain joint is
+            # used, so capture the whole latest set.
+            needed = ([n for n in self.source_joint_names if n] if self.mapping_mode != "geometric"
+                      else [j[0] for j in self.geom_chain])
+            if needed and all(name in self.latest_device_joints for name in needed):
                 self.neutral_device_joints = {
-                    name: self.latest_device_joints[name] for name in self.source_joint_names
+                    name: self.latest_device_joints[name] for name in needed
                 }
                 rospy.loginfo("Captured dracomancer neutral joints for DRAGON mapping")
 
@@ -175,19 +226,122 @@ class ControlJoints:
     def mapped_target(self):
         if not self.latest_device_joints:
             return list(self.last_feasible_target)
+        if self.mapping_mode == "geometric":
+            return self.geometric_target()
+        return self.joint_pairing_target()
 
+    def joint_pairing_target(self):
+        # Medium-term: per-DRAGON-joint 1:1 mapping with sign/scale/offset.
+        # An empty source name means a constant joint (value = offset), used to keep
+        # the pitch joints at 0 so DRAGON stays planar.
         target = []
         for i, source_name in enumerate(self.source_joint_names):
+            if not source_name:
+                target.append(self.clamp(self.offsets[i]))
+                continue
             source = self.latest_device_joints.get(source_name)
             if source is None:
                 target.append(self.last_feasible_target[i])
                 continue
-
             neutral = self.neutral_device_joints.get(source_name, 0.0)
             mapped = self.offsets[i] + self.signs[i] * self.scales[i] * (source - neutral)
             target.append(self.clamp(mapped))
-
         return target
+
+    # --- geometric (long-term) mapping --------------------------------------
+    @staticmethod
+    def rot_axis_angle(axis, angle):
+        # Rodrigues' rotation matrix for a unit (or near-unit) axis.
+        a = np.asarray(axis, dtype=float)
+        n = np.linalg.norm(a)
+        if n < 1e-9:
+            return np.eye(3)
+        a = a / n
+        c, s = np.cos(angle), np.sin(angle)
+        x, y, z = a
+        return np.array([
+            [c + x * x * (1 - c), x * y * (1 - c) - z * s, x * z * (1 - c) + y * s],
+            [y * x * (1 - c) + z * s, c + y * y * (1 - c), y * z * (1 - c) - x * s],
+            [z * x * (1 - c) - y * s, z * y * (1 - c) + x * s, c + z * z * (1 - c)],
+        ])
+
+    def arm_node_positions(self, joints):
+        # Forward kinematics over geom_chain (all joint rpy are 0): returns the base-
+        # frame positions of every joint origin plus the final hand point.
+        T = np.eye(4)
+        positions = []
+        for name, origin, axis in self.geom_chain:
+            trans = np.eye(4)
+            trans[:3, 3] = np.asarray(origin, dtype=float)
+            T = T.dot(trans)
+            positions.append(T[:3, 3].copy())  # joint location (before its own rotation)
+            rot = np.eye(4)
+            rot[:3, :3] = self.rot_axis_angle(axis, float(joints.get(name, 0.0)))
+            T = T.dot(rot)
+        positions.append(T[:3, 3].copy())  # hand tip
+        return positions
+
+    def segment_angles(self, joints):
+        # Decompose the upper-arm / forearm / hand segment directions into azimuth
+        # (in-plane, -> yaw) and elevation (toward plane normal, -> pitch).
+        pos = self.arm_node_positions(joints)
+        # node indices in geom_chain: 1=shoulder_flexion, 3=elbow, 5=wrist, 7=hand tip
+        shoulder, elbow, wrist, hand = pos[1], pos[3], pos[5], pos[7]
+        segments = [elbow - shoulder, wrist - elbow, hand - wrist]  # upper arm, forearm, hand
+
+        n = np.asarray(self.geom_plane_normal, dtype=float)
+        n = n / max(np.linalg.norm(n), 1e-9)
+        # Build an in-plane orthonormal basis (e1, e2) spanning the plane.
+        ref = np.array([0.0, 0.0, 1.0]) if abs(n[2]) < 0.9 else np.array([0.0, 1.0, 0.0])
+        e1 = ref - n * ref.dot(n)
+        e1 = e1 / max(np.linalg.norm(e1), 1e-9)
+        e2 = np.cross(n, e1)
+
+        az, el = [], []
+        for v in segments:
+            if np.linalg.norm(v) < 1e-9:
+                az.append(0.0)
+                el.append(0.0)
+                continue
+            u = v / np.linalg.norm(v)
+            az.append(np.arctan2(u.dot(e2), u.dot(e1)))  # azimuth in plane
+            el.append(np.arcsin(max(-1.0, min(1.0, u.dot(n)))))  # elevation toward normal
+        return az, el
+
+    @staticmethod
+    def wrap(angle):
+        return (angle + np.pi) % (2.0 * np.pi) - np.pi
+
+    def geometric_relative(self, joints):
+        # Inter-segment (child - parent) azimuth/elevation per arm joint, ordered
+        # [shoulder(joint3), elbow(joint2), wrist(joint1)]. The shoulder's parent is the
+        # fixed torso, so its relative angle is the upper-arm direction itself; the
+        # constant torso offset is removed later by subtracting the neutral reference.
+        az, el = self.segment_angles(joints)  # segments: 0=upper arm, 1=forearm, 2=hand
+        rel_az = [az[0], self.wrap(az[1] - az[0]), self.wrap(az[2] - az[1])]
+        rel_el = [el[0], self.wrap(el[1] - el[0]), self.wrap(el[2] - el[1])]
+        return rel_az, rel_el
+
+    def geometric_target(self):
+        if self.geom_ref is None:
+            neutral_joints = self.neutral_device_joints if self.neutral_device_joints else {}
+            self.geom_ref = self.geometric_relative(neutral_joints)
+        az0, el0 = self.geom_ref
+        az, el = self.geometric_relative(self.latest_device_joints)
+
+        # DRAGON joints carried by the shoulder/elbow/wrist articulation.
+        # joint3 <- shoulder (segment 0), joint2 <- elbow (segment 1), joint1 <- wrist (segment 2).
+        yaw = [self.geom_yaw_sign * self.geom_yaw_scale * self.wrap(az[k] - az0[k]) for k in range(3)]
+        pitch = [self.geom_pitch_sign * self.geom_pitch_scale * self.wrap(el[k] - el0[k]) for k in range(3)]
+
+        # joint_names order: [j1_pitch, j1_yaw, j2_pitch, j2_yaw, j3_pitch, j3_yaw].
+        # segment index: wrist=2 -> joint1, elbow=1 -> joint2, shoulder=0 -> joint3.
+        ordered = [
+            pitch[2], yaw[2],   # joint1
+            pitch[1], yaw[1],   # joint2
+            pitch[0], yaw[0],   # joint3
+        ]
+        return [self.clamp(v) for v in ordered]
 
     def evaluate_feasibility(self, candidate):
         # Returns (feasible: bool, fc_f_min, fc_t_min). On service failure returns

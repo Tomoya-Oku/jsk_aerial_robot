@@ -28,6 +28,10 @@
   <arg name="torque_radius_threshold" default="0.002"/>
   <arg name="max_step" default="0.04"/>
   <arg name="joint_limit" default="1.57079632679"/>
+  <!-- Arm->DRAGON mapping strategy (precision mode):
+         joint_pairing : flexion joints -> DRAGON yaw, pitch held at 0 (planar). Default.
+         geometric     : arm FK -> link directions -> yaw/pitch decomposition. -->
+  <arg name="mapping_mode" default="joint_pairing"/>
   <arg name="capture_neutral_on_first_msg" default="false"/>
   <arg name="enable_position_control" default="true"/>
   <arg name="enable_attitude_control" default="false"/>
@@ -175,6 +179,7 @@
     <param name="rate" value="40.0"/>
     <param name="teleop_mode" value="$(arg teleop_mode)"/>
     <param name="mode_topic" value="$(arg mode_topic)"/>
+    <param name="mapping_mode" value="$(arg mapping_mode)"/>
     <param name="joint_limit" value="$(arg joint_limit)"/>
     <param name="max_step" value="$(arg max_step)"/>
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
