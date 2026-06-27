@@ -4,7 +4,7 @@ DRAGON の **可制御レンチ内接半径** `fc_f_min` / `fc_t_min` に対す�
 Dracomancer 安全ゲートのしきい値 `[hard_min, min]`（[volume_radius_monitor.py](../scripts/safety/volume_radius_monitor.py)）を、
 **データに基づいて**決めるための実験手順と結果を記録する。
 
-関連: [dracomancer_system.md](dracomancer_system.md)（安全スケールの定義）。
+関連: [README.md](../README.md)（安全スケールの定義）。
 
 ## 1. 背景：fc とは何か、外乱はどう関わるか
 

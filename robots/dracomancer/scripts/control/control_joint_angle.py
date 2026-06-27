@@ -32,20 +32,73 @@ class ControlJoints:
             "joint3_pitch",
             "joint3_yaw",
         ])
-        self.source_joint_names = rospy.get_param("~source_joint_names", [
-            "wrist_flexion_extension_joint",
-            "wrist_supination_joint",
-            "upper_arm_external_internal_rotation_joint",
-            "elbow_flexion_extension_joint",
-            "shoulder_flexion_extension_joint",
-            "shoulder_abduction_adduction_joint",
-        ])
-        self.signs = rospy.get_param("~signs", [1.0, 1.0, 1.0, -1.0, 1.0, 1.0])
-        self.scales = rospy.get_param("~scales", [1.0] * len(self.joint_names))
-        self.offsets = rospy.get_param("~offsets", [0.0, np.pi / 2.0, 0.0, 0.0, 0.0, np.pi / 2.0])
         self.startup_pose = rospy.get_param("~startup_pose", [0.0, np.pi / 2.0, 0.0, np.pi / 2.0, 0.0, np.pi / 2.0])
         self.wide_hold_pose = rospy.get_param("~wide_hold_pose", self.startup_pose)
         self.safe_pose = rospy.get_param("~safe_pose", self.startup_pose)
+
+        # Mapping strategy: "joint_pairing" (medium-term, default) or "geometric"
+        # (long-term, FK + plane projection). See README.md.
+        self.mapping_mode = str(rospy.get_param("~mapping_mode", "joint_pairing")).lower()
+        if self.mapping_mode not in ("joint_pairing", "geometric"):
+            rospy.logwarn("unknown mapping_mode '%s', fall back to 'joint_pairing'", self.mapping_mode)
+            self.mapping_mode = "joint_pairing"
+        self.joint_pairing_reference = str(rospy.get_param("~joint_pairing_reference", "zero")).lower()
+        if self.joint_pairing_reference not in ("zero", "startup"):
+            rospy.logwarn("unknown joint_pairing_reference '%s', fall back to 'zero'",
+                          self.joint_pairing_reference)
+            self.joint_pairing_reference = "zero"
+
+        # --- joint_pairing (medium-term) mapping ---------------------------------
+        # The three arm flexion joints share the same -X axis, so moving only them
+        # keeps the arm in one plane. Route them to the three DRAGON yaw joints so the
+        # operator's planar arm bend becomes DRAGON's in-plane (planar) shape; keep the
+        # pitch joints at 0 (empty source name => constant = offset) so DRAGON stays
+        # planar. This preserves plane-parallelism by construction (no offset hack).
+        self.source_joint_names = rospy.get_param("~source_joint_names", [
+            "",                                  # joint1_pitch (constant 0)
+            "wrist_flexion_extension_joint",     # joint1_yaw
+            "",                                  # joint2_pitch (constant 0)
+            "elbow_flexion_extension_joint",     # joint2_yaw
+            "",                                  # joint3_pitch (constant 0)
+            "shoulder_flexion_extension_joint",  # joint3_yaw
+        ])
+        # Signs of the yaw entries set the serpentine curl direction (all -1 so that
+        # the curl matches the geometric mode, keeping the two modes consistent). Flip
+        # all three together on hardware if DRAGON curls the wrong way. Pitch entries
+        # are unused (constant source).
+        self.signs = rospy.get_param("~signs", [1.0, -1.0, 1.0, -1.0, 1.0, -1.0])
+        joint_pairing_scale = rospy.get_param("~joint_pairing_scale", 1.0)
+        base_scales = rospy.get_param("~scales", [1.0] * len(self.joint_names))
+        self.scales = [float(joint_pairing_scale) * float(scale) for scale in base_scales]
+        default_offsets = ([0.0] * len(self.joint_names)
+                           if self.joint_pairing_reference == "zero"
+                           else list(self.startup_pose))
+        # offset[i] is the constant value when source is empty and the additive bias
+        # otherwise. "startup" keeps precision commands near DRAGON's circular shape.
+        self.offsets = rospy.get_param("~offsets", default_offsets)
+
+        # --- geometric (long-term) mapping ---------------------------------------
+        # Arm kinematic chain (parent->child joint origins / axes) taken from
+        # urdf/dracomancer.urdf (all joint rpy are 0). Used to forward-kinematics the
+        # arm and decompose consecutive link directions into yaw (in-plane) / pitch
+        # (out-of-plane) components about geom_plane_normal.
+        self.geom_chain = rospy.get_param("~geom_chain", [
+            ["shoulder_abduction_adduction_joint", [0.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            ["shoulder_flexion_extension_joint", [0.0925, 0.001, -0.1025], [-1.0, 0.0, 0.0]],
+            ["upper_arm_external_internal_rotation_joint", [-0.0209, 0.0, -0.09475], [0.0, 0.0, -1.0]],
+            ["elbow_flexion_extension_joint", [-0.00675, 0.0, -0.1209], [-1.0, 0.0, 0.0]],
+            ["wrist_supination_joint", [-0.0209, 0.0, -0.09475], [0.0, 0.0, -1.0]],
+            ["wrist_flexion_extension_joint", [-0.00675, 0.0, -0.1209], [-1.0, 0.0, 0.0]],
+            ["wrist_abduction_adduction_joint", [-0.03915, 0.0209, -0.0225], [0.0, 1.0, 0.0]],
+        ])
+        # The arm's natural bending plane normal (flexion joints rotate about +-X), so
+        # in-plane motion is the Y-Z plane. yaw = azimuth in that plane, pitch = tilt
+        # toward the normal. Output sign lets you flip DRAGON's curl/tilt sense.
+        self.geom_plane_normal = rospy.get_param("~geom_plane_normal", [1.0, 0.0, 0.0])
+        self.geom_yaw_sign = rospy.get_param("~geom_yaw_sign", 1.0)
+        self.geom_pitch_sign = rospy.get_param("~geom_pitch_sign", 1.0)
+        self.geom_yaw_scale = rospy.get_param("~geom_yaw_scale", 1.0)
+        self.geom_pitch_scale = rospy.get_param("~geom_pitch_scale", 1.0)
         self.joint_limit = rospy.get_param("~joint_limit", np.pi / 2.0)
         self.max_step = rospy.get_param("~max_step", 0.04)
         self.capture_neutral = rospy.get_param("~capture_neutral_on_first_msg", False)
@@ -66,6 +119,11 @@ class ControlJoints:
         #   Deform only when BOTH radii are at or above their lower thresholds;
         #   otherwise hold the last feasible shape.
         self.enable_feasibility_gate = rospy.get_param("~enable_feasibility_gate", True)
+        self.feasibility_gate_mode = str(rospy.get_param("~feasibility_gate_mode", "hold")).lower()
+        if self.feasibility_gate_mode not in ("hold", "step_search", "soft_scale"):
+            rospy.logwarn("unknown feasibility_gate_mode '%s', fall back to 'hold'",
+                          self.feasibility_gate_mode)
+            self.feasibility_gate_mode = "hold"
         self.feasibility_service_name = rospy.get_param(
             "~feasibility_service", "/" + self.robot_name + "/shape_feasibility/check_shape")
         self.feasibility_service_timeout = rospy.get_param("~feasibility_service_timeout", 2.0)
@@ -76,6 +134,9 @@ class ControlJoints:
         # Lower thresholds (fallback params; overridden by the threshold topics below).
         self.force_radius_threshold = rospy.get_param("~force_radius_threshold", 0.1)
         self.torque_radius_threshold = rospy.get_param("~torque_radius_threshold", 0.01)
+        self.feasibility_step_fraction = rospy.get_param("~feasibility_step_fraction", 0.25)
+        self.feasibility_min_step_fraction = rospy.get_param("~feasibility_min_step_fraction", 0.03)
+        self.feasibility_soft_min_scale = rospy.get_param("~feasibility_soft_min_scale", 0.0)
         # Threshold topics carry [hard_min, min]; hard_min ([0]) is used as the gate bound.
         self.force_threshold_topic = rospy.get_param(
             "~force_volume_radius_threshold_topic", self.device_ns + "/force_volume_radius_threshold")
@@ -91,6 +152,9 @@ class ControlJoints:
         self.last_gate_log_stamp = rospy.Time(0)
         self.last_gate_feasible = None
         self.last_feasibility_eval_stamp = rospy.Time(0)
+        # Geometric-mode reference (neutral) relative angles, computed lazily so a
+        # captured neutral pose can be used if available.
+        self.geom_ref = None
 
         # Publisher
         self.joints_ctrl_pub = rospy.Publisher(self.command_topic, JointState, queue_size=10)
@@ -113,6 +177,8 @@ class ControlJoints:
         rospy.loginfo("teleop_mode: %s, mode_topic: %s", self.teleop_mode, self.mode_topic)
         rospy.loginfo("device_joint_topic: %s", self.device_joint_topic)
         rospy.loginfo("command_topic: %s", self.command_topic)
+        rospy.loginfo("mapping_mode: %s, joint_pairing_reference: %s",
+                      self.mapping_mode, self.joint_pairing_reference)
         rospy.loginfo("joint mapping: %s",
                       ", ".join("{}<-{}".format(dst, src)
                                 for dst, src in zip(self.joint_names, self.source_joint_names)))
@@ -121,8 +187,8 @@ class ControlJoints:
                           name, scale, sign, offset)
                                 for name, scale, sign, offset in zip(
                                     self.joint_names, self.scales, self.signs, self.offsets)))
-        rospy.loginfo("feasibility gate: enable=%s, service=%s, thresholds force/torque=%.4f/%.4f",
-                      self.enable_feasibility_gate, self.feasibility_service_name,
+        rospy.loginfo("feasibility gate: enable=%s, mode=%s, service=%s, thresholds force/torque=%.4f/%.4f",
+                      self.enable_feasibility_gate, self.feasibility_gate_mode, self.feasibility_service_name,
                       self.force_radius_threshold, self.torque_radius_threshold)
         rospy.loginfo("joint command gating: only_when_hovering=%s, before_device_ready=%s",
                       self.publish_only_when_hovering, self.publish_before_device_ready)
@@ -150,14 +216,22 @@ class ControlJoints:
     def clamp(self, x):
         return max(-self.joint_limit, min(self.joint_limit, x))
 
+    def clamp_target(self, target):
+        return [self.clamp(v) for v in target]
+
     def device_joint_cb(self, msg):
         self.latest_device_joints = {
             name: float(pos) for name, pos in zip(msg.name, msg.position)
         }
         if self.capture_neutral and not self.neutral_device_joints:
-            if all(name in self.latest_device_joints for name in self.source_joint_names):
+            # Capture the joints actually used as mapping sources. In joint_pairing the
+            # empty (constant) entries are skipped; in geometric every chain joint is
+            # used, so capture the whole latest set.
+            needed = ([n for n in self.source_joint_names if n] if self.mapping_mode != "geometric"
+                      else [j[0] for j in self.geom_chain])
+            if needed and all(name in self.latest_device_joints for name in needed):
                 self.neutral_device_joints = {
-                    name: self.latest_device_joints[name] for name in self.source_joint_names
+                    name: self.latest_device_joints[name] for name in needed
                 }
                 rospy.loginfo("Captured dracomancer neutral joints for DRAGON mapping")
 
@@ -175,19 +249,122 @@ class ControlJoints:
     def mapped_target(self):
         if not self.latest_device_joints:
             return list(self.last_feasible_target)
+        if self.mapping_mode == "geometric":
+            return self.geometric_target()
+        return self.joint_pairing_target()
 
+    def joint_pairing_target(self):
+        # Medium-term: per-DRAGON-joint 1:1 mapping with sign/scale/offset.
+        # An empty source name means a constant joint (value = offset), used to keep
+        # the pitch joints at 0 so DRAGON stays planar.
         target = []
         for i, source_name in enumerate(self.source_joint_names):
+            if not source_name:
+                target.append(self.clamp(self.offsets[i]))
+                continue
             source = self.latest_device_joints.get(source_name)
             if source is None:
                 target.append(self.last_feasible_target[i])
                 continue
-
             neutral = self.neutral_device_joints.get(source_name, 0.0)
             mapped = self.offsets[i] + self.signs[i] * self.scales[i] * (source - neutral)
             target.append(self.clamp(mapped))
-
         return target
+
+    # --- geometric (long-term) mapping --------------------------------------
+    @staticmethod
+    def rot_axis_angle(axis, angle):
+        # Rodrigues' rotation matrix for a unit (or near-unit) axis.
+        a = np.asarray(axis, dtype=float)
+        n = np.linalg.norm(a)
+        if n < 1e-9:
+            return np.eye(3)
+        a = a / n
+        c, s = np.cos(angle), np.sin(angle)
+        x, y, z = a
+        return np.array([
+            [c + x * x * (1 - c), x * y * (1 - c) - z * s, x * z * (1 - c) + y * s],
+            [y * x * (1 - c) + z * s, c + y * y * (1 - c), y * z * (1 - c) - x * s],
+            [z * x * (1 - c) - y * s, z * y * (1 - c) + x * s, c + z * z * (1 - c)],
+        ])
+
+    def arm_node_positions(self, joints):
+        # Forward kinematics over geom_chain (all joint rpy are 0): returns the base-
+        # frame positions of every joint origin plus the final hand point.
+        T = np.eye(4)
+        positions = []
+        for name, origin, axis in self.geom_chain:
+            trans = np.eye(4)
+            trans[:3, 3] = np.asarray(origin, dtype=float)
+            T = T.dot(trans)
+            positions.append(T[:3, 3].copy())  # joint location (before its own rotation)
+            rot = np.eye(4)
+            rot[:3, :3] = self.rot_axis_angle(axis, float(joints.get(name, 0.0)))
+            T = T.dot(rot)
+        positions.append(T[:3, 3].copy())  # hand tip
+        return positions
+
+    def segment_angles(self, joints):
+        # Decompose the upper-arm / forearm / hand segment directions into azimuth
+        # (in-plane, -> yaw) and elevation (toward plane normal, -> pitch).
+        pos = self.arm_node_positions(joints)
+        # node indices in geom_chain: 1=shoulder_flexion, 3=elbow, 5=wrist, 7=hand tip
+        shoulder, elbow, wrist, hand = pos[1], pos[3], pos[5], pos[7]
+        segments = [elbow - shoulder, wrist - elbow, hand - wrist]  # upper arm, forearm, hand
+
+        n = np.asarray(self.geom_plane_normal, dtype=float)
+        n = n / max(np.linalg.norm(n), 1e-9)
+        # Build an in-plane orthonormal basis (e1, e2) spanning the plane.
+        ref = np.array([0.0, 0.0, 1.0]) if abs(n[2]) < 0.9 else np.array([0.0, 1.0, 0.0])
+        e1 = ref - n * ref.dot(n)
+        e1 = e1 / max(np.linalg.norm(e1), 1e-9)
+        e2 = np.cross(n, e1)
+
+        az, el = [], []
+        for v in segments:
+            if np.linalg.norm(v) < 1e-9:
+                az.append(0.0)
+                el.append(0.0)
+                continue
+            u = v / np.linalg.norm(v)
+            az.append(np.arctan2(u.dot(e2), u.dot(e1)))  # azimuth in plane
+            el.append(np.arcsin(max(-1.0, min(1.0, u.dot(n)))))  # elevation toward normal
+        return az, el
+
+    @staticmethod
+    def wrap(angle):
+        return (angle + np.pi) % (2.0 * np.pi) - np.pi
+
+    def geometric_relative(self, joints):
+        # Inter-segment (child - parent) azimuth/elevation per arm joint, ordered
+        # [shoulder(joint3), elbow(joint2), wrist(joint1)]. The shoulder's parent is the
+        # fixed torso, so its relative angle is the upper-arm direction itself; the
+        # constant torso offset is removed later by subtracting the neutral reference.
+        az, el = self.segment_angles(joints)  # segments: 0=upper arm, 1=forearm, 2=hand
+        rel_az = [az[0], self.wrap(az[1] - az[0]), self.wrap(az[2] - az[1])]
+        rel_el = [el[0], self.wrap(el[1] - el[0]), self.wrap(el[2] - el[1])]
+        return rel_az, rel_el
+
+    def geometric_target(self):
+        if self.geom_ref is None:
+            neutral_joints = self.neutral_device_joints if self.neutral_device_joints else {}
+            self.geom_ref = self.geometric_relative(neutral_joints)
+        az0, el0 = self.geom_ref
+        az, el = self.geometric_relative(self.latest_device_joints)
+
+        # DRAGON joints carried by the shoulder/elbow/wrist articulation.
+        # joint3 <- shoulder (segment 0), joint2 <- elbow (segment 1), joint1 <- wrist (segment 2).
+        yaw = [self.geom_yaw_sign * self.geom_yaw_scale * self.wrap(az[k] - az0[k]) for k in range(3)]
+        pitch = [self.geom_pitch_sign * self.geom_pitch_scale * self.wrap(el[k] - el0[k]) for k in range(3)]
+
+        # joint_names order: [j1_pitch, j1_yaw, j2_pitch, j2_yaw, j3_pitch, j3_yaw].
+        # segment index: wrist=2 -> joint1, elbow=1 -> joint2, shoulder=0 -> joint3.
+        ordered = [
+            pitch[2], yaw[2],   # joint1
+            pitch[1], yaw[1],   # joint2
+            pitch[0], yaw[0],   # joint3
+        ]
+        return [self.clamp(v) for v in ordered]
 
     def evaluate_feasibility(self, candidate):
         # Returns (feasible: bool, fc_f_min, fc_t_min). On service failure returns
@@ -209,6 +386,40 @@ class ControlJoints:
         feasible = (res.fc_f_min >= self.force_radius_threshold and
                     res.fc_t_min >= self.torque_radius_threshold)
         return feasible, res.fc_f_min, res.fc_t_min
+
+    def publish_candidate_fc(self, fc_f, fc_t):
+        if fc_f is not None:
+            self.candidate_fc_f_pub.publish(Float64(fc_f))
+        if fc_t is not None:
+            self.candidate_fc_t_pub.publish(Float64(fc_t))
+
+    def interpolate_target(self, src, dst, fraction):
+        return self.clamp_target([
+            float(a) + float(fraction) * (float(b) - float(a))
+            for a, b in zip(src, dst)
+        ])
+
+    def feasibility_soft_scale(self, fc_f, fc_t):
+        if fc_f is None or fc_t is None:
+            return 0.0
+        force_scale = 1.0 if self.force_radius_threshold <= 0.0 else fc_f / self.force_radius_threshold
+        torque_scale = 1.0 if self.torque_radius_threshold <= 0.0 else fc_t / self.torque_radius_threshold
+        scale = max(0.0, min(1.0, force_scale, torque_scale))
+        return max(float(self.feasibility_soft_min_scale), scale)
+
+    def step_search_target(self, candidate):
+        fraction = min(1.0, max(0.0, float(self.feasibility_step_fraction)))
+        min_fraction = min(fraction, max(0.0, float(self.feasibility_min_step_fraction)))
+        while fraction >= min_fraction and fraction > 0.0:
+            trial = self.interpolate_target(self.last_feasible_target, candidate, fraction)
+            feasible, fc_f, fc_t = self.evaluate_feasibility(trial)
+            if feasible:
+                self.publish_candidate_fc(fc_f, fc_t)
+                self.last_feasible_target = trial
+                self.log_gate(True, fc_f, fc_t)
+                return list(self.last_feasible_target)
+            fraction *= 0.5
+        return list(self.last_feasible_target)
 
     def log_gate(self, feasible, fc_f, fc_t):
         if feasible != self.last_gate_feasible:
@@ -242,12 +453,18 @@ class ControlJoints:
         self.last_feasibility_eval_stamp = now
 
         feasible, fc_f, fc_t = self.evaluate_feasibility(candidate)
-        if fc_f is not None:
-            self.candidate_fc_f_pub.publish(Float64(fc_f))
-        if fc_t is not None:
-            self.candidate_fc_t_pub.publish(Float64(fc_t))
+        self.publish_candidate_fc(fc_f, fc_t)
         if feasible:
             self.last_feasible_target = candidate
+        elif self.feasibility_gate_mode == "step_search":
+            self.log_gate(False, fc_f, fc_t)
+            return self.step_search_target(candidate)
+        elif self.feasibility_gate_mode == "soft_scale":
+            scale = self.feasibility_soft_scale(fc_f, fc_t)
+            target = self.interpolate_target(self.last_feasible_target, candidate, scale)
+            self.last_feasible_target = target
+            self.log_gate(scale > 0.0, fc_f, fc_t)
+            return list(self.last_feasible_target)
         # feasible False or None (service failure / invalid) -> hold last feasible.
         self.log_gate(bool(feasible), fc_f, fc_t)
         return list(self.last_feasible_target)

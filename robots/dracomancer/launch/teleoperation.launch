@@ -19,6 +19,12 @@
        shape_feasibility_node runs in the controlled robot's namespace so its
        robot model can read <robot_ns>/robot_description. -->
   <arg name="enable_feasibility_gate" default="true"/>
+  <!-- hold: current hard gate; step_search: try smaller feasible increments;
+       soft_scale: move partially toward infeasible candidates. -->
+  <arg name="feasibility_gate_mode" default="hold"/>
+  <arg name="feasibility_step_fraction" default="0.25"/>
+  <arg name="feasibility_min_step_fraction" default="0.03"/>
+  <arg name="feasibility_soft_min_scale" default="0.0"/>
   <arg name="feasibility_service" default="/$(arg robot_ns)/shape_feasibility/check_shape"/>
   <arg name="robot_model_plugin_name" default="dragon/full_vectoring_robot_model"/>
   <!-- Gate fallback (hard_min) used only until the threshold topic arrives;
@@ -28,6 +34,15 @@
   <arg name="torque_radius_threshold" default="0.002"/>
   <arg name="max_step" default="0.04"/>
   <arg name="joint_limit" default="1.57079632679"/>
+  <!-- Arm->DRAGON mapping strategy (precision mode):
+         joint_pairing : flexion joints -> DRAGON yaw, pitch held at 0 (planar). Default.
+         geometric     : arm FK -> link directions -> yaw/pitch decomposition. -->
+  <arg name="mapping_mode" default="joint_pairing"/>
+  <!-- joint_pairing_reference:
+         zero    : existing direct mapping around 0 rad.
+         startup : relative deformation around startup_pose (circular DRAGON shape). -->
+  <arg name="joint_pairing_reference" default="zero"/>
+  <arg name="joint_pairing_scale" default="1.0"/>
   <arg name="capture_neutral_on_first_msg" default="false"/>
   <arg name="enable_position_control" default="true"/>
   <arg name="enable_attitude_control" default="false"/>
@@ -175,12 +190,19 @@
     <param name="rate" value="40.0"/>
     <param name="teleop_mode" value="$(arg teleop_mode)"/>
     <param name="mode_topic" value="$(arg mode_topic)"/>
+    <param name="mapping_mode" value="$(arg mapping_mode)"/>
+    <param name="joint_pairing_reference" value="$(arg joint_pairing_reference)"/>
+    <param name="joint_pairing_scale" value="$(arg joint_pairing_scale)"/>
     <param name="joint_limit" value="$(arg joint_limit)"/>
     <param name="max_step" value="$(arg max_step)"/>
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
     <param name="publish_only_when_hovering" value="$(arg publish_joints_only_when_hovering)"/>
     <param name="publish_before_device_ready" value="$(arg publish_joints_before_device_ready)"/>
     <param name="enable_feasibility_gate" value="$(arg enable_feasibility_gate)"/>
+    <param name="feasibility_gate_mode" value="$(arg feasibility_gate_mode)"/>
+    <param name="feasibility_step_fraction" value="$(arg feasibility_step_fraction)"/>
+    <param name="feasibility_min_step_fraction" value="$(arg feasibility_min_step_fraction)"/>
+    <param name="feasibility_soft_min_scale" value="$(arg feasibility_soft_min_scale)"/>
     <param name="feasibility_service" value="$(arg feasibility_service)"/>
     <param name="force_radius_threshold" value="$(arg force_radius_threshold)"/>
     <param name="torque_radius_threshold" value="$(arg torque_radius_threshold)"/>
