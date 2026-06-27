@@ -15,7 +15,7 @@
   <arg name="servo_topic" default="/dracomancer/servo/states"/>
   <arg name="enable_servo_to_joint_states" default="true"/>
   <arg name="servo_to_joint_states_rate" default="40.0"/>
-  <!-- Predictive shape-feasibility gate (precision mode).
+  <!-- Predictive shape-feasibility gate (teleoperation mode).
        shape_feasibility_node runs in the controlled robot's namespace so its
        robot model can read <robot_ns>/robot_description. -->
   <arg name="enable_feasibility_gate" default="true"/>
@@ -34,7 +34,7 @@
   <arg name="torque_radius_threshold" default="0.002"/>
   <arg name="max_step" default="0.04"/>
   <arg name="joint_limit" default="1.57079632679"/>
-  <!-- Arm->DRAGON mapping strategy (precision mode):
+  <!-- Arm->DRAGON mapping strategy (teleoperation mode):
          joint_pairing : flexion joints -> DRAGON yaw, pitch held at 0 (planar). Default.
          geometric     : arm FK -> link directions -> yaw/pitch decomposition. -->
   <arg name="mapping_mode" default="joint_pairing"/>
@@ -47,8 +47,9 @@
   <arg name="enable_position_control" default="true"/>
   <arg name="enable_attitude_control" default="false"/>
   <arg name="enable_joint_angle_control" default="true"/>
-  <!-- teleop_mode: startup / precision / wide.
-       Runtime switch: rostopic pub -1 /dracomancer/teleop_mode std_msgs/String "data: 'wide'" -->
+  <!-- teleop_mode: startup / teleoperation ('teleop' alias accepted).
+       In teleoperation, joystick movement and arm-shape mapping are both active.
+       Runtime switch: rostopic pub -1 /dracomancer/teleop_mode std_msgs/String "data: 'teleoperation'" -->
   <arg name="teleop_mode" default="startup"/>
   <arg name="mode_topic" default="/$(arg device_ns)/teleop_mode"/>
 

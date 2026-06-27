@@ -17,9 +17,9 @@ class ControlJoints:
         self.device_joint_topic = rospy.get_param("~device_joint_topic", "/dracomancer/joint_states")
         self.command_topic = rospy.get_param("~command_topic", "/" + self.robot_name + "/joints_ctrl")
         self.rate_hz = rospy.get_param("~rate", 40.0)
-        self.teleop_mode = str(rospy.get_param("~teleop_mode", "startup")).lower()
+        self.valid_modes = ("startup", "teleoperation")
+        self.teleop_mode = self.normalize_mode(rospy.get_param("~teleop_mode", "startup"))
         self.mode_topic = rospy.get_param("~mode_topic", self.device_ns + "/teleop_mode")
-        self.valid_modes = ("startup", "precision", "wide")
         if self.teleop_mode not in self.valid_modes:
             rospy.logwarn("unknown teleop_mode '%s', fall back to 'startup'", self.teleop_mode)
             self.teleop_mode = "startup"
@@ -33,7 +33,6 @@ class ControlJoints:
             "joint3_yaw",
         ])
         self.startup_pose = rospy.get_param("~startup_pose", [0.0, np.pi / 2.0, 0.0, np.pi / 2.0, 0.0, np.pi / 2.0])
-        self.wide_hold_pose = rospy.get_param("~wide_hold_pose", self.startup_pose)
         self.safe_pose = rospy.get_param("~safe_pose", self.startup_pose)
 
         # Mapping strategy: "joint_pairing" (medium-term, default) or "geometric"
@@ -74,7 +73,7 @@ class ControlJoints:
                            if self.joint_pairing_reference == "zero"
                            else list(self.startup_pose))
         # offset[i] is the constant value when source is empty and the additive bias
-        # otherwise. "startup" keeps precision commands near DRAGON's circular shape.
+        # otherwise. "startup" keeps mapped commands near DRAGON's circular shape.
         self.offsets = rospy.get_param("~offsets", default_offsets)
 
         # --- geometric (long-term) mapping ---------------------------------------
@@ -107,14 +106,14 @@ class ControlJoints:
 
         self.shape_error_topic = rospy.get_param("~shape_error_topic", self.device_ns + "/shape_control_error")
         # Predicted fc of the *candidate* (mapped) shape, republished from the
-        # feasibility service response (precision mode only). Useful for plotting
+        # feasibility service response (teleoperation mode only). Useful for plotting
         # / recording; distinct from the controlled robot's measured fc.
         self.candidate_force_radius_topic = rospy.get_param(
             "~candidate_force_radius_topic", self.device_ns + "/candidate/fc_f_min")
         self.candidate_torque_radius_topic = rospy.get_param(
             "~candidate_torque_radius_topic", self.device_ns + "/candidate/fc_t_min")
 
-        # Predictive shape-feasibility gate (precision mode):
+        # Predictive shape-feasibility gate (teleoperation mode):
         #   candidate shape -> shape_feasibility service -> fc_f_min / fc_t_min.
         #   Deform only when BOTH radii are at or above their lower thresholds;
         #   otherwise hold the last feasible shape.
@@ -204,8 +203,14 @@ class ControlJoints:
             self.feasibility_srv = None
             return False
 
+    @staticmethod
+    def normalize_mode(mode):
+        # "teleop" is accepted as a shorthand alias for "teleoperation".
+        mode = str(mode).strip().lower()
+        return "teleoperation" if mode == "teleop" else mode
+
     def mode_cb(self, msg):
-        mode = str(msg.data).strip().lower()
+        mode = self.normalize_mode(msg.data)
         if mode not in self.valid_modes:
             rospy.logwarn("ignore unknown teleop mode '%s'", mode)
             return
@@ -438,7 +443,7 @@ class ControlJoints:
         else:
             rospy.logwarn(msg)
 
-    def precision_target(self):
+    def teleop_shape_target(self):
         # Map the arm to a candidate DRAGON shape, then gate by predicted feasibility.
         candidate = self.mapped_target()
         if not self.enable_feasibility_gate:
@@ -473,10 +478,7 @@ class ControlJoints:
         if self.teleop_mode == "startup":
             self.last_feasible_target = list(self.startup_pose)
             return list(self.startup_pose)
-        if self.teleop_mode == "wide":
-            self.last_feasible_target = list(self.wide_hold_pose)
-            return list(self.wide_hold_pose)
-        return self.precision_target()
+        return self.teleop_shape_target()
 
     def rate_limit(self, target):
         limited = []
@@ -493,7 +495,7 @@ class ControlJoints:
     def make_joint_msg(self):
         target = self.desired_target()
         # desired (raw mapping) vs target (feasible-gated) error, for haptic feedback.
-        desired = self.mapped_target() if self.teleop_mode == "precision" else target
+        desired = self.mapped_target() if self.teleop_mode == "teleoperation" else target
         self.publish_shape_error(desired, target)
         self.current_target = self.rate_limit(target)
 
@@ -506,7 +508,7 @@ class ControlJoints:
     def can_publish_joint_command(self):
         if self.publish_only_when_hovering and not self.robot_hovering:
             return False
-        if self.teleop_mode == "precision" and not self.publish_before_device_ready and not self.latest_device_joints:
+        if self.teleop_mode == "teleoperation" and not self.publish_before_device_ready and not self.latest_device_joints:
             return False
         return True
 
