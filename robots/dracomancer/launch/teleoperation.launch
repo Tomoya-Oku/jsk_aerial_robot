@@ -36,13 +36,18 @@
   <arg name="joint_limit" default="1.57079632679"/>
   <!-- Arm->DRAGON mapping strategy (teleoperation mode):
          joint_pairing : flexion joints -> DRAGON yaw, pitch held at 0 (planar). Default.
-         geometric     : arm FK -> link directions -> yaw/pitch decomposition. -->
+         geometric     : arm FK -> link directions -> yaw/pitch decomposition.
+         elbow_only    : elbow flexion angle -> DRAGON's middle yaw joint only. -->
   <arg name="mapping_mode" default="joint_pairing"/>
-  <!-- joint_pairing_reference:
+  <!-- joint_pairing_reference (also used by elbow_only):
          zero    : existing direct mapping around 0 rad.
          startup : relative deformation around startup_pose (circular DRAGON shape). -->
   <arg name="joint_pairing_reference" default="zero"/>
   <arg name="joint_pairing_scale" default="1.0"/>
+  <!-- elbow_only: source (Dracomancer) joint and target DRAGON joint.
+       elbow_target_joint empty -> middle yaw of dragon_joint_names. -->
+  <arg name="elbow_source_joint" default="elbow_flexion_extension_joint"/>
+  <arg name="elbow_target_joint" default="joint2_yaw"/>
   <arg name="capture_neutral_on_first_msg" default="false"/>
   <arg name="enable_position_control" default="true"/>
   <arg name="enable_attitude_control" default="false"/>
@@ -194,6 +199,8 @@
     <param name="mapping_mode" value="$(arg mapping_mode)"/>
     <param name="joint_pairing_reference" value="$(arg joint_pairing_reference)"/>
     <param name="joint_pairing_scale" value="$(arg joint_pairing_scale)"/>
+    <param name="elbow_source_joint" value="$(arg elbow_source_joint)"/>
+    <param name="elbow_target_joint" value="$(arg elbow_target_joint)"/>
     <param name="joint_limit" value="$(arg joint_limit)"/>
     <param name="max_step" value="$(arg max_step)"/>
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>

@@ -199,6 +199,7 @@ Dracomancer の腕関節を、DRAGON を1本の直列アームとみなして対
 | --- | --- |
 | `joint_pairing`（**既定**） | 3つの屈曲関節を DRAGON の3つの yaw に1:1対応、pitch は 0 固定で平面保持 |
 | `geometric` | 腕の順運動学からリンク方向ベクトルを求め、面内(yaw)/面外(pitch)成分に分解 |
+| `elbow_only` | 肘屈曲角の1自由度を DRAGON の真ん中の yaw 関節だけに対応させる（他関節は基準姿勢で保持） |
 
 ### joint_pairing（中期方式・既定）
 
@@ -251,7 +252,30 @@ FK -> 上腕/前腕/手の方向ベクトル
 - 主用途の屈曲ベース面内整形はクリーン。外転・捻りなど面外DOFは、リンク構造オフセットの影響で遠位関節に pitch/yaw 結合が出ることがある（既知の限界、研究比較用）。
 - パラメータ: `geom_chain`, `geom_plane_normal`, `geom_yaw_sign/scale`, `geom_pitch_sign/scale`。
 
-両方式とも出力はフィージビリティ・ゲートを通って DRAGON へ送られます。変形確認だけをシミュレーションで行う場合は `enable_feasibility_gate:=false` で候補姿勢をそのまま送れます。
+### elbow_only（1自由度・引数で選択）
+
+肘の屈曲角（`elbow_source_joint`、既定 `elbow_flexion_extension_joint`）の中立からの差分**1つ**を、DRAGON の**真ん中の yaw 関節**（`elbow_target_joint`、既定は `dragon_joint_names` の中央 yaw = `joint2_yaw`）だけに対応させます。それ以外の関節は offset（基準姿勢）で保持されるため、`joint_pairing_reference=startup` なら DRAGON は円形を保ったまま中央の1関節だけが曲がります。肩・手首は使いません。マッピング比較実験での「最小自由度ベースライン」として使えます。
+
+```text
+delta = elbow - 中立elbow
+elbow_target_joint = offset + sign * scale * delta
+その他の関節        = offset（定数。pitch は 0、startup基準なら yaw は pi/2）
+```
+
+- `joint_pairing` と同じ `signs` / `scales`（`joint_pairing_scale` 込み） / `offsets` / `joint_pairing_reference`(zero/startup) を再利用するので挙動が一貫。
+- 対応先を変えたい場合は `elbow_target_joint` に DRAGON 関節名（例 `joint1_yaw`）を指定。
+- パラメータ: `elbow_source_joint`, `elbow_target_joint`（＋共有の `signs`/`scales`/`offsets`/`joint_pairing_reference`）。
+
+```bash
+roslaunch dracomancer teleoperation.launch \
+  teleop_mode:=teleoperation \
+  mapping_mode:=elbow_only \
+  joint_pairing_reference:=startup \
+  capture_neutral_on_first_msg:=true \
+  joint_pairing_scale:=0.3
+```
+
+3方式とも出力はフィージビリティ・ゲートを通って DRAGON へ送られます。変形確認だけをシミュレーションで行う場合は `enable_feasibility_gate:=false` で候補姿勢をそのまま送れます。
 
 サーボIDと Dracomancer 関節名:
 
