@@ -32,12 +32,21 @@ class ControlJoints:
             "joint3_pitch",
             "joint3_yaw",
         ])
+        self.startup_pose = rospy.get_param("~startup_pose", [0.0, np.pi / 2.0, 0.0, np.pi / 2.0, 0.0, np.pi / 2.0])
+        self.wide_hold_pose = rospy.get_param("~wide_hold_pose", self.startup_pose)
+        self.safe_pose = rospy.get_param("~safe_pose", self.startup_pose)
+
         # Mapping strategy: "joint_pairing" (medium-term, default) or "geometric"
-        # (long-term, FK + plane projection). See docs/dracomancer_system.md.
+        # (long-term, FK + plane projection). See README.md.
         self.mapping_mode = str(rospy.get_param("~mapping_mode", "joint_pairing")).lower()
         if self.mapping_mode not in ("joint_pairing", "geometric"):
             rospy.logwarn("unknown mapping_mode '%s', fall back to 'joint_pairing'", self.mapping_mode)
             self.mapping_mode = "joint_pairing"
+        self.joint_pairing_reference = str(rospy.get_param("~joint_pairing_reference", "zero")).lower()
+        if self.joint_pairing_reference not in ("zero", "startup"):
+            rospy.logwarn("unknown joint_pairing_reference '%s', fall back to 'zero'",
+                          self.joint_pairing_reference)
+            self.joint_pairing_reference = "zero"
 
         # --- joint_pairing (medium-term) mapping ---------------------------------
         # The three arm flexion joints share the same -X axis, so moving only them
@@ -58,10 +67,15 @@ class ControlJoints:
         # all three together on hardware if DRAGON curls the wrong way. Pitch entries
         # are unused (constant source).
         self.signs = rospy.get_param("~signs", [1.0, -1.0, 1.0, -1.0, 1.0, -1.0])
-        self.scales = rospy.get_param("~scales", [1.0] * len(self.joint_names))
-        # offset[i] is the constant value when source is empty (pitch -> 0), and the
-        # additive bias otherwise. Straight arm -> straight DRAGON, so all 0 by default.
-        self.offsets = rospy.get_param("~offsets", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        joint_pairing_scale = rospy.get_param("~joint_pairing_scale", 1.0)
+        base_scales = rospy.get_param("~scales", [1.0] * len(self.joint_names))
+        self.scales = [float(joint_pairing_scale) * float(scale) for scale in base_scales]
+        default_offsets = ([0.0] * len(self.joint_names)
+                           if self.joint_pairing_reference == "zero"
+                           else list(self.startup_pose))
+        # offset[i] is the constant value when source is empty and the additive bias
+        # otherwise. "startup" keeps precision commands near DRAGON's circular shape.
+        self.offsets = rospy.get_param("~offsets", default_offsets)
 
         # --- geometric (long-term) mapping ---------------------------------------
         # Arm kinematic chain (parent->child joint origins / axes) taken from
@@ -85,9 +99,6 @@ class ControlJoints:
         self.geom_pitch_sign = rospy.get_param("~geom_pitch_sign", 1.0)
         self.geom_yaw_scale = rospy.get_param("~geom_yaw_scale", 1.0)
         self.geom_pitch_scale = rospy.get_param("~geom_pitch_scale", 1.0)
-        self.startup_pose = rospy.get_param("~startup_pose", [0.0, np.pi / 2.0, 0.0, np.pi / 2.0, 0.0, np.pi / 2.0])
-        self.wide_hold_pose = rospy.get_param("~wide_hold_pose", self.startup_pose)
-        self.safe_pose = rospy.get_param("~safe_pose", self.startup_pose)
         self.joint_limit = rospy.get_param("~joint_limit", np.pi / 2.0)
         self.max_step = rospy.get_param("~max_step", 0.04)
         self.capture_neutral = rospy.get_param("~capture_neutral_on_first_msg", False)
@@ -108,6 +119,11 @@ class ControlJoints:
         #   Deform only when BOTH radii are at or above their lower thresholds;
         #   otherwise hold the last feasible shape.
         self.enable_feasibility_gate = rospy.get_param("~enable_feasibility_gate", True)
+        self.feasibility_gate_mode = str(rospy.get_param("~feasibility_gate_mode", "hold")).lower()
+        if self.feasibility_gate_mode not in ("hold", "step_search", "soft_scale"):
+            rospy.logwarn("unknown feasibility_gate_mode '%s', fall back to 'hold'",
+                          self.feasibility_gate_mode)
+            self.feasibility_gate_mode = "hold"
         self.feasibility_service_name = rospy.get_param(
             "~feasibility_service", "/" + self.robot_name + "/shape_feasibility/check_shape")
         self.feasibility_service_timeout = rospy.get_param("~feasibility_service_timeout", 2.0)
@@ -118,6 +134,9 @@ class ControlJoints:
         # Lower thresholds (fallback params; overridden by the threshold topics below).
         self.force_radius_threshold = rospy.get_param("~force_radius_threshold", 0.1)
         self.torque_radius_threshold = rospy.get_param("~torque_radius_threshold", 0.01)
+        self.feasibility_step_fraction = rospy.get_param("~feasibility_step_fraction", 0.25)
+        self.feasibility_min_step_fraction = rospy.get_param("~feasibility_min_step_fraction", 0.03)
+        self.feasibility_soft_min_scale = rospy.get_param("~feasibility_soft_min_scale", 0.0)
         # Threshold topics carry [hard_min, min]; hard_min ([0]) is used as the gate bound.
         self.force_threshold_topic = rospy.get_param(
             "~force_volume_radius_threshold_topic", self.device_ns + "/force_volume_radius_threshold")
@@ -158,7 +177,8 @@ class ControlJoints:
         rospy.loginfo("teleop_mode: %s, mode_topic: %s", self.teleop_mode, self.mode_topic)
         rospy.loginfo("device_joint_topic: %s", self.device_joint_topic)
         rospy.loginfo("command_topic: %s", self.command_topic)
-        rospy.loginfo("mapping_mode: %s", self.mapping_mode)
+        rospy.loginfo("mapping_mode: %s, joint_pairing_reference: %s",
+                      self.mapping_mode, self.joint_pairing_reference)
         rospy.loginfo("joint mapping: %s",
                       ", ".join("{}<-{}".format(dst, src)
                                 for dst, src in zip(self.joint_names, self.source_joint_names)))
@@ -167,8 +187,8 @@ class ControlJoints:
                           name, scale, sign, offset)
                                 for name, scale, sign, offset in zip(
                                     self.joint_names, self.scales, self.signs, self.offsets)))
-        rospy.loginfo("feasibility gate: enable=%s, service=%s, thresholds force/torque=%.4f/%.4f",
-                      self.enable_feasibility_gate, self.feasibility_service_name,
+        rospy.loginfo("feasibility gate: enable=%s, mode=%s, service=%s, thresholds force/torque=%.4f/%.4f",
+                      self.enable_feasibility_gate, self.feasibility_gate_mode, self.feasibility_service_name,
                       self.force_radius_threshold, self.torque_radius_threshold)
         rospy.loginfo("joint command gating: only_when_hovering=%s, before_device_ready=%s",
                       self.publish_only_when_hovering, self.publish_before_device_ready)
@@ -195,6 +215,9 @@ class ControlJoints:
 
     def clamp(self, x):
         return max(-self.joint_limit, min(self.joint_limit, x))
+
+    def clamp_target(self, target):
+        return [self.clamp(v) for v in target]
 
     def device_joint_cb(self, msg):
         self.latest_device_joints = {
@@ -364,6 +387,40 @@ class ControlJoints:
                     res.fc_t_min >= self.torque_radius_threshold)
         return feasible, res.fc_f_min, res.fc_t_min
 
+    def publish_candidate_fc(self, fc_f, fc_t):
+        if fc_f is not None:
+            self.candidate_fc_f_pub.publish(Float64(fc_f))
+        if fc_t is not None:
+            self.candidate_fc_t_pub.publish(Float64(fc_t))
+
+    def interpolate_target(self, src, dst, fraction):
+        return self.clamp_target([
+            float(a) + float(fraction) * (float(b) - float(a))
+            for a, b in zip(src, dst)
+        ])
+
+    def feasibility_soft_scale(self, fc_f, fc_t):
+        if fc_f is None or fc_t is None:
+            return 0.0
+        force_scale = 1.0 if self.force_radius_threshold <= 0.0 else fc_f / self.force_radius_threshold
+        torque_scale = 1.0 if self.torque_radius_threshold <= 0.0 else fc_t / self.torque_radius_threshold
+        scale = max(0.0, min(1.0, force_scale, torque_scale))
+        return max(float(self.feasibility_soft_min_scale), scale)
+
+    def step_search_target(self, candidate):
+        fraction = min(1.0, max(0.0, float(self.feasibility_step_fraction)))
+        min_fraction = min(fraction, max(0.0, float(self.feasibility_min_step_fraction)))
+        while fraction >= min_fraction and fraction > 0.0:
+            trial = self.interpolate_target(self.last_feasible_target, candidate, fraction)
+            feasible, fc_f, fc_t = self.evaluate_feasibility(trial)
+            if feasible:
+                self.publish_candidate_fc(fc_f, fc_t)
+                self.last_feasible_target = trial
+                self.log_gate(True, fc_f, fc_t)
+                return list(self.last_feasible_target)
+            fraction *= 0.5
+        return list(self.last_feasible_target)
+
     def log_gate(self, feasible, fc_f, fc_t):
         if feasible != self.last_gate_feasible:
             self.last_gate_feasible = feasible
@@ -396,12 +453,18 @@ class ControlJoints:
         self.last_feasibility_eval_stamp = now
 
         feasible, fc_f, fc_t = self.evaluate_feasibility(candidate)
-        if fc_f is not None:
-            self.candidate_fc_f_pub.publish(Float64(fc_f))
-        if fc_t is not None:
-            self.candidate_fc_t_pub.publish(Float64(fc_t))
+        self.publish_candidate_fc(fc_f, fc_t)
         if feasible:
             self.last_feasible_target = candidate
+        elif self.feasibility_gate_mode == "step_search":
+            self.log_gate(False, fc_f, fc_t)
+            return self.step_search_target(candidate)
+        elif self.feasibility_gate_mode == "soft_scale":
+            scale = self.feasibility_soft_scale(fc_f, fc_t)
+            target = self.interpolate_target(self.last_feasible_target, candidate, scale)
+            self.last_feasible_target = target
+            self.log_gate(scale > 0.0, fc_f, fc_t)
+            return list(self.last_feasible_target)
         # feasible False or None (service failure / invalid) -> hold last feasible.
         self.log_gate(bool(feasible), fc_f, fc_t)
         return list(self.last_feasible_target)
