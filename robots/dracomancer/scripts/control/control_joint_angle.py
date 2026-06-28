@@ -96,9 +96,11 @@ class ControlJoints:
         # Default: wrist flexion (beckoning) -> joint1_pitch, wrist abduction (sweep
         # parallel to the palm) -> joint1_yaw, elbow flexion -> joint2_yaw, shoulder
         # flexion -> joint3_pitch, shoulder abduction -> joint3_yaw. Signs default to
-        # [1, -1, 1, -1, -1] (flip per joint if DRAGON bends the wrong way); scales 1.0
-        # give a 1:1 angle match; offsets shift the zero (shoulder flexion uses pi/2
-        # so a 90deg operator shoulder maps to joint3_pitch = 0). Joints not listed
+        # [1, -1, 1, 1, -1] (flip per joint if DRAGON bends the wrong way); scales 1.0
+        # give a 1:1 angle match; offsets shift the zero. The device measures shoulder
+        # flexion as negative (~-pi/2 at a 90deg operator shoulder), so joint3_pitch
+        # uses sign=+1, offset=pi/2 -> source -pi/2 maps to joint3_pitch = 0. Joints
+        # not listed
         # (e.g. joint2_pitch, kept as a redundancy reserve) are held at their last
         # commanded value, so only the mapped joints move.
         self.joint_index = {name: i for i, name in enumerate(self.joint_names)}
@@ -116,7 +118,7 @@ class ControlJoints:
             "joint3_pitch",
             "joint3_yaw",
         ])
-        distal_signs = rospy.get_param("~distal_signs", [1.0, -1.0, 1.0, -1.0, -1.0])
+        distal_signs = rospy.get_param("~distal_signs", [1.0, -1.0, 1.0, 1.0, -1.0])
         distal_scales = rospy.get_param("~distal_scales", [1.0, 1.0, 1.0, 1.0, 1.0])
         # Per-joint additive offset [rad]: target = clamp(sign*scale*source + offset).
         # shoulder flexion (joint3_pitch) uses offset=pi/2 with sign=-1 so that a 90deg

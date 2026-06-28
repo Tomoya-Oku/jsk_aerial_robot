@@ -276,8 +276,8 @@ target_joint[k] = clamp(sign[k] * scale[k] * source_angle[k] + offset[k],  -join
 ```
 
 - 絶対角の直接対応なので中立姿勢の記録（`capture_neutral_on_first_msg`）は不要・不使用。
-- `distal_signs` 既定は `[1.0, -1.0, 1.0, -1.0, -1.0]`（手首内外転・肩屈曲・肩内外転が -1、他は +1。各関節ごとに、DRAGON が逆向きに動く場合に反転）。`distal_scales` 既定 `1.0` で 1:1 角度一致。
-- `distal_offsets` 既定は `[0, 0, 0, π/2, 0]`：肩屈曲は `sign=-1`＋`offset=π/2` なので、**操縦者の肩が 90° のとき joint3_pitch が 0°** になる。肩内外転の向きは未検証なので sim で要確認。
+- `distal_signs` 既定は `[1.0, -1.0, 1.0, 1.0, -1.0]`（手首内外転・肩内外転が -1、他は +1。各関節ごとに、DRAGON が逆向きに動く場合に反転）。`distal_scales` 既定 `1.0` で 1:1 角度一致。
+- `distal_offsets` 既定は `[0, 0, 0, π/2, 0]`：**device は肩屈曲を負で測る**（90° で約 -π/2）ため、joint3_pitch は `sign=+1`＋`offset=π/2` で **操縦者の肩 90° → joint3_pitch 0°**（rosbag 解析で確定。`sign=-1` だと全域 +π/2 に飽和した）。肩内外転の向きは未検証なので sim で要確認。
 - 未対応の関節は `mapping_reference` の straight/circular に関係なく動かない。
 - 対応関係は平行リスト `distal_source_joints` / `distal_target_joints` / `distal_signs` / `distal_scales`（同じ長さ）で自由に変更可。
 
@@ -381,7 +381,7 @@ flowchart TD
 | `joint_pairing_scale` | `1.0` | `joint_pairing` の一括写像ゲイン |
 | `distal_source_joints` | `[wrist_flexion_extension_joint, wrist_abduction_adduction_joint, elbow_flexion_extension_joint, shoulder_flexion_extension_joint, shoulder_abduction_adduction_joint]` | `distal` の入力（人間の腕）関節リスト |
 | `distal_target_joints` | `[joint1_pitch, joint1_yaw, joint2_yaw, joint3_pitch, joint3_yaw]` | `distal` の出力 DRAGON 関節リスト（source と同順） |
-| `distal_signs` | `[1.0, -1.0, 1.0, -1.0, -1.0]` | `distal` の各符号（逆向きに動く関節を反転） |
+| `distal_signs` | `[1.0, -1.0, 1.0, 1.0, -1.0]` | `distal` の各符号（逆向きに動く関節を反転） |
 | `distal_scales` | `[1.0, 1.0, 1.0, 1.0, 1.0]` | `distal` の各ゲイン（`1.0` で 1:1 角度一致） |
 | `distal_offsets` | `[0, 0, 0, π/2, 0]` | `distal` の各加算オフセット[rad]（`sign*scale*source + offset`。肩屈曲=π/2 で 90°→0°） |
 | `capture_neutral_on_first_msg` | `false` | 最初の Dracomancer 関節角を中立姿勢として記憶（`elbow_only` では不使用） |
