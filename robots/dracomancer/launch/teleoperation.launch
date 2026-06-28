@@ -52,7 +52,10 @@
   <arg name="elbow_source_joint" default="elbow_flexion_extension_joint"/>
   <arg name="elbow_target_joint" default="joint2_yaw"/>
   <arg name="capture_neutral_on_first_msg" default="false"/>
-  <arg name="enable_position_control" default="true"/>
+  <!-- Joystick movement control is OFF by default: control_position publishes a
+       POS_VEL_MODE FlightNav whose target_pos is unset (=0), which commands DRAGON
+       toward origin/ground (fall). Enable only once that is addressed. -->
+  <arg name="enable_position_control" default="false"/>
   <arg name="enable_attitude_control" default="false"/>
   <arg name="enable_joint_angle_control" default="true"/>
   <!-- teleop_mode: startup / teleoperation ('teleop' alias accepted).

@@ -96,7 +96,7 @@ flowchart TB
 
 ## 操作モード
 
-`teleoperation.launch` は `teleop_mode` で、立ち上げ（`startup`）と遠隔操作（`teleoperation`）を切り替えます。起動時の既定は `startup` です。実行中は `/dracomancer/teleop_mode` に `std_msgs/String` を送ることで切り替えられます。`teleoperation` では、**操縦桿による広域移動と腕形状による精密動作が同時に有効**になります（以前の `wide` / `precision` の2モードを統合）。`teleop` は `teleoperation` の別名として受け付けます。
+`teleoperation.launch` は `teleop_mode` で、立ち上げ（`startup`）と遠隔操作（`teleoperation`）を切り替えます。起動時の既定は `startup` です。実行中は `/dracomancer/teleop_mode` に `std_msgs/String` を送ることで切り替えられます。`teleoperation` では、**腕形状による精密動作**が有効になります（以前の `wide` / `precision` の2モードを統合）。操縦桿による広域移動は既定で OFF（`enable_position_control:=false`）です（後述「既知の課題」の `control_position` FlightNav モード問題のため）。`teleop` は `teleoperation` の別名として受け付けます。
 
 ```mermaid
 stateDiagram-v2
@@ -548,7 +548,7 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | `js_raw_topic` | `/joystick/raw` | 操縦桿生値 |
 | `js_calibrated_topic` | `/dracomancer/joystick/calibrated` | 較正済み操縦桿 |
 | `enable_servo_to_joint_states` | `true` | サーボ状態をDracomancer関節状態へ変換する |
-| `enable_position_control` | `true` | `/dragon/uav/nav` を送る |
+| `enable_position_control` | `false` | `/dragon/uav/nav`（操縦桿による移動）を送る。既定 OFF（落下防止のため。下記「既知の課題」参照） |
 | `enable_attitude_control` | `false` | `/dragon/final_target_baselink_rpy` を送る |
 | `enable_joint_angle_control` | `true` | `/dragon/joints_ctrl` を送る |
 | `teleop_mode` | `startup` | `startup` / `teleoperation`（`teleop` 別名可） |
@@ -582,11 +582,11 @@ DRAGON がすぐ落下する場合の切り分け:
 roslaunch dracomancer teleoperation.launch enable_joint_angle_control:=false
 ```
 
-それでも落ちる場合は、移動指令も止めて確認します。
+移動指令（操縦桿）は既定で OFF（`enable_position_control:=false`）です。明示的に ON にすると落下する場合は、下記「既知の課題」の `control_position` の FlightNav モード問題に該当します。形状確認だけなら ON にする必要はありません。
 
 ```bash
+# 移動指令も含めて全て止めて確認する場合
 roslaunch dracomancer teleoperation.launch \
-  enable_position_control:=false \
   enable_joint_angle_control:=false
 ```
 
@@ -598,6 +598,7 @@ roslaunch dracomancer teleoperation.launch \
 
 | 項目 | 現状 |
 | --- | --- |
+| 操縦桿による移動制御 | 既定 OFF（`enable_position_control:=false`）。`control_position.py` が `POS_VEL_MODE` で `target_pos` 未設定（=0）の FlightNav を送るため、ON にすると DRAGON が原点・高度0へ指令され落下する。`VEL_MODE` 化など修正が必要 |
 | 立ち上げ時の通常形状保持 | `startup` モードで実装。DRAGON 側の preflight joint control 設定に依存 |
 | 力覚提示 | 提示トルク相当量の計算とトルク ON/OFF 出力のみ対応。XL430-W250-T では所望電流・所望トルク入力ができないため、Mk-Iでの連続的な反力・反トルク提示は Mk-II 以降の展望。既存の電流指令経路は互換サーボ向け任意機能として保持 |
 | Force/Torque Volume に基づく厳密な姿勢制限 | DRAGON の内接半径を使ったスケーリングのみ実装 |

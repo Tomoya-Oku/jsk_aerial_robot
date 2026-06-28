@@ -49,7 +49,7 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 - **spinal.msg** は `convert_servo_to_joint_states.py` / `control_position.py` / `control_haptic_feedback.py` で使用。`package.xml` に `spinal` run_depend を宣言済み。
 - **rm / sim** が通常の起動引数。`real_machine` / `simulation` は旧互換エイリアス。
 - Khadas など表示なし環境を想定し、RViz は既定で起動しない（`headless` 既定 True）。
-- `teleop_mode` は `startup` / `teleoperation`（`teleop` は別名）。`teleoperation` では移動（操縦桿）と形状（腕写像）が同時に有効。実行中は `/dracomancer/teleop_mode` (`std_msgs/String`) で切り替える。
+- `teleop_mode` は `startup` / `teleoperation`（`teleop` は別名）。`teleoperation` では形状（腕写像）が有効。移動（操縦桿）は既定 OFF（`enable_position_control:=false`。`control_position.py` の FlightNav が `POS_VEL_MODE`＋`target_pos` 未設定で落下するため。README「既知の課題」参照）。実行中は `/dracomancer/teleop_mode` (`std_msgs/String`) で切り替える。
 
 ## FlightNav（aerial_robot_msgs）の要点
 
