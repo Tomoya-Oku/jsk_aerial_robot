@@ -57,8 +57,8 @@
   <!-- distal mapping lists are set as private params inside the control_joint_angle
        node below (parallel lists: human source joint -> DRAGON target joint, sign,
        scale). Default: wrist flexion -> joint1_pitch, wrist abduction -> joint1_yaw,
-       elbow flexion -> joint2_yaw; signs=-1 (flip per joint if it bends wrong),
-       scales=1.0 (1:1 match). Joints not listed are held. -->
+       elbow flexion -> joint2_yaw; signs=[1,-1,1] (wrist abduction -1, wrist
+       flexion / elbow +1; flip if it bends wrong), scales=1.0 (1:1). Held else. -->
   <arg name="capture_neutral_on_first_msg" default="false"/>
   <!-- Joystick movement control is OFF by default: control_position publishes a
        POS_VEL_MODE FlightNav whose target_pos is unset (=0), which commands DRAGON
@@ -216,7 +216,7 @@
     <!-- distal mapping (absolute match of distal arm joints; see comment above) -->
     <rosparam param="distal_source_joints">["wrist_flexion_extension_joint", "wrist_abduction_adduction_joint", "elbow_flexion_extension_joint"]</rosparam>
     <rosparam param="distal_target_joints">["joint1_pitch", "joint1_yaw", "joint2_yaw"]</rosparam>
-    <rosparam param="distal_signs">[-1.0, -1.0, -1.0]</rosparam>
+    <rosparam param="distal_signs">[1.0, -1.0, 1.0]</rosparam>
     <rosparam param="distal_scales">[1.0, 1.0, 1.0]</rosparam>
     <param name="joint_limit" value="$(arg joint_limit)"/>
     <param name="max_step" value="$(arg max_step)"/>

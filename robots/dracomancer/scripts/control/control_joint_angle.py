@@ -95,8 +95,9 @@ class ControlJoints:
         #   target_joint = clamp(sign * scale * source_angle)   (no neutral capture).
         # Default: wrist flexion (beckoning) -> joint1_pitch, wrist abduction (sweep
         # parallel to the palm) -> joint1_yaw, elbow flexion -> joint2_yaw. Signs
-        # default to -1 (flip per joint if DRAGON bends the wrong way); scales 1.0
-        # give a 1:1 angle match. Joints not listed (e.g. the shoulder/joint3) are
+        # default to [1, -1, 1] (wrist abduction -1, wrist flexion / elbow +1; flip
+        # per joint if DRAGON bends the wrong way); scales 1.0 give a 1:1 angle match.
+        # Joints not listed (e.g. the shoulder/joint3) are
         # held at their last commanded value, so only the mapped joints move.
         self.joint_index = {name: i for i, name in enumerate(self.joint_names)}
         distal_sources = rospy.get_param("~distal_source_joints", [
@@ -109,7 +110,7 @@ class ControlJoints:
             "joint1_yaw",
             "joint2_yaw",
         ])
-        distal_signs = rospy.get_param("~distal_signs", [-1.0, -1.0, -1.0])
+        distal_signs = rospy.get_param("~distal_signs", [1.0, -1.0, 1.0])
         distal_scales = rospy.get_param("~distal_scales", [1.0, 1.0, 1.0])
         self.distal_map = []  # list of (source_joint, target_joint, sign, scale)
         for k in range(min(len(distal_sources), len(distal_targets))):
