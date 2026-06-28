@@ -35,11 +35,15 @@ class ControlJoints:
         self.startup_pose = rospy.get_param("~startup_pose", [0.0, np.pi / 2.0, 0.0, np.pi / 2.0, 0.0, np.pi / 2.0])
         self.safe_pose = rospy.get_param("~safe_pose", self.startup_pose)
 
-        # Mapping strategy: "elbow_only" (default, single-DOF: the elbow drives only
-        # DRAGON's middle joint, every other joint held unchanged), "joint_pairing"
-        # (medium-term), or "geometric" (long-term, FK + plane projection). See README.md.
-        self.mapping_mode = str(rospy.get_param("~mapping_mode", "elbow_only")).lower()
-        if self.mapping_mode not in ("joint_pairing", "geometric", "elbow_only"):
+        # Mapping strategy: "distal" (default, absolute match of distal arm joints
+        # (wrist + elbow) to DRAGON joints, every unmapped joint held unchanged),
+        # "joint_pairing" (medium-term), or "geometric" (long-term, FK + plane
+        # projection). "elbow_only" is a backward-compatible alias of "distal".
+        # See README.md.
+        self.mapping_mode = str(rospy.get_param("~mapping_mode", "distal")).lower()
+        if self.mapping_mode == "elbow_only":
+            self.mapping_mode = "distal"  # backward-compatible alias
+        if self.mapping_mode not in ("joint_pairing", "geometric", "distal"):
             rospy.logwarn("unknown mapping_mode '%s', fall back to 'joint_pairing'", self.mapping_mode)
             self.mapping_mode = "joint_pairing"
         # Reference (base) pose the mapping deforms around. Shared by every mapping_mode:
@@ -86,22 +90,38 @@ class ControlJoints:
         # otherwise. "circular" keeps mapped commands near DRAGON's circular shape.
         self.offsets = rospy.get_param("~offsets", default_offsets)
 
-        # --- elbow_only mapping --------------------------------------------------
-        # Absolute match: DRAGON's middle yaw joint directly tracks the human elbow
-        # flexion angle (elbow 90deg -> middle joint 90deg), NOT a delta from a
-        # captured neutral. Every other joint is held at its last commanded value.
-        # target = clamp(elbow_sign * elbow_scale * elbow). elbow_sign defaults to -1
-        # so DRAGON's middle joint bends opposite to the raw elbow angle sign; flip it
-        # if DRAGON bends the wrong way. elbow_scale stays 1.0 for a true 1:1 match.
-        self.elbow_source_joint = rospy.get_param("~elbow_source_joint", "elbow_flexion_extension_joint")
-        default_yaws = [n for n in self.joint_names if n.endswith("_yaw")]
-        default_elbow_target = default_yaws[len(default_yaws) // 2] if default_yaws else ""
-        self.elbow_target_joint = rospy.get_param("~elbow_target_joint", default_elbow_target)
-        self.elbow_sign = float(rospy.get_param("~elbow_sign", -1.0))
-        self.elbow_scale = float(rospy.get_param("~elbow_scale", 1.0))
-        if self.mapping_mode == "elbow_only" and self.elbow_target_joint not in self.joint_names:
-            rospy.logwarn("elbow_target_joint '%s' not in dragon_joint_names; "
-                          "elbow_only will not move any joint", self.elbow_target_joint)
+        # --- distal mapping (absolute match of distal arm joints) ----------------
+        # Each listed human arm joint is matched in ABSOLUTE angle to a DRAGON joint:
+        #   target_joint = clamp(sign * scale * source_angle)   (no neutral capture).
+        # Default: wrist flexion (beckoning) -> joint1_pitch, wrist abduction (sweep
+        # parallel to the palm) -> joint1_yaw, elbow flexion -> joint2_yaw. Signs
+        # default to -1 (flip per joint if DRAGON bends the wrong way); scales 1.0
+        # give a 1:1 angle match. Joints not listed (e.g. the shoulder/joint3) are
+        # held at their last commanded value, so only the mapped joints move.
+        self.joint_index = {name: i for i, name in enumerate(self.joint_names)}
+        distal_sources = rospy.get_param("~distal_source_joints", [
+            "wrist_flexion_extension_joint",
+            "wrist_abduction_adduction_joint",
+            "elbow_flexion_extension_joint",
+        ])
+        distal_targets = rospy.get_param("~distal_target_joints", [
+            "joint1_pitch",
+            "joint1_yaw",
+            "joint2_yaw",
+        ])
+        distal_signs = rospy.get_param("~distal_signs", [-1.0, -1.0, -1.0])
+        distal_scales = rospy.get_param("~distal_scales", [1.0, 1.0, 1.0])
+        self.distal_map = []  # list of (source_joint, target_joint, sign, scale)
+        for k in range(min(len(distal_sources), len(distal_targets))):
+            dst = distal_targets[k]
+            if dst not in self.joint_index:
+                rospy.logwarn("distal: target joint '%s' not in dragon_joint_names; skipped", dst)
+                continue
+            sign = float(distal_signs[k]) if k < len(distal_signs) else 1.0
+            scale = float(distal_scales[k]) if k < len(distal_scales) else 1.0
+            self.distal_map.append((distal_sources[k], dst, sign, scale))
+        if self.mapping_mode == "distal" and not self.distal_map:
+            rospy.logwarn("distal: no valid source->target mapping; no joint will move")
 
         # --- geometric (long-term) mapping ---------------------------------------
         # Arm kinematic chain (parent->child joint origins / axes) taken from
@@ -205,10 +225,10 @@ class ControlJoints:
         rospy.loginfo("command_topic: %s", self.command_topic)
         rospy.loginfo("mapping_mode: %s, mapping_reference: %s",
                       self.mapping_mode, self.mapping_reference)
-        if self.mapping_mode == "elbow_only":
-            rospy.loginfo("elbow_only absolute match: %s = clamp(%.3f * %.3f * %s)",
-                          self.elbow_target_joint, self.elbow_sign, self.elbow_scale,
-                          self.elbow_source_joint)
+        if self.mapping_mode == "distal":
+            rospy.loginfo("distal absolute match: %s", ", ".join(
+                "{}<-clamp({:+.1f}*{:.2f}*{})".format(dst, sign, scale, src)
+                for src, dst, sign, scale in self.distal_map))
         rospy.loginfo("joint mapping: %s",
                       ", ".join("{}<-{}".format(dst, src)
                                 for dst, src in zip(self.joint_names, self.source_joint_names)))
@@ -262,7 +282,7 @@ class ControlJoints:
         if self.capture_neutral and not self.neutral_device_joints:
             # Capture the joints actually used as mapping sources. In joint_pairing the
             # empty (constant) entries are skipped; in geometric every chain joint is
-            # used. elbow_only does an absolute match and needs no neutral.
+            # used. distal does an absolute match and needs no neutral.
             if self.mapping_mode == "geometric":
                 needed = [j[0] for j in self.geom_chain]
             else:
@@ -289,8 +309,8 @@ class ControlJoints:
             return list(self.last_feasible_target)
         if self.mapping_mode == "geometric":
             return self.geometric_target()
-        if self.mapping_mode == "elbow_only":
-            return self.elbow_only_target()
+        if self.mapping_mode == "distal":
+            return self.distal_target()
         return self.joint_pairing_target()
 
     def joint_pairing_target(self):
@@ -311,18 +331,17 @@ class ControlJoints:
             target.append(self.clamp(mapped))
         return target
 
-    def elbow_only_target(self):
-        # Single-DOF, absolute match: DRAGON's middle yaw joint (elbow_target_joint)
-        # directly tracks the human elbow flexion angle (elbow 90deg -> middle joint
-        # 90deg), with no neutral capture. Every other joint is held at its last
-        # commanded (feasible) value, so only the middle joint moves.
+    def distal_target(self):
+        # Absolute match: each mapped DRAGON joint directly tracks its human arm joint
+        # angle (clamp(sign*scale*source)), with no neutral capture. Every unmapped
+        # joint is held at its last commanded (feasible) value, so only the mapped
+        # joints move.
         target = list(self.last_feasible_target)
-        elbow = self.latest_device_joints.get(self.elbow_source_joint)
-        if elbow is None:
-            return target
-        for i, name in enumerate(self.joint_names):
-            if name == self.elbow_target_joint:
-                target[i] = self.clamp(self.elbow_sign * self.elbow_scale * elbow)
+        for src, dst, sign, scale in self.distal_map:
+            val = self.latest_device_joints.get(src)
+            if val is None:
+                continue
+            target[self.joint_index[dst]] = self.clamp(sign * scale * val)
         return target
 
     # --- geometric (long-term) mapping --------------------------------------

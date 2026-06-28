@@ -43,9 +43,10 @@
   <!-- Arm->DRAGON mapping strategy (teleoperation mode):
          joint_pairing : flexion joints -> DRAGON yaw, pitch held at 0 (planar).
          geometric     : arm FK -> link directions -> yaw/pitch decomposition.
-         elbow_only    : elbow flexion angle -> DRAGON's middle yaw joint only;
-                         every other joint is held unchanged. Default. -->
-  <arg name="mapping_mode" default="elbow_only"/>
+         distal        : absolute match of distal arm joints (wrist + elbow) to
+                         DRAGON joints; every unmapped joint held unchanged. Default.
+                         ("elbow_only" is a backward-compatible alias of distal.) -->
+  <arg name="mapping_mode" default="distal"/>
   <!-- mapping_reference: base pose the arm->DRAGON mapping deforms around
        (shared by every mapping_mode).
          straight : map around 0 rad (DRAGON straightens out).
@@ -53,14 +54,11 @@
   <arg name="joint_pairing_reference" default="circular"/>  <!-- deprecated alias of mapping_reference -->
   <arg name="mapping_reference" default="$(arg joint_pairing_reference)"/>
   <arg name="joint_pairing_scale" default="1.0"/>
-  <!-- elbow_only: absolute match, target_joint = clamp(elbow_sign*elbow_scale*elbow).
-       elbow_target_joint empty -> middle yaw of dragon_joint_names.
-       elbow_sign=-1 by default (DRAGON bends opposite to the raw elbow angle sign);
-       flip if it bends the wrong way. elbow_scale=1.0 keeps a 1:1 angle match. -->
-  <arg name="elbow_source_joint" default="elbow_flexion_extension_joint"/>
-  <arg name="elbow_target_joint" default="joint2_yaw"/>
-  <arg name="elbow_sign" default="-1.0"/>
-  <arg name="elbow_scale" default="1.0"/>
+  <!-- distal mapping lists are set as private params inside the control_joint_angle
+       node below (parallel lists: human source joint -> DRAGON target joint, sign,
+       scale). Default: wrist flexion -> joint1_pitch, wrist abduction -> joint1_yaw,
+       elbow flexion -> joint2_yaw; signs=-1 (flip per joint if it bends wrong),
+       scales=1.0 (1:1 match). Joints not listed are held. -->
   <arg name="capture_neutral_on_first_msg" default="false"/>
   <!-- Joystick movement control is OFF by default: control_position publishes a
        POS_VEL_MODE FlightNav whose target_pos is unset (=0), which commands DRAGON
@@ -215,10 +213,11 @@
     <param name="mapping_mode" value="$(arg mapping_mode)"/>
     <param name="mapping_reference" value="$(arg mapping_reference)"/>
     <param name="joint_pairing_scale" value="$(arg joint_pairing_scale)"/>
-    <param name="elbow_source_joint" value="$(arg elbow_source_joint)"/>
-    <param name="elbow_target_joint" value="$(arg elbow_target_joint)"/>
-    <param name="elbow_sign" value="$(arg elbow_sign)"/>
-    <param name="elbow_scale" value="$(arg elbow_scale)"/>
+    <!-- distal mapping (absolute match of distal arm joints; see comment above) -->
+    <rosparam param="distal_source_joints">["wrist_flexion_extension_joint", "wrist_abduction_adduction_joint", "elbow_flexion_extension_joint"]</rosparam>
+    <rosparam param="distal_target_joints">["joint1_pitch", "joint1_yaw", "joint2_yaw"]</rosparam>
+    <rosparam param="distal_signs">[-1.0, -1.0, -1.0]</rosparam>
+    <rosparam param="distal_scales">[1.0, 1.0, 1.0]</rosparam>
     <param name="joint_limit" value="$(arg joint_limit)"/>
     <param name="max_step" value="$(arg max_step)"/>
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
