@@ -75,7 +75,7 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 ## control_joint_angle.py（形状制御）の設計
 
 - `startup`: `startup_pose`（既定 `[0, pi/2, 0, pi/2, 0, pi/2]`）を保持。
-- `teleoperation`: Dracomancer 腕関節を DRAGON 関節へマッピングし、**候補姿勢のフィージビリティで変形可否を判定**する（移動は `control_position.py` が同時に担当）。マッピングは `~mapping_mode` で切替（`joint_pairing`=既定: 3屈曲関節→3 yaw・pitch=0で平面保持 / `geometric`: 腕FK→面内yaw・面外pitch分解 / `elbow_only`: 肘屈曲角1自由度→DRAGON 中央 yaw 関節のみ（`elbow_target_joint`、既定 `joint2_yaw`。他は基準姿勢で保持））。詳細は [README.md](README.md) の関節マッピング節。
+- `teleoperation`: Dracomancer 腕関節を DRAGON 関節へマッピングし、**候補姿勢のフィージビリティで変形可否を判定**する（移動は `control_position.py` が同時に担当）。マッピングは `~mapping_mode` で切替（`elbow_only`=既定: 肘屈曲角1自由度→DRAGON 中央 yaw 関節のみ（`elbow_target_joint`、既定 `joint2_yaw`。他関節は直前値のまま変化させない） / `joint_pairing`: 3屈曲関節→3 yaw・pitch=0で平面保持 / `geometric`: 腕FK→面内yaw・面外pitch分解）。詳細は [README.md](README.md) の関節マッピング節。
 - **予測フィージビリティ・ゲート（主機構）**: 候補 DRAGON 形状を `shape_feasibility_node`（C++、`dragon/full_vectoring_robot_model` を pluginlib で読み込み、`ns=dragon` で起動）の `check_shape` サービスに渡し `fc_f_min`/`fc_t_min` を予測。force・torque 両方が下限しきい値以上なら変形（採用・記憶）、未満／サービス失敗なら直前可行姿勢で停止。下限しきい値は `*_volume_radius_threshold`（`[hard_min, min]` の `hard_min`）を購読、未受信時は `force_radius_threshold`/`torque_radius_threshold` パラメータ。
 - **ライブ監視（情報提供）**: `volume_radius_monitor.py`（bringup.launch）が実機現在状態の fc からライブスケールを `/dracomancer/dragon_shape_safety_scale` に publish（web UI 用、ゲートとは独立）。しきい値の所有・pub/sub もここ。
 - 位置・姿勢・関節角操作はいずれもホバリング（`flight_state>=4`）時のみ出力する（`publish_joints_only_when_hovering` 既定 true）。

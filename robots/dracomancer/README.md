@@ -197,11 +197,11 @@ Dracomancer の腕関節を、DRAGON を1本の直列アームとみなして対
 
 | `mapping_mode` | 概要 |
 | --- | --- |
-| `joint_pairing`（**既定**） | 3つの屈曲関節を DRAGON の3つの yaw に1:1対応、pitch は 0 固定で平面保持 |
+| `joint_pairing` | 3つの屈曲関節を DRAGON の3つの yaw に1:1対応、pitch は 0 固定で平面保持 |
 | `geometric` | 腕の順運動学からリンク方向ベクトルを求め、面内(yaw)/面外(pitch)成分に分解 |
-| `elbow_only` | 肘屈曲角の1自由度を DRAGON の真ん中の yaw 関節だけに対応させる（他関節は基準姿勢で保持） |
+| `elbow_only`（**既定**） | 肘屈曲角の1自由度を DRAGON の真ん中の yaw 関節だけに対応させる（他関節は変化させず現状維持） |
 
-### joint_pairing（中期方式・既定）
+### joint_pairing（中期方式）
 
 屈曲関節（肩・肘・手首、すべて −X 軸）は同軸なので、これだけ動かすと腕は1平面内で曲がります。これを DRAGON の yaw に流し、pitch を定数に固定することで「**腕の面内曲げ＝DRAGON の面内形状**」を構造的に保証します。
 
@@ -221,8 +221,9 @@ target        = clamp(mapped, -joint_limit, joint_limit)
 ```
 
 - yaw の sign は蛇の曲がり向き。DRAGON が逆向きに曲がる場合は3つ揃えて反転（`geom_yaw_sign` も合わせる）。
-- `joint_pairing_reference=zero`（既定）は従来方式で、yaw の offset は 0。腕角度を DRAGON yaw へ直接入れるため、円形姿勢 `pi/2` から大きく離れた候補が出やすい。
-- `joint_pairing_reference=startup` は `startup_pose=[0, pi/2, 0, pi/2, 0, pi/2]` を offset に使い、円形姿勢からの相対変形にする。形状制御試験の推奨設定。
+- `mapping_reference=straight` は yaw の offset を 0 とする方式（DRAGON を真っ直ぐ伸ばす基準）。腕角度を DRAGON yaw へ直接入れるため、円形姿勢 `pi/2` から大きく離れた候補が出やすい。
+- `mapping_reference=circular`（既定）は `startup_pose=[0, pi/2, 0, pi/2, 0, pi/2]` を offset に使い、円形姿勢からの相対変形にする。テイクオフ円形からそのまま変形でき、形状制御試験の推奨設定。
+- ※ `mapping_reference` は全 `mapping_mode` 共通。旧名 `joint_pairing_reference` と旧値 `zero`/`startup` も後方互換で使用可（それぞれ `straight`/`circular` に対応）。
 - `joint_pairing_scale` は全関節の写像ゲインに掛かる一括係数。安全ゲートを残す試験では `0.2〜0.4` 程度から始める。
 - `capture_neutral_on_first_msg=true` にすると、最初に受け取った Dracomancer 関節角を `neutral` として記憶し、以後はそこからの差分を使う。
 - `joint_limit=pi/2` が既定。
@@ -232,8 +233,9 @@ target        = clamp(mapped, -joint_limit, joint_limit)
 
 ```bash
 roslaunch dracomancer teleoperation.launch \
+  mapping_mode:=joint_pairing \
   teleop_mode:=teleoperation \
-  joint_pairing_reference:=startup \
+  mapping_reference:=circular \
   capture_neutral_on_first_msg:=true \
   joint_pairing_scale:=0.3
 ```
@@ -252,25 +254,25 @@ FK -> 上腕/前腕/手の方向ベクトル
 - 主用途の屈曲ベース面内整形はクリーン。外転・捻りなど面外DOFは、リンク構造オフセットの影響で遠位関節に pitch/yaw 結合が出ることがある（既知の限界、研究比較用）。
 - パラメータ: `geom_chain`, `geom_plane_normal`, `geom_yaw_sign/scale`, `geom_pitch_sign/scale`。
 
-### elbow_only（1自由度・引数で選択）
+### elbow_only（1自由度・**既定**）
 
-肘の屈曲角（`elbow_source_joint`、既定 `elbow_flexion_extension_joint`）の中立からの差分**1つ**を、DRAGON の**真ん中の yaw 関節**（`elbow_target_joint`、既定は `dragon_joint_names` の中央 yaw = `joint2_yaw`）だけに対応させます。それ以外の関節は offset（基準姿勢）で保持されるため、`joint_pairing_reference=startup` なら DRAGON は円形を保ったまま中央の1関節だけが曲がります。肩・手首は使いません。マッピング比較実験での「最小自由度ベースライン」として使えます。
+肘の屈曲角（`elbow_source_joint`、既定 `elbow_flexion_extension_joint`）の中立からの差分**1つ**を、DRAGON の**真ん中の yaw 関節**（`elbow_target_joint`、既定は `dragon_joint_names` の中央 yaw = `joint2_yaw`）だけに対応させます。それ以外の関節は**直前に指令した値のまま保持され、一切変化しません**（DRAGON はテイクオフ時／直前の形状を維持し、中央の1関節だけが肘に追従して曲がる）。肩・手首は使いません。マッピング比較実験での「最小自由度ベースライン」として使えます。
 
 ```text
 delta = elbow - 中立elbow
 elbow_target_joint = offset + sign * scale * delta
-その他の関節        = offset（定数。pitch は 0、startup基準なら yaw は pi/2）
+その他の関節        = 直前の可行値（last_feasible_target、変化させない）
 ```
 
-- `joint_pairing` と同じ `signs` / `scales`（`joint_pairing_scale` 込み） / `offsets` / `joint_pairing_reference`(zero/startup) を再利用するので挙動が一貫。
+- 中央関節は `joint_pairing` と同じ `signs` / `scales`（`joint_pairing_scale` 込み） / `offsets` / `mapping_reference`(straight/circular) を再利用するので挙動が一貫。
+- 他の関節は offset を使わず直前値を保持するため、`mapping_reference` の straight/circular に関係なく動かない。
 - 対応先を変えたい場合は `elbow_target_joint` に DRAGON 関節名（例 `joint1_yaw`）を指定。
-- パラメータ: `elbow_source_joint`, `elbow_target_joint`（＋共有の `signs`/`scales`/`offsets`/`joint_pairing_reference`）。
+- パラメータ: `elbow_source_joint`, `elbow_target_joint`（＋共有の `signs`/`scales`/`offsets`/`mapping_reference`）。
 
 ```bash
 roslaunch dracomancer teleoperation.launch \
   teleop_mode:=teleoperation \
-  mapping_mode:=elbow_only \
-  joint_pairing_reference:=startup \
+  mapping_reference:=circular \
   capture_neutral_on_first_msg:=true \
   joint_pairing_scale:=0.3
 ```
@@ -363,8 +365,8 @@ flowchart TD
 
 | パラメータ | 既定 | 説明 |
 | --- | --- | --- |
-| `mapping_mode` | `joint_pairing` | 腕→DRAGON形状の写像方式 |
-| `joint_pairing_reference` | `zero` | `joint_pairing` の offset 基準。`startup` で円形姿勢基準 |
+| `mapping_mode` | `elbow_only` | 腕→DRAGON形状の写像方式 |
+| `mapping_reference` | `circular` | 写像の offset 基準（全モード共通）。`straight`=0rad基準 / `circular`=円形姿勢基準。旧名 `joint_pairing_reference`、旧値 `zero`/`startup` も可 |
 | `joint_pairing_scale` | `1.0` | `joint_pairing` の一括写像ゲイン |
 | `capture_neutral_on_first_msg` | `false` | 最初の Dracomancer 関節角を中立姿勢として記憶 |
 | `enable_feasibility_gate` | `true` | 予測ゲートの有効化（false で候補をそのまま採用） |

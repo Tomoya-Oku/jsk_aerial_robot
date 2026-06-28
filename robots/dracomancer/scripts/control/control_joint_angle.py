@@ -35,18 +35,27 @@ class ControlJoints:
         self.startup_pose = rospy.get_param("~startup_pose", [0.0, np.pi / 2.0, 0.0, np.pi / 2.0, 0.0, np.pi / 2.0])
         self.safe_pose = rospy.get_param("~safe_pose", self.startup_pose)
 
-        # Mapping strategy: "joint_pairing" (medium-term, default), "geometric"
-        # (long-term, FK + plane projection), or "elbow_only" (single-DOF curl driven
-        # by the elbow alone). See README.md.
-        self.mapping_mode = str(rospy.get_param("~mapping_mode", "joint_pairing")).lower()
+        # Mapping strategy: "elbow_only" (default, single-DOF: the elbow drives only
+        # DRAGON's middle joint, every other joint held unchanged), "joint_pairing"
+        # (medium-term), or "geometric" (long-term, FK + plane projection). See README.md.
+        self.mapping_mode = str(rospy.get_param("~mapping_mode", "elbow_only")).lower()
         if self.mapping_mode not in ("joint_pairing", "geometric", "elbow_only"):
             rospy.logwarn("unknown mapping_mode '%s', fall back to 'joint_pairing'", self.mapping_mode)
             self.mapping_mode = "joint_pairing"
-        self.joint_pairing_reference = str(rospy.get_param("~joint_pairing_reference", "zero")).lower()
-        if self.joint_pairing_reference not in ("zero", "startup"):
-            rospy.logwarn("unknown joint_pairing_reference '%s', fall back to 'zero'",
-                          self.joint_pairing_reference)
-            self.joint_pairing_reference = "zero"
+        # Reference (base) pose the mapping deforms around. Shared by every mapping_mode:
+        #   straight : map around 0 rad (DRAGON straightens out).
+        #   circular : map around startup_pose (DRAGON keeps its circular takeoff shape). Default.
+        # The legacy name (joint_pairing_reference) and legacy values (zero/startup) are
+        # still accepted for backward compatibility.
+        mapping_reference = rospy.get_param(
+            "~mapping_reference", rospy.get_param("~joint_pairing_reference", "circular"))
+        self.mapping_reference = str(mapping_reference).strip().lower()
+        legacy_reference = {"zero": "straight", "startup": "circular"}
+        self.mapping_reference = legacy_reference.get(self.mapping_reference, self.mapping_reference)
+        if self.mapping_reference not in ("straight", "circular"):
+            rospy.logwarn("unknown mapping_reference '%s', fall back to 'straight'",
+                          self.mapping_reference)
+            self.mapping_reference = "straight"
 
         # --- joint_pairing (medium-term) mapping ---------------------------------
         # The three arm flexion joints share the same -X axis, so moving only them
@@ -71,17 +80,17 @@ class ControlJoints:
         base_scales = rospy.get_param("~scales", [1.0] * len(self.joint_names))
         self.scales = [float(joint_pairing_scale) * float(scale) for scale in base_scales]
         default_offsets = ([0.0] * len(self.joint_names)
-                           if self.joint_pairing_reference == "zero"
+                           if self.mapping_reference == "straight"
                            else list(self.startup_pose))
         # offset[i] is the constant value when source is empty and the additive bias
-        # otherwise. "startup" keeps mapped commands near DRAGON's circular shape.
+        # otherwise. "circular" keeps mapped commands near DRAGON's circular shape.
         self.offsets = rospy.get_param("~offsets", default_offsets)
 
         # --- elbow_only mapping --------------------------------------------------
         # Map the single Dracomancer elbow flexion angle (relative to its neutral) to
         # DRAGON's middle yaw joint only; every other joint is held at its offset
-        # (reference pose). Reuses signs/scales/offsets and joint_pairing_reference, so
-        # with reference=startup the rest of DRAGON stays circular and only the middle
+        # (reference pose). Reuses signs/scales/offsets and mapping_reference, so
+        # with mapping_reference=circular the rest of DRAGON stays circular and only the middle
         # joint bends. elbow_target_joint defaults to the middle yaw in joint_names.
         self.elbow_source_joint = rospy.get_param("~elbow_source_joint", "elbow_flexion_extension_joint")
         default_yaws = [n for n in self.joint_names if n.endswith("_yaw")]
@@ -191,8 +200,8 @@ class ControlJoints:
         rospy.loginfo("teleop_mode: %s, mode_topic: %s", self.teleop_mode, self.mode_topic)
         rospy.loginfo("device_joint_topic: %s", self.device_joint_topic)
         rospy.loginfo("command_topic: %s", self.command_topic)
-        rospy.loginfo("mapping_mode: %s, joint_pairing_reference: %s",
-                      self.mapping_mode, self.joint_pairing_reference)
+        rospy.loginfo("mapping_mode: %s, mapping_reference: %s",
+                      self.mapping_mode, self.mapping_reference)
         rospy.loginfo("joint mapping: %s",
                       ", ".join("{}<-{}".format(dst, src)
                                 for dst, src in zip(self.joint_names, self.source_joint_names)))
@@ -299,20 +308,19 @@ class ControlJoints:
 
     def elbow_only_target(self):
         # Single-DOF: the elbow flexion angle (delta from neutral) drives only DRAGON's
-        # middle yaw joint (elbow_target_joint); every other joint is held at its offset
-        # (reference pose, e.g. circular when joint_pairing_reference=startup).
+        # middle yaw joint (elbow_target_joint). Every other joint is held at its last
+        # commanded (feasible) value, so elbow_only never moves any joint but the middle
+        # one (DRAGON keeps the shape it took off / was last left in).
+        target = list(self.last_feasible_target)
         elbow = self.latest_device_joints.get(self.elbow_source_joint)
         if elbow is None:
-            return list(self.last_feasible_target)
+            return target
         neutral = self.neutral_device_joints.get(self.elbow_source_joint, 0.0)
         delta = elbow - neutral
-        target = []
         for i, name in enumerate(self.joint_names):
             if name == self.elbow_target_joint:
                 mapped = self.offsets[i] + self.signs[i] * self.scales[i] * delta
-                target.append(self.clamp(mapped))
-            else:
-                target.append(self.clamp(self.offsets[i]))
+                target[i] = self.clamp(mapped)
         return target
 
     # --- geometric (long-term) mapping --------------------------------------
