@@ -35,14 +35,17 @@
   <arg name="max_step" default="0.04"/>
   <arg name="joint_limit" default="1.57079632679"/>
   <!-- Arm->DRAGON mapping strategy (teleoperation mode):
-         joint_pairing : flexion joints -> DRAGON yaw, pitch held at 0 (planar). Default.
+         joint_pairing : flexion joints -> DRAGON yaw, pitch held at 0 (planar).
          geometric     : arm FK -> link directions -> yaw/pitch decomposition.
-         elbow_only    : elbow flexion angle -> DRAGON's middle yaw joint only. -->
-  <arg name="mapping_mode" default="joint_pairing"/>
-  <!-- joint_pairing_reference (also used by elbow_only):
-         zero    : existing direct mapping around 0 rad.
-         startup : relative deformation around startup_pose (circular DRAGON shape). -->
-  <arg name="joint_pairing_reference" default="zero"/>
+         elbow_only    : elbow flexion angle -> DRAGON's middle yaw joint only;
+                         every other joint is held unchanged. Default. -->
+  <arg name="mapping_mode" default="elbow_only"/>
+  <!-- mapping_reference: base pose the arm->DRAGON mapping deforms around
+       (shared by every mapping_mode).
+         straight : map around 0 rad (DRAGON straightens out).
+         circular : relative deformation around startup_pose (circular DRAGON shape). Default. -->
+  <arg name="joint_pairing_reference" default="circular"/>  <!-- deprecated alias of mapping_reference -->
+  <arg name="mapping_reference" default="$(arg joint_pairing_reference)"/>
   <arg name="joint_pairing_scale" default="1.0"/>
   <!-- elbow_only: source (Dracomancer) joint and target DRAGON joint.
        elbow_target_joint empty -> middle yaw of dragon_joint_names. -->
@@ -197,7 +200,7 @@
     <param name="teleop_mode" value="$(arg teleop_mode)"/>
     <param name="mode_topic" value="$(arg mode_topic)"/>
     <param name="mapping_mode" value="$(arg mapping_mode)"/>
-    <param name="joint_pairing_reference" value="$(arg joint_pairing_reference)"/>
+    <param name="mapping_reference" value="$(arg mapping_reference)"/>
     <param name="joint_pairing_scale" value="$(arg joint_pairing_scale)"/>
     <param name="elbow_source_joint" value="$(arg elbow_source_joint)"/>
     <param name="elbow_target_joint" value="$(arg elbow_target_joint)"/>
