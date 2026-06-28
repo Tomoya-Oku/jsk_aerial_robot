@@ -76,6 +76,7 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 - `teleoperation`: Dracomancer 腕関節を DRAGON 関節へマッピングし、**候補姿勢のフィージビリティで変形可否を判定**する（移動は `control_position.py` が同時に担当）。マッピングは `~mapping_mode` で切替（`distal`=既定: 腕関節を DRAGON 関節へ**絶対角で一致**（中立記録なし。既定対応: 手首屈曲→joint1_pitch、手首内外転→joint1_yaw、肘屈曲→joint2_yaw、肩屈曲→joint3_pitch、肩内外転→joint3_yaw。`clamp(sign*scale*source + offset)`、`distal_signs` 既定 `[1,-1,1,1,-1]`・`distal_offsets` 既定 `[0,0,0,π/2,0]`（device は肩屈曲を負で測るため joint3_pitch は sign=+1+offset=π/2 で 90°→0°。rosbag 解析で確定）、平行リスト `distal_source_joints`/`distal_target_joints`/`distal_signs`/`distal_scales`/`distal_offsets` で設定。未対応の joint2_pitch は冗長性として held。旧名 `elbow_only` は後方互換エイリアス） / `joint_pairing`: 3屈曲関節→3 yaw・pitch=0で平面保持 / `geometric`: 腕FK→面内yaw・面外pitch分解）。詳細は [README.md](README.md) の関節マッピング節。
 - **予測フィージビリティ・ゲート**: 候補 DRAGON 形状を `shape_feasibility_node`（C++、`dragon/full_vectoring_robot_model` を pluginlib で読み込み、`ns=dragon` で起動）の `check_shape` サービスに渡し `fc_f_min`/`fc_t_min` を予測。force・torque 両方が下限しきい値以上なら変形（採用・記憶）、未満／サービス失敗なら直前可行姿勢で停止。**ただし現状は既定 OFF（`enable_feasibility_gate:=false`）**：フルベクタリング DRAGON は単発 `updateRobotModel` だとジンバルが水平のままで予測 fc がどの姿勢でも ≈0 になり、全変形を却下して形状が凍結するため。再有効化にはコントローラのベクタリング最適化済み fc を予測器側で再現する必要がある（README「既知の課題」参照）。下限しきい値は `*_volume_radius_threshold`（`[hard_min, min]` の `hard_min`）を購読、未受信時は `force_radius_threshold`/`torque_radius_threshold` パラメータ。
 - **ライブ監視（情報提供）**: `volume_radius_monitor.py`（bringup.launch）が実機現在状態の fc からライブスケールを `/dracomancer/dragon_shape_safety_scale` に publish（web UI 用、ゲートとは独立）。しきい値の所有・pub/sub もここ。
+- **link4 アンカー**（distal 標準・既定 ON `enable_link4_anchor`）: 関節操作中も DRAGON の link4 をワールドにおおよそ固定する。ホバー開始時に link4 姿勢を TF からキャプチャし、毎周期 `T_anchor·T_cog→link4⁻¹` / `T_anchor·T_baselink→link4⁻¹` を逆算して `uav/nav`(COG, POS_MODE) と `final_target_baselink_rpy` を joints_ctrl と協調送信（`update_link4_anchor`）。完全静止ではない。移動制御（`enable_position_control`）とは `uav/nav` が競合するため併用不可。詳細は [docs/link4_anchor.md](docs/link4_anchor.md)。
 - 位置・姿勢・関節角操作はいずれもホバリング（`flight_state>=4`）時のみ出力する（`publish_joints_only_when_hovering` 既定 true）。
 - `shape_feasibility_node` は DRAGON のモデル/パラメータを使うため **DRAGON 起動が前提**。`dragon` を run_depend に追加済み。
 
@@ -107,7 +108,7 @@ ROS ノードの起動には spinal/aerial_robot 一式が必要。
 実装を変えたら関連ドキュメントを更新すること（中粒度・Mermaid 図・日本語）。
 
 - `README.md`: システム仕様、モード、トピックフロー、関節マッピング、安全機構、起動引数（旧 `docs/dracomancer_system.md` を統合）
-- `docs/`: 個別トピックの補足（例: `fc_threshold_calibration.md`）
+- `docs/`: 個別トピックの補足（例: `fc_threshold_calibration.md`、`link4_anchor.md`(distal の link4 アンカー)）
 
 ### 使用機材
 

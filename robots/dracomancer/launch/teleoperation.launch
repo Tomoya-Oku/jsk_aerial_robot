@@ -62,6 +62,11 @@
        [1,-1,1,1,-1], offsets=[0,0,0,pi/2,0] (device shoulder ~-pi/2 at 90deg ->
        joint3_pitch 0), scales=1.0. joint2_pitch unmapped (reserve), held. -->
   <arg name="capture_neutral_on_first_msg" default="false"/>
+  <!-- distal link4 anchor: keep the arm-tip link (link4) ~fixed in world while
+       joints bend, by commanding COG position + baselink attitude (uav/nav POS_MODE
+       + final_target_baselink_rpy) alongside joints_ctrl. Anchor captured at hover
+       start. Standard part of distal (default ON). See docs/link4_anchor.md. -->
+  <arg name="enable_link4_anchor" default="true"/>
   <!-- Joystick movement control is OFF by default: control_position publishes a
        POS_VEL_MODE FlightNav whose target_pos is unset (=0), which commands DRAGON
        toward origin/ground (fall). Enable only once that is addressed. -->
@@ -227,6 +232,7 @@
     <param name="joint_limit" value="$(arg joint_limit)"/>
     <param name="max_step" value="$(arg max_step)"/>
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
+    <param name="enable_link4_anchor" value="$(arg enable_link4_anchor)"/>
     <param name="publish_only_when_hovering" value="$(arg publish_joints_only_when_hovering)"/>
     <param name="publish_before_device_ready" value="$(arg publish_joints_before_device_ready)"/>
     <param name="enable_feasibility_gate" value="$(arg enable_feasibility_gate)"/>

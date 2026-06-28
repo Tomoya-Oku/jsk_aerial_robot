@@ -3,8 +3,12 @@
 
 import rospy
 import numpy as np
-from std_msgs.msg import Float64, Float64MultiArray, UInt8, String
+import tf2_ros
+import tf.transformations as tft
+from std_msgs.msg import Float64, Float64MultiArray, UInt8, String, Empty
 from sensor_msgs.msg import JointState
+from geometry_msgs.msg import Vector3Stamped
+from aerial_robot_msgs.msg import FlightNav
 from dracomancer.srv import ShapeFeasibility, ShapeFeasibilityRequest
 
 class ControlJoints:
@@ -137,6 +141,26 @@ class ControlJoints:
         if self.mapping_mode == "distal" and not self.distal_map:
             rospy.logwarn("distal: no valid source->target mapping; no joint will move")
 
+        # --- distal link4 anchor -------------------------------------------------
+        # Standard part of distal: keep the arm-tip link (default link4) roughly fixed
+        # in the world while joints bend, so the operator's wrist swings link1 and the
+        # shoulder swings link1-3. The anchor (link4 world pose) is captured at hover
+        # start; each cycle the COG position and baselink attitude that place link4 at
+        # the anchor are computed from TF and sent (uav/nav POS_MODE + baselink rpy),
+        # coordinated with joints_ctrl. Not a perfect hold (slew-rate / feasibility
+        # limited). See docs/link4_anchor.md.
+        self.enable_link4_anchor = rospy.get_param("~enable_link4_anchor", True)
+        self.world_frame = rospy.get_param("~world_frame", "world")
+        anchor_link = rospy.get_param("~anchor_link", "link4")
+        self.anchor_frame = rospy.get_param("~anchor_frame", self.robot_name + "/" + anchor_link)
+        self.cog_frame = rospy.get_param("~cog_frame", self.robot_name + "/cog")
+        self.baselink_frame = rospy.get_param("~baselink_frame", self.robot_name + "/fc")
+        self.nav_topic = rospy.get_param("~nav_topic", "/" + self.robot_name + "/uav/nav")
+        self.baselink_rpy_topic = rospy.get_param(
+            "~baselink_rpy_topic", "/" + self.robot_name + "/final_target_baselink_rpy")
+        self.anchor_mat = None
+        self.want_capture_anchor = False
+
         # --- geometric (long-term) mapping ---------------------------------------
         # Arm kinematic chain (parent->child joint origins / axes) taken from
         # urdf/dracomancer.urdf (all joint rpy are 0). Used to forward-kinematics the
@@ -221,6 +245,12 @@ class ControlJoints:
         self.shape_error_pub = rospy.Publisher(self.shape_error_topic, Float64MultiArray, queue_size=1)
         self.candidate_fc_f_pub = rospy.Publisher(self.candidate_force_radius_topic, Float64, queue_size=1)
         self.candidate_fc_t_pub = rospy.Publisher(self.candidate_torque_radius_topic, Float64, queue_size=1)
+        self.nav_pub = rospy.Publisher(self.nav_topic, FlightNav, queue_size=1)
+        self.baselink_rpy_pub = rospy.Publisher(self.baselink_rpy_topic, Vector3Stamped, queue_size=1)
+
+        # TF for the link4 anchor
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
         # Service client (persistent for rate; reconnected on failure)
         self.feasibility_srv = None
@@ -233,6 +263,7 @@ class ControlJoints:
         self.mode_sub = rospy.Subscriber(self.mode_topic, String, self.mode_cb, queue_size=1)
         self.force_threshold_sub = rospy.Subscriber(self.force_threshold_topic, Float64MultiArray, self.force_threshold_cb, queue_size=1)
         self.torque_threshold_sub = rospy.Subscriber(self.torque_threshold_topic, Float64MultiArray, self.torque_threshold_cb, queue_size=1)
+        self.recapture_anchor_sub = rospy.Subscriber("~recapture_anchor", Empty, self.recapture_anchor_cb, queue_size=1)
 
         rospy.loginfo("teleop_mode: %s, mode_topic: %s", self.teleop_mode, self.mode_topic)
         rospy.loginfo("device_joint_topic: %s", self.device_joint_topic)
@@ -256,6 +287,9 @@ class ControlJoints:
                       self.force_radius_threshold, self.torque_radius_threshold)
         rospy.loginfo("joint command gating: only_when_hovering=%s, before_device_ready=%s",
                       self.publish_only_when_hovering, self.publish_before_device_ready)
+        rospy.loginfo("link4 anchor: enable=%s, anchor=%s, world=%s, cog=%s, baselink=%s",
+                      self.enable_link4_anchor, self.anchor_frame, self.world_frame,
+                      self.cog_frame, self.baselink_frame)
 
     def connect_feasibility_service(self):
         try:
@@ -308,7 +342,15 @@ class ControlJoints:
                 rospy.loginfo("Captured dracomancer neutral joints for DRAGON mapping")
 
     def robot_flight_state_cb(self, msg):
-        self.robot_hovering = int(msg.data) >= 4
+        hovering = int(msg.data) >= 4
+        # Capture the link4 anchor at the moment hovering starts.
+        if hovering and not self.robot_hovering:
+            self.want_capture_anchor = True
+        self.robot_hovering = hovering
+
+    def recapture_anchor_cb(self, msg):
+        self.want_capture_anchor = True
+        rospy.loginfo("link4 anchor recapture requested")
 
     def force_threshold_cb(self, msg):
         if len(msg.data) > 0:
@@ -594,12 +636,76 @@ class ControlJoints:
             return False
         return True
 
+    @staticmethod
+    def tf_to_matrix(tr):
+        t = tr.transform.translation
+        q = tr.transform.rotation
+        m = tft.quaternion_matrix([q.x, q.y, q.z, q.w])
+        m[0, 3], m[1, 3], m[2, 3] = t.x, t.y, t.z
+        return m
+
+    def lookup_matrix(self, target_frame, source_frame):
+        # pose of source_frame expressed in target_frame
+        tr = self.tf_buffer.lookup_transform(target_frame, source_frame,
+                                             rospy.Time(0), rospy.Duration(0.1))
+        return self.tf_to_matrix(tr)
+
+    def update_link4_anchor(self):
+        # Keep the anchor link (link4) at the pose captured at hover start by
+        # commanding the COG position and baselink attitude that place it there.
+        if not self.enable_link4_anchor or self.mapping_mode != "distal":
+            return
+        if not self.robot_hovering:
+            self.anchor_mat = None  # re-capture on next hover
+            return
+        # capture at hover start (or on request)
+        if self.anchor_mat is None or self.want_capture_anchor:
+            try:
+                self.anchor_mat = self.lookup_matrix(self.world_frame, self.anchor_frame)
+                self.want_capture_anchor = False
+                rospy.loginfo("link4 anchor captured (%s in %s)", self.anchor_frame, self.world_frame)
+            except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+                    tf2_ros.ExtrapolationException) as e:
+                rospy.logwarn_throttle(2.0, "link4 anchor capture failed: %s", str(e))
+            return
+        # only steer the body while the operator is actively shaping
+        if self.teleop_mode != "teleoperation":
+            return
+        try:
+            m_cog_link4 = self.lookup_matrix(self.cog_frame, self.anchor_frame)
+            m_bl_link4 = self.lookup_matrix(self.baselink_frame, self.anchor_frame)
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+                tf2_ros.ExtrapolationException) as e:
+            rospy.logwarn_throttle(2.0, "link4 anchor tf lookup failed: %s", str(e))
+            return
+        # world poses that hold link4 at the anchor: T_world_x = T_anchor * T_x_link4^-1
+        m_world_cog = self.anchor_mat.dot(tft.inverse_matrix(m_cog_link4))
+        m_world_bl = self.anchor_mat.dot(tft.inverse_matrix(m_bl_link4))
+
+        nav = FlightNav()
+        nav.header.stamp = rospy.Time.now()
+        nav.control_frame = FlightNav.WORLD_FRAME
+        nav.target = FlightNav.COG
+        nav.pos_xy_nav_mode = FlightNav.POS_MODE
+        nav.pos_z_nav_mode = FlightNav.POS_MODE
+        nav.target_pos_x = float(m_world_cog[0, 3])
+        nav.target_pos_y = float(m_world_cog[1, 3])
+        nav.target_pos_z = float(m_world_cog[2, 3])
+        self.nav_pub.publish(nav)
+
+        roll, pitch, yaw = tft.euler_from_matrix(m_world_bl)
+        rpy = Vector3Stamped()
+        rpy.header.stamp = rospy.Time.now()
+        rpy.vector.x, rpy.vector.y, rpy.vector.z = roll, pitch, yaw
+        self.baselink_rpy_pub.publish(rpy)
+
     def main(self):
         rate = rospy.Rate(self.rate_hz)
 
         while not rospy.is_shutdown():
             if self.can_publish_joint_command():
                 self.joints_ctrl_pub.publish(self.make_joint_msg())
+            self.update_link4_anchor()
             rate.sleep()
 
 
