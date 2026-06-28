@@ -87,15 +87,18 @@ class ControlJoints:
         self.offsets = rospy.get_param("~offsets", default_offsets)
 
         # --- elbow_only mapping --------------------------------------------------
-        # Map the single Dracomancer elbow flexion angle (relative to its neutral) to
-        # DRAGON's middle yaw joint only; every other joint is held at its offset
-        # (reference pose). Reuses signs/scales/offsets and mapping_reference, so
-        # with mapping_reference=circular the rest of DRAGON stays circular and only the middle
-        # joint bends. elbow_target_joint defaults to the middle yaw in joint_names.
+        # Absolute match: DRAGON's middle yaw joint directly tracks the human elbow
+        # flexion angle (elbow 90deg -> middle joint 90deg), NOT a delta from a
+        # captured neutral. Every other joint is held at its last commanded value.
+        # target = clamp(elbow_sign * elbow_scale * elbow). elbow_sign defaults to -1
+        # so DRAGON's middle joint bends opposite to the raw elbow angle sign; flip it
+        # if DRAGON bends the wrong way. elbow_scale stays 1.0 for a true 1:1 match.
         self.elbow_source_joint = rospy.get_param("~elbow_source_joint", "elbow_flexion_extension_joint")
         default_yaws = [n for n in self.joint_names if n.endswith("_yaw")]
         default_elbow_target = default_yaws[len(default_yaws) // 2] if default_yaws else ""
         self.elbow_target_joint = rospy.get_param("~elbow_target_joint", default_elbow_target)
+        self.elbow_sign = float(rospy.get_param("~elbow_sign", -1.0))
+        self.elbow_scale = float(rospy.get_param("~elbow_scale", 1.0))
         if self.mapping_mode == "elbow_only" and self.elbow_target_joint not in self.joint_names:
             rospy.logwarn("elbow_target_joint '%s' not in dragon_joint_names; "
                           "elbow_only will not move any joint", self.elbow_target_joint)
@@ -202,6 +205,10 @@ class ControlJoints:
         rospy.loginfo("command_topic: %s", self.command_topic)
         rospy.loginfo("mapping_mode: %s, mapping_reference: %s",
                       self.mapping_mode, self.mapping_reference)
+        if self.mapping_mode == "elbow_only":
+            rospy.loginfo("elbow_only absolute match: %s = clamp(%.3f * %.3f * %s)",
+                          self.elbow_target_joint, self.elbow_sign, self.elbow_scale,
+                          self.elbow_source_joint)
         rospy.loginfo("joint mapping: %s",
                       ", ".join("{}<-{}".format(dst, src)
                                 for dst, src in zip(self.joint_names, self.source_joint_names)))
@@ -255,11 +262,9 @@ class ControlJoints:
         if self.capture_neutral and not self.neutral_device_joints:
             # Capture the joints actually used as mapping sources. In joint_pairing the
             # empty (constant) entries are skipped; in geometric every chain joint is
-            # used; in elbow_only only the elbow source is needed.
+            # used. elbow_only does an absolute match and needs no neutral.
             if self.mapping_mode == "geometric":
                 needed = [j[0] for j in self.geom_chain]
-            elif self.mapping_mode == "elbow_only":
-                needed = [self.elbow_source_joint]
             else:
                 needed = [n for n in self.source_joint_names if n]
             if needed and all(name in self.latest_device_joints for name in needed):
@@ -307,20 +312,17 @@ class ControlJoints:
         return target
 
     def elbow_only_target(self):
-        # Single-DOF: the elbow flexion angle (delta from neutral) drives only DRAGON's
-        # middle yaw joint (elbow_target_joint). Every other joint is held at its last
-        # commanded (feasible) value, so elbow_only never moves any joint but the middle
-        # one (DRAGON keeps the shape it took off / was last left in).
+        # Single-DOF, absolute match: DRAGON's middle yaw joint (elbow_target_joint)
+        # directly tracks the human elbow flexion angle (elbow 90deg -> middle joint
+        # 90deg), with no neutral capture. Every other joint is held at its last
+        # commanded (feasible) value, so only the middle joint moves.
         target = list(self.last_feasible_target)
         elbow = self.latest_device_joints.get(self.elbow_source_joint)
         if elbow is None:
             return target
-        neutral = self.neutral_device_joints.get(self.elbow_source_joint, 0.0)
-        delta = elbow - neutral
         for i, name in enumerate(self.joint_names):
             if name == self.elbow_target_joint:
-                mapped = self.offsets[i] + self.signs[i] * self.scales[i] * delta
-                target[i] = self.clamp(mapped)
+                target[i] = self.clamp(self.elbow_sign * self.elbow_scale * elbow)
         return target
 
     # --- geometric (long-term) mapping --------------------------------------

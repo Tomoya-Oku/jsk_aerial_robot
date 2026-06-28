@@ -53,10 +53,14 @@
   <arg name="joint_pairing_reference" default="circular"/>  <!-- deprecated alias of mapping_reference -->
   <arg name="mapping_reference" default="$(arg joint_pairing_reference)"/>
   <arg name="joint_pairing_scale" default="1.0"/>
-  <!-- elbow_only: source (Dracomancer) joint and target DRAGON joint.
-       elbow_target_joint empty -> middle yaw of dragon_joint_names. -->
+  <!-- elbow_only: absolute match, target_joint = clamp(elbow_sign*elbow_scale*elbow).
+       elbow_target_joint empty -> middle yaw of dragon_joint_names.
+       elbow_sign=-1 by default (DRAGON bends opposite to the raw elbow angle sign);
+       flip if it bends the wrong way. elbow_scale=1.0 keeps a 1:1 angle match. -->
   <arg name="elbow_source_joint" default="elbow_flexion_extension_joint"/>
   <arg name="elbow_target_joint" default="joint2_yaw"/>
+  <arg name="elbow_sign" default="-1.0"/>
+  <arg name="elbow_scale" default="1.0"/>
   <arg name="capture_neutral_on_first_msg" default="false"/>
   <!-- Joystick movement control is OFF by default: control_position publishes a
        POS_VEL_MODE FlightNav whose target_pos is unset (=0), which commands DRAGON
@@ -213,6 +217,8 @@
     <param name="joint_pairing_scale" value="$(arg joint_pairing_scale)"/>
     <param name="elbow_source_joint" value="$(arg elbow_source_joint)"/>
     <param name="elbow_target_joint" value="$(arg elbow_target_joint)"/>
+    <param name="elbow_sign" value="$(arg elbow_sign)"/>
+    <param name="elbow_scale" value="$(arg elbow_scale)"/>
     <param name="joint_limit" value="$(arg joint_limit)"/>
     <param name="max_step" value="$(arg max_step)"/>
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
