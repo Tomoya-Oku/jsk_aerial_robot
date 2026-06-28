@@ -277,7 +277,7 @@ roslaunch dracomancer teleoperation.launch \
   joint_pairing_scale:=0.3
 ```
 
-3方式とも出力はフィージビリティ・ゲートを通って DRAGON へ送られます。変形確認だけをシミュレーションで行う場合は `enable_feasibility_gate:=false` で候補姿勢をそのまま送れます。
+3方式とも出力はフィージビリティ・ゲートを通って DRAGON へ送られます。ただし**現状ゲートは既定 OFF**（`enable_feasibility_gate:=false`、後述「形状安全機構」「既知の課題」参照）なので、既定では候補姿勢がそのまま送られます。
 
 サーボIDと Dracomancer 関節名:
 
@@ -302,6 +302,8 @@ rad = (tick - 2048) * 2*pi / 4096 + offset
 形状安全は **予測フィージビリティ・ゲート**（teleoperation モードの主機構）と **ライブ監視**（情報提供）の2層です。
 
 ### 1. 予測フィージビリティ・ゲート（teleoperation モード）
+
+> **現状このゲートは既定 OFF（`enable_feasibility_gate:=false`）です。** フルベクタリング DRAGON では、`shape_feasibility_node` の単発 `updateRobotModel` で候補を評価するとジンバルが水平のままになり、ロータ法線が縮退して予測 `fc_f_min`/`fc_t_min` が**どの姿勢でも ≈0**（フィージブルな円形姿勢でも 0）になります。その結果ゲートが全変形を却下し DRAGON が凍結するため、当面は無効化しています。詳細は「既知の課題」。
 
 腕関節を DRAGON 形状にマッピングした**候補姿勢**を、実際に送る前に評価します。
 
@@ -369,7 +371,7 @@ flowchart TD
 | `mapping_reference` | `circular` | 写像の offset 基準（全モード共通）。`straight`=0rad基準 / `circular`=円形姿勢基準。旧名 `joint_pairing_reference`、旧値 `zero`/`startup` も可 |
 | `joint_pairing_scale` | `1.0` | `joint_pairing` の一括写像ゲイン |
 | `capture_neutral_on_first_msg` | `false` | 最初の Dracomancer 関節角を中立姿勢として記憶 |
-| `enable_feasibility_gate` | `true` | 予測ゲートの有効化（false で候補をそのまま採用） |
+| `enable_feasibility_gate` | `false` | 予測ゲートの有効化（既定 OFF：フルベクタリング DRAGON で予測 fc≈0 となり全変形が凍結するため。「既知の課題」参照）。false で候補をそのまま採用 |
 | `feasibility_gate_mode` | `hold` | 不可行候補への対処。`hold` / `step_search` / `soft_scale` |
 | `feasibility_step_fraction` | `0.25` | `step_search` の初期探索ステップ |
 | `feasibility_min_step_fraction` | `0.03` | `step_search` の最小探索ステップ |
@@ -599,6 +601,7 @@ roslaunch dracomancer teleoperation.launch \
 | 項目 | 現状 |
 | --- | --- |
 | 操縦桿による移動制御 | 既定 OFF（`enable_position_control:=false`）。`control_position.py` が `POS_VEL_MODE` で `target_pos` 未設定（=0）の FlightNav を送るため、ON にすると DRAGON が原点・高度0へ指令され落下する。`VEL_MODE` 化など修正が必要 |
+| 予測フィージビリティ・ゲート | 既定 OFF（`enable_feasibility_gate:=false`）。`shape_feasibility_node` の単発 `updateRobotModel` ではフルベクタリング DRAGON のジンバルが水平のままで、予測 fc がどの姿勢でも ≈0 になり全変形を却下＝形状が凍結する。コントローラのベクタリング最適化済み fc（`/dragon/debug/fc_f_min` は非ゼロ）を予測器側で再現する作り込みが必要 |
 | 立ち上げ時の通常形状保持 | `startup` モードで実装。DRAGON 側の preflight joint control 設定に依存 |
 | 力覚提示 | 提示トルク相当量の計算とトルク ON/OFF 出力のみ対応。XL430-W250-T では所望電流・所望トルク入力ができないため、Mk-Iでの連続的な反力・反トルク提示は Mk-II 以降の展望。既存の電流指令経路は互換サーボ向け任意機能として保持 |
 | Force/Torque Volume に基づく厳密な姿勢制限 | DRAGON の内接半径を使ったスケーリングのみ実装 |
