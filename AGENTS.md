@@ -21,8 +21,9 @@
 このリポジトリでは以下のルールに従ってブランチを運用する．
 
 - mainは[upstream](https://github.com/jsk-ros-pkg/jsk_aerial_robot) のmasterブランチをpullする専用のブランチとする．
-- developが私の開発の主軸ブランチとする．
-- 作業は最新developをベースにブランチを切って行う．
+- developが開発の主軸ブランチとする．
+- 現在は一時的にdevelopブランチの保護ルールを外している．直接developにプッシュして作業を進める．
+<!-- - 作業は最新developをベースにブランチを切って行う． -->
 - ブランチ名は`<作業対象>/<タグ>/<作業内容>`とする．以下は良い例．
   - dracomancer/feat/haptics-feedback-test
   - spinal/feat/m5-stack-joystick
