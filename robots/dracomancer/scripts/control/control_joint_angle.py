@@ -92,14 +92,15 @@ class ControlJoints:
 
         # --- distal mapping (absolute match of distal arm joints) ----------------
         # Each listed human arm joint is matched in ABSOLUTE angle to a DRAGON joint:
-        #   target_joint = clamp(sign * scale * source_angle)   (no neutral capture).
+        #   target_joint = clamp(sign * scale * source_angle + offset)  (no neutral).
         # Default: wrist flexion (beckoning) -> joint1_pitch, wrist abduction (sweep
         # parallel to the palm) -> joint1_yaw, elbow flexion -> joint2_yaw, shoulder
         # flexion -> joint3_pitch, shoulder abduction -> joint3_yaw. Signs default to
-        # [1, -1, 1, 1, -1] (flip per joint if DRAGON bends the wrong way); scales 1.0
-        # give a 1:1 angle match. Joints not listed (e.g. joint2_pitch, kept as a
-        # redundancy reserve) are held at their last commanded value, so only the
-        # mapped joints move.
+        # [1, -1, 1, -1, -1] (flip per joint if DRAGON bends the wrong way); scales 1.0
+        # give a 1:1 angle match; offsets shift the zero (shoulder flexion uses pi/2
+        # so a 90deg operator shoulder maps to joint3_pitch = 0). Joints not listed
+        # (e.g. joint2_pitch, kept as a redundancy reserve) are held at their last
+        # commanded value, so only the mapped joints move.
         self.joint_index = {name: i for i, name in enumerate(self.joint_names)}
         distal_sources = rospy.get_param("~distal_source_joints", [
             "wrist_flexion_extension_joint",
@@ -115,9 +116,13 @@ class ControlJoints:
             "joint3_pitch",
             "joint3_yaw",
         ])
-        distal_signs = rospy.get_param("~distal_signs", [1.0, -1.0, 1.0, 1.0, -1.0])
+        distal_signs = rospy.get_param("~distal_signs", [1.0, -1.0, 1.0, -1.0, -1.0])
         distal_scales = rospy.get_param("~distal_scales", [1.0, 1.0, 1.0, 1.0, 1.0])
-        self.distal_map = []  # list of (source_joint, target_joint, sign, scale)
+        # Per-joint additive offset [rad]: target = clamp(sign*scale*source + offset).
+        # shoulder flexion (joint3_pitch) uses offset=pi/2 with sign=-1 so that a 90deg
+        # operator shoulder maps to joint3_pitch = 0.
+        distal_offsets = rospy.get_param("~distal_offsets", [0.0, 0.0, 0.0, np.pi / 2.0, 0.0])
+        self.distal_map = []  # list of (source_joint, target_joint, sign, scale, offset)
         for k in range(min(len(distal_sources), len(distal_targets))):
             dst = distal_targets[k]
             if dst not in self.joint_index:
@@ -125,7 +130,8 @@ class ControlJoints:
                 continue
             sign = float(distal_signs[k]) if k < len(distal_signs) else 1.0
             scale = float(distal_scales[k]) if k < len(distal_scales) else 1.0
-            self.distal_map.append((distal_sources[k], dst, sign, scale))
+            offset = float(distal_offsets[k]) if k < len(distal_offsets) else 0.0
+            self.distal_map.append((distal_sources[k], dst, sign, scale, offset))
         if self.mapping_mode == "distal" and not self.distal_map:
             rospy.logwarn("distal: no valid source->target mapping; no joint will move")
 
@@ -233,8 +239,8 @@ class ControlJoints:
                       self.mapping_mode, self.mapping_reference)
         if self.mapping_mode == "distal":
             rospy.loginfo("distal absolute match: %s", ", ".join(
-                "{}<-clamp({:+.1f}*{:.2f}*{})".format(dst, sign, scale, src)
-                for src, dst, sign, scale in self.distal_map))
+                "{}<-clamp({:+.1f}*{:.2f}*{}{:+.3f})".format(dst, sign, scale, src, offset)
+                for src, dst, sign, scale, offset in self.distal_map))
         rospy.loginfo("joint mapping: %s",
                       ", ".join("{}<-{}".format(dst, src)
                                 for dst, src in zip(self.joint_names, self.source_joint_names)))
@@ -343,11 +349,11 @@ class ControlJoints:
         # joint is held at its last commanded (feasible) value, so only the mapped
         # joints move.
         target = list(self.last_feasible_target)
-        for src, dst, sign, scale in self.distal_map:
+        for src, dst, sign, scale, offset in self.distal_map:
             val = self.latest_device_joints.get(src)
             if val is None:
                 continue
-            target[self.joint_index[dst]] = self.clamp(sign * scale * val)
+            target[self.joint_index[dst]] = self.clamp(sign * scale * val + offset)
         return target
 
     # --- geometric (long-term) mapping --------------------------------------

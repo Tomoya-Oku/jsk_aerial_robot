@@ -58,8 +58,9 @@
        node below (parallel lists: human source joint -> DRAGON target joint, sign,
        scale). Default: wrist flexion -> joint1_pitch, wrist abduction -> joint1_yaw,
        elbow flexion -> joint2_yaw, shoulder flexion -> joint3_pitch, shoulder
-       abduction -> joint3_yaw; signs=[1,-1,1,1,-1] (flip if it bends wrong),
-       scales=1.0 (1:1). joint2_pitch unmapped (redundancy reserve), held. -->
+       abduction -> joint3_yaw; target=clamp(sign*scale*source+offset), signs=
+       [1,-1,1,-1,-1], offsets=[0,0,0,pi/2,0] (90deg shoulder -> joint3_pitch 0),
+       scales=1.0. joint2_pitch unmapped (redundancy reserve), held. -->
   <arg name="capture_neutral_on_first_msg" default="false"/>
   <!-- Joystick movement control is OFF by default: control_position publishes a
        POS_VEL_MODE FlightNav whose target_pos is unset (=0), which commands DRAGON
@@ -214,11 +215,14 @@
     <param name="mapping_mode" value="$(arg mapping_mode)"/>
     <param name="mapping_reference" value="$(arg mapping_reference)"/>
     <param name="joint_pairing_scale" value="$(arg joint_pairing_scale)"/>
-    <!-- distal mapping (absolute match of arm joints; see comment above) -->
+    <!-- distal mapping (absolute match of arm joints; see comment above).
+         target = clamp(sign*scale*source + offset). shoulder flexion uses
+         sign=-1, offset=pi/2 so a 90deg operator shoulder -> joint3_pitch = 0. -->
     <rosparam param="distal_source_joints">["wrist_flexion_extension_joint", "wrist_abduction_adduction_joint", "elbow_flexion_extension_joint", "shoulder_flexion_extension_joint", "shoulder_abduction_adduction_joint"]</rosparam>
     <rosparam param="distal_target_joints">["joint1_pitch", "joint1_yaw", "joint2_yaw", "joint3_pitch", "joint3_yaw"]</rosparam>
-    <rosparam param="distal_signs">[1.0, -1.0, 1.0, 1.0, -1.0]</rosparam>
+    <rosparam param="distal_signs">[1.0, -1.0, 1.0, -1.0, -1.0]</rosparam>
     <rosparam param="distal_scales">[1.0, 1.0, 1.0, 1.0, 1.0]</rosparam>
+    <rosparam param="distal_offsets">[0.0, 0.0, 0.0, 1.5707963267948966, 0.0]</rosparam>
     <param name="joint_limit" value="$(arg joint_limit)"/>
     <param name="max_step" value="$(arg max_step)"/>
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
