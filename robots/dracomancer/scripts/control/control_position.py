@@ -94,9 +94,9 @@ class ControlPose:
         self.rate_hz = rospy.get_param("~rate", 40.0)
         self.wait_after_hover = rospy.get_param("~wait_after_hover", 3.0)
 
-        self.teleop_mode = str(rospy.get_param("~teleop_mode", "startup")).lower()
+        self.valid_modes = ("startup", "teleoperation")
+        self.teleop_mode = self.normalize_mode(rospy.get_param("~teleop_mode", "startup"))
         self.mode_topic = rospy.get_param("~mode_topic", self.device_ns + "/teleop_mode")
-        self.valid_modes = ("startup", "precision", "wide")
         if self.teleop_mode not in self.valid_modes:
             rospy.logwarn("unknown teleop_mode '%s', fall back to 'startup'", self.teleop_mode)
             self.teleop_mode = "startup"
@@ -192,8 +192,14 @@ class ControlPose:
                       self.direction_mode, "baselink" if self.nav_target == FlightNav.BASELINK else "cog")
         rospy.loginfo("imu_mount_rpy: %s, recapture_on_hover: %s", mount_rpy, self.recapture_on_hover)
 
+    @staticmethod
+    def normalize_mode(mode):
+        # "teleop" is accepted as a shorthand alias for "teleoperation".
+        mode = str(mode).strip().lower()
+        return "teleoperation" if mode == "teleop" else mode
+
     def mode_cb(self, msg):
-        mode = str(msg.data).strip().lower()
+        mode = self.normalize_mode(msg.data)
         if mode not in self.valid_modes:
             rospy.logwarn("ignore unknown teleop mode '%s'", mode)
             return
@@ -201,9 +207,9 @@ class ControlPose:
             old_mode = self.teleop_mode
             rospy.loginfo("teleop mode: %s -> %s", self.teleop_mode, mode)
             self.teleop_mode = mode
-            if mode == "wide":
+            if mode == "teleoperation":
                 self.want_recapture = True
-            elif old_mode == "wide":
+            elif old_mode == "teleoperation":
                 self.publish_zero_nav()
             self.latest_axes = None
 
@@ -360,7 +366,7 @@ class ControlPose:
         rate = rospy.Rate(self.rate_hz)
 
         while not rospy.is_shutdown():
-            pose_active = self.teleop_mode == "wide" and self.robot_hovering and not self.robot_landing
+            pose_active = self.teleop_mode == "teleoperation" and self.robot_hovering and not self.robot_landing
             if pose_active:
                 if not self.wait_flag:
                     rospy.sleep(self.wait_after_hover)
@@ -372,7 +378,7 @@ class ControlPose:
                 if self.pose_active_prev:
                     self.publish_zero_nav()
                 self.latest_axes = None
-                if self.teleop_mode != "wide":
+                if self.teleop_mode != "teleoperation":
                     self.wait_flag = False
             self.pose_active_prev = pose_active
 

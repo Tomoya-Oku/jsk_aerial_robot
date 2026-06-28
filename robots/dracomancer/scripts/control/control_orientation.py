@@ -15,8 +15,8 @@ class AttitudeControl:
         self.joy_topic = rospy.get_param("~joy_topic", self.device_ns + "/joystick/calibrated")
         self.output_topic = rospy.get_param("~output_topic", "/" + self.robot_name + "/final_target_baselink_rpy")
         self.mode_topic = rospy.get_param("~mode_topic", self.device_ns + "/teleop_mode")
-        self.teleop_mode = str(rospy.get_param("~teleop_mode", "startup")).lower()
-        self.active_mode = rospy.get_param("~active_mode", "wide")
+        self.teleop_mode = self.normalize_mode(rospy.get_param("~teleop_mode", "startup"))
+        self.active_mode = self.normalize_mode(rospy.get_param("~active_mode", "teleoperation"))
         self.rate_hz = rospy.get_param("~rate", 40.0)
 
         self.axis_roll = rospy.get_param("~axis_roll", -1)
@@ -45,8 +45,14 @@ class AttitudeControl:
     def joystick_cb(self, msg):
         self.latest_axes = list(msg.data)
 
+    @staticmethod
+    def normalize_mode(mode):
+        # "teleop" is accepted as a shorthand alias for "teleoperation".
+        mode = str(mode).strip().lower()
+        return "teleoperation" if mode == "teleop" else mode
+
     def mode_cb(self, msg):
-        self.teleop_mode = str(msg.data).strip().lower()
+        self.teleop_mode = self.normalize_mode(msg.data)
         self.latest_axes = None
 
     def robot_flight_state_cb(self, msg):

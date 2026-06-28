@@ -96,36 +96,33 @@ flowchart TB
 
 ## 操作モード
 
-`teleoperation.launch` は `teleop_mode` で、立ち上げ、精密動作、広域移動を切り替えます。起動時の既定は `startup` です。実行中は `/dracomancer/teleop_mode` に `std_msgs/String` を送ることで切り替えられます。
+`teleoperation.launch` は `teleop_mode` で、立ち上げ（`startup`）と遠隔操作（`teleoperation`）を切り替えます。起動時の既定は `startup` です。実行中は `/dracomancer/teleop_mode` に `std_msgs/String` を送ることで切り替えられます。`teleoperation` では、**操縦桿による広域移動と腕形状による精密動作が同時に有効**になります（以前の `wide` / `precision` の2モードを統合）。`teleop` は `teleoperation` の別名として受け付けます。
 
 ```mermaid
 stateDiagram-v2
     [*] --> startup
-    startup --> precision: 腕形状で精密操作
-    startup --> wide: ジョイスティックで広域移動
-    precision --> wide
-    wide --> precision
-    precision --> startup
-    wide --> startup
+    startup --> teleoperation: 操作開始（移動＋形状）
+    teleoperation --> startup: 安全姿勢へ復帰
+    note right of teleoperation
+      操縦桿移動と腕形状写像を同時に提供
+    end note
 ```
 
 | モード | 移動指令 `/dragon/uav/nav` | 形状指令 `/dragon/joints_ctrl` | 用途 |
 | --- | --- | --- | --- |
 | `startup` | 送信しない | `startup_pose` を保持 | 離陸前後に DRAGON を通常姿勢へ保つ |
-| `precision` | 送信しない | Dracomancer 腕関節を DRAGON へマッピング | 接触作業や狭い姿勢調整 |
-| `wide` | ジョイスティック + IMU 相対移動を送信 | `wide_hold_pose` を保持 | 広域移動。機械学習による意図変換は使わない |
+| `teleoperation` | ジョイスティック + IMU 相対移動を送信 | Dracomancer 腕関節を DRAGON へマッピング | 接触作業。移動と形状変形を同時に行う |
 
 切り替え例:
 
 ```bash
-rosrun dracomancer set_teleop_mode.py wide
-rosrun dracomancer set_teleop_mode.py precision
+rosrun dracomancer set_teleop_mode.py teleoperation   # 'teleop' でも可
 rosrun dracomancer set_teleop_mode.py startup
 ```
 
 ### 位置系統
 
-`control_position.py` は、`teleop_mode=wide` のときだけ較正済み操縦桿入力を `FlightNav` の速度指令へ変換します。DRAGON がホバリング状態（`flight_state >= 4`）になってから送信し、ホバ直後は `wait_after_hover`（既定 3 秒）待機します。
+`control_position.py` は、`teleop_mode=teleoperation` のときだけ較正済み操縦桿入力を `FlightNav` の速度指令へ変換します。DRAGON がホバリング状態（`flight_state >= 4`）になってから送信し、ホバ直後は `wait_after_hover`（既定 3 秒）待機します。
 
 ```mermaid
 flowchart LR
@@ -190,8 +187,7 @@ rostopic pub -1 /dracomancer_control_position/recapture_neutral std_msgs/Empty "
 | モード | 目標形状 |
 | --- | --- |
 | `startup` | `startup_pose`。既定 `[0, pi/2, 0, pi/2, 0, pi/2]` |
-| `precision` | Dracomancer 腕関節からのマッピング結果 |
-| `wide` | `wide_hold_pose`。既定は `startup_pose` と同じ |
+| `teleoperation` | Dracomancer 腕関節からのマッピング結果 |
 
 `startup_pose` は DRAGON の通常姿勢へ戻す `transformation_demo.py _reset:=1` と同じ考え方で、離陸時に人間の腕形状へ直接マッピングできない問題を避けるための保持姿勢です。実機で離陸前の関節指令が反映されるかは、DRAGON 側の preflight joint control 設定に依存します。
 
@@ -203,6 +199,7 @@ Dracomancer の腕関節を、DRAGON を1本の直列アームとみなして対
 | --- | --- |
 | `joint_pairing`（**既定**） | 3つの屈曲関節を DRAGON の3つの yaw に1:1対応、pitch は 0 固定で平面保持 |
 | `geometric` | 腕の順運動学からリンク方向ベクトルを求め、面内(yaw)/面外(pitch)成分に分解 |
+| `elbow_only` | 肘屈曲角の1自由度を DRAGON の真ん中の yaw 関節だけに対応させる（他関節は基準姿勢で保持） |
 
 ### joint_pairing（中期方式・既定）
 
@@ -225,17 +222,17 @@ target        = clamp(mapped, -joint_limit, joint_limit)
 
 - yaw の sign は蛇の曲がり向き。DRAGON が逆向きに曲がる場合は3つ揃えて反転（`geom_yaw_sign` も合わせる）。
 - `joint_pairing_reference=zero`（既定）は従来方式で、yaw の offset は 0。腕角度を DRAGON yaw へ直接入れるため、円形姿勢 `pi/2` から大きく離れた候補が出やすい。
-- `joint_pairing_reference=startup` は `startup_pose=[0, pi/2, 0, pi/2, 0, pi/2]` を offset に使い、円形姿勢からの相対変形にする。precision 試験の推奨設定。
+- `joint_pairing_reference=startup` は `startup_pose=[0, pi/2, 0, pi/2, 0, pi/2]` を offset に使い、円形姿勢からの相対変形にする。形状制御試験の推奨設定。
 - `joint_pairing_scale` は全関節の写像ゲインに掛かる一括係数。安全ゲートを残す試験では `0.2〜0.4` 程度から始める。
 - `capture_neutral_on_first_msg=true` にすると、最初に受け取った Dracomancer 関節角を `neutral` として記憶し、以後はそこからの差分を使う。
 - `joint_limit=pi/2` が既定。
 - 捻り（supination, upper_arm_rotation）と外転は未使用。面外形状が必要なら pitch に source を割り当てる。
 
-推奨する precision 試験設定:
+推奨する形状制御試験設定:
 
 ```bash
 roslaunch dracomancer teleoperation.launch \
-  teleop_mode:=precision \
+  teleop_mode:=teleoperation \
   joint_pairing_reference:=startup \
   capture_neutral_on_first_msg:=true \
   joint_pairing_scale:=0.3
@@ -255,7 +252,30 @@ FK -> 上腕/前腕/手の方向ベクトル
 - 主用途の屈曲ベース面内整形はクリーン。外転・捻りなど面外DOFは、リンク構造オフセットの影響で遠位関節に pitch/yaw 結合が出ることがある（既知の限界、研究比較用）。
 - パラメータ: `geom_chain`, `geom_plane_normal`, `geom_yaw_sign/scale`, `geom_pitch_sign/scale`。
 
-両方式とも出力はフィージビリティ・ゲートを通って DRAGON へ送られます。変形確認だけをシミュレーションで行う場合は `enable_feasibility_gate:=false` で候補姿勢をそのまま送れます。
+### elbow_only（1自由度・引数で選択）
+
+肘の屈曲角（`elbow_source_joint`、既定 `elbow_flexion_extension_joint`）の中立からの差分**1つ**を、DRAGON の**真ん中の yaw 関節**（`elbow_target_joint`、既定は `dragon_joint_names` の中央 yaw = `joint2_yaw`）だけに対応させます。それ以外の関節は offset（基準姿勢）で保持されるため、`joint_pairing_reference=startup` なら DRAGON は円形を保ったまま中央の1関節だけが曲がります。肩・手首は使いません。マッピング比較実験での「最小自由度ベースライン」として使えます。
+
+```text
+delta = elbow - 中立elbow
+elbow_target_joint = offset + sign * scale * delta
+その他の関節        = offset（定数。pitch は 0、startup基準なら yaw は pi/2）
+```
+
+- `joint_pairing` と同じ `signs` / `scales`（`joint_pairing_scale` 込み） / `offsets` / `joint_pairing_reference`(zero/startup) を再利用するので挙動が一貫。
+- 対応先を変えたい場合は `elbow_target_joint` に DRAGON 関節名（例 `joint1_yaw`）を指定。
+- パラメータ: `elbow_source_joint`, `elbow_target_joint`（＋共有の `signs`/`scales`/`offsets`/`joint_pairing_reference`）。
+
+```bash
+roslaunch dracomancer teleoperation.launch \
+  teleop_mode:=teleoperation \
+  mapping_mode:=elbow_only \
+  joint_pairing_reference:=startup \
+  capture_neutral_on_first_msg:=true \
+  joint_pairing_scale:=0.3
+```
+
+3方式とも出力はフィージビリティ・ゲートを通って DRAGON へ送られます。変形確認だけをシミュレーションで行う場合は `enable_feasibility_gate:=false` で候補姿勢をそのまま送れます。
 
 サーボIDと Dracomancer 関節名:
 
@@ -277,9 +297,9 @@ rad = (tick - 2048) * 2*pi / 4096 + offset
 
 ## 形状安全機構
 
-形状安全は **予測フィージビリティ・ゲート**（precision モードの主機構）と **ライブ監視**（情報提供）の2層です。
+形状安全は **予測フィージビリティ・ゲート**（teleoperation モードの主機構）と **ライブ監視**（情報提供）の2層です。
 
-### 1. 予測フィージビリティ・ゲート（precision モード）
+### 1. 予測フィージビリティ・ゲート（teleoperation モード）
 
 腕関節を DRAGON 形状にマッピングした**候補姿勢**を、実際に送る前に評価します。
 
@@ -333,9 +353,9 @@ flowchart TD
 | 条件 | 既定 | 挙動 |
 | --- | --- | --- |
 | `publish_joints_only_when_hovering` | `true` in `teleoperation.launch` | ホバリング前は `/dragon/joints_ctrl` を送らない |
-| `publish_joints_before_device_ready` | `false` | `precision` では false なら Dracomancer 関節状態を受け取るまで送らない |
+| `publish_joints_before_device_ready` | `false` | `teleoperation` では false なら Dracomancer 関節状態を受け取るまで送らない |
 
-> `control_position.py`（`wide && hovering && !landing`）と `control_orientation.py`（`publish_only_when_hovering` 既定 true）も同様にホバリング時のみ出力します。
+> `control_position.py`（`teleoperation && hovering && !landing`）と `control_orientation.py`（`publish_only_when_hovering` 既定 true）も同様にホバリング時のみ出力します。
 
 ### 主なパラメータ
 
@@ -358,7 +378,6 @@ flowchart TD
 | `torque_radius_threshold` | `0.002` | トルクの下限しきい値（同上） |
 | `max_step` | `0.04` | 1周期あたりの最大変化量 |
 | `startup_pose` | `[0, pi/2, 0, pi/2, 0, pi/2]` | 立ち上げ時の通常姿勢 |
-| `wide_hold_pose` | `startup_pose` | 広域移動中に保持する形状 |
 
 `shape_feasibility_node`（teleoperation.launch、`ns=dragon`）:
 
@@ -468,16 +487,10 @@ roslaunch dracomancer bringup.launch rm:=false sim:=true headless:=false
 roslaunch dracomancer teleoperation.launch
 ```
 
-起動直後は `startup` モードです。ホバリング後、広域移動へ切り替える例:
+起動直後は `startup` モードです。ホバリング後、遠隔操作（移動＋腕形状）へ切り替える例:
 
 ```bash
-rosrun dracomancer set_teleop_mode.py wide
-```
-
-腕形状を使う精密動作へ切り替える例:
-
-```bash
-rosrun dracomancer set_teleop_mode.py precision
+rosrun dracomancer set_teleop_mode.py teleoperation   # 'teleop' でも可
 ```
 
 シミュレーションで形状安全を緩める例:
@@ -536,7 +549,7 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | `enable_position_control` | `true` | `/dragon/uav/nav` を送る |
 | `enable_attitude_control` | `false` | `/dragon/final_target_baselink_rpy` を送る |
 | `enable_joint_angle_control` | `true` | `/dragon/joints_ctrl` を送る |
-| `teleop_mode` | `startup` | `startup` / `precision` / `wide` |
+| `teleop_mode` | `startup` | `startup` / `teleoperation`（`teleop` 別名可） |
 | `mode_topic` | `/dracomancer/teleop_mode` | 実行中のモード切替トピック |
 | `nav_target` | `cog` | 移動対象 `cog` / `baselink` |
 | `direction_mode` | `yaw` | `none` / `yaw` / `yaw_pitch` / `full` |

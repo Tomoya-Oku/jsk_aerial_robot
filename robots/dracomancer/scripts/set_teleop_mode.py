@@ -8,7 +8,12 @@ import rospy
 from std_msgs.msg import String
 
 
-VALID_MODES = ("startup", "precision", "wide")
+# "teleop" is accepted as a shorthand alias for "teleoperation".
+VALID_MODES = ("startup", "teleoperation", "teleop")
+
+
+def normalize_mode(mode):
+    return "teleoperation" if mode == "teleop" else mode
 
 
 def parse_args():
@@ -18,7 +23,7 @@ def parse_args():
     parser.add_argument(
         "mode",
         choices=VALID_MODES,
-        help="teleoperation mode to publish",
+        help="teleoperation mode to publish (startup / teleoperation; 'teleop' is an alias)",
     )
     parser.add_argument(
         "--topic",
@@ -44,9 +49,10 @@ def main():
     while pub.get_num_connections() == 0 and time.monotonic() < deadline and not rospy.is_shutdown():
         rate.sleep()
 
-    pub.publish(String(data=args.mode))
+    mode = normalize_mode(args.mode)
+    pub.publish(String(data=mode))
     rospy.sleep(0.2)
-    rospy.loginfo("published teleop mode '%s' to %s", args.mode, args.topic)
+    rospy.loginfo("published teleop mode '%s' to %s", mode, args.topic)
 
 
 if __name__ == "__main__":

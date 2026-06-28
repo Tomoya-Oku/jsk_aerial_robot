@@ -53,7 +53,7 @@ class HapticFeedback:
             name: i for i, name in enumerate(self.haptic_device_joint_names)
         }
 
-        self.teleop_mode = str(rospy.get_param("~teleop_mode", "startup")).lower()
+        self.teleop_mode = self.normalize_mode(rospy.get_param("~teleop_mode", "startup"))
         self.shape_error = [0.0] * len(self.source_joint_names)
         self.last_shape_error_stamp = rospy.Time(0)
         self.latest_device_joints = {}
@@ -85,8 +85,14 @@ class HapticFeedback:
         rospy.loginfo("haptic current command: %s -> %s",
                       self.enable_haptic_current_command, self.haptic_current_topic)
 
+    @staticmethod
+    def normalize_mode(mode):
+        # "teleop" is accepted as a shorthand alias for "teleoperation".
+        mode = str(mode).strip().lower()
+        return "teleoperation" if mode == "teleop" else mode
+
     def mode_cb(self, msg):
-        self.teleop_mode = str(msg.data).strip().lower()
+        self.teleop_mode = self.normalize_mode(msg.data)
 
     def shape_error_cb(self, msg):
         self.shape_error = self.fit_list(msg.data, len(self.source_joint_names), 0.0)
@@ -119,7 +125,7 @@ class HapticFeedback:
 
     def haptic_torque(self):
         size = len(self.haptic_device_joint_names)
-        if self.teleop_mode != "precision" or not self.shape_error_ready():
+        if self.teleop_mode != "teleoperation" or not self.shape_error_ready():
             return [0.0] * size
 
         stiffness = self.fit_list(self.haptic_stiffness, len(self.source_joint_names), 0.0)
