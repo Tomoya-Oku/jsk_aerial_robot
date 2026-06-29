@@ -8,6 +8,7 @@ import tf.transformations as tft
 from std_msgs.msg import Float64, Float64MultiArray, UInt8, String, Empty
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import Vector3Stamped
+from nav_msgs.msg import Odometry
 from aerial_robot_msgs.msg import FlightNav
 from dracomancer.srv import ShapeFeasibility, ShapeFeasibilityRequest
 
@@ -21,6 +22,10 @@ class ControlJoints:
         self.device_joint_topic = rospy.get_param("~device_joint_topic", "/dracomancer/joint_states")
         self.command_topic = rospy.get_param("~command_topic", "/" + self.robot_name + "/joints_ctrl")
         self.rate_hz = rospy.get_param("~rate", 40.0)
+        # aerial_robot_control::HOVER_STATE. Navigation commands are ignored by
+        # DRAGON outside this state, so link4 anchor must not treat LAND/PRE_LAND as
+        # anchor-capable just because their numeric value is larger.
+        self.hover_flight_state = int(rospy.get_param("~hover_flight_state", 5))
         self.valid_modes = ("startup", "teleoperation")
         self.teleop_mode = self.normalize_mode(rospy.get_param("~teleop_mode", "startup"))
         self.mode_topic = rospy.get_param("~mode_topic", self.device_ns + "/teleop_mode")
@@ -158,6 +163,9 @@ class ControlJoints:
         self.nav_topic = rospy.get_param("~nav_topic", "/" + self.robot_name + "/uav/nav")
         self.baselink_rpy_topic = rospy.get_param(
             "~baselink_rpy_topic", "/" + self.robot_name + "/final_target_baselink_rpy")
+        self.baselink_motion_topic = rospy.get_param(
+            "~baselink_motion_topic", "/" + self.robot_name + "/target_rotation_motion")
+        self.publish_baselink_motion = rospy.get_param("~publish_baselink_motion", True)
         # Minimal DRAGON v1/v1.5 kinematics used for target-shape feed-forward.
         # fc is fixed to link2; link4 is reached through joint2 and joint3.
         self.dragon_link_length = float(rospy.get_param("~dragon_link_length", 0.474))
@@ -253,6 +261,7 @@ class ControlJoints:
         self.candidate_fc_t_pub = rospy.Publisher(self.candidate_torque_radius_topic, Float64, queue_size=1)
         self.nav_pub = rospy.Publisher(self.nav_topic, FlightNav, queue_size=1)
         self.baselink_rpy_pub = rospy.Publisher(self.baselink_rpy_topic, Vector3Stamped, queue_size=1)
+        self.baselink_motion_pub = rospy.Publisher(self.baselink_motion_topic, Odometry, queue_size=1)
 
         # TF for the link4 anchor
         self.tf_buffer = tf2_ros.Buffer()
@@ -293,9 +302,12 @@ class ControlJoints:
                       self.force_radius_threshold, self.torque_radius_threshold)
         rospy.loginfo("joint command gating: only_when_hovering=%s, before_device_ready=%s",
                       self.publish_only_when_hovering, self.publish_before_device_ready)
+        rospy.loginfo("hover flight_state for joint/link4 commands: %d", self.hover_flight_state)
         rospy.loginfo("link4 anchor: enable=%s, anchor=%s, world=%s, cog=%s, baselink=%s",
                       self.enable_link4_anchor, self.anchor_frame, self.world_frame,
                       self.cog_frame, self.baselink_frame)
+        rospy.loginfo("link4 anchor baselink motion: enable=%s, topic=%s",
+                      self.publish_baselink_motion, self.baselink_motion_topic)
 
     def connect_feasibility_service(self):
         try:
@@ -348,7 +360,7 @@ class ControlJoints:
                 rospy.loginfo("Captured dracomancer neutral joints for DRAGON mapping")
 
     def robot_flight_state_cb(self, msg):
-        hovering = int(msg.data) >= 4
+        hovering = int(msg.data) == self.hover_flight_state
         # Capture the link4 anchor at the moment hovering starts.
         if hovering and not self.robot_hovering:
             self.want_capture_anchor = True
@@ -735,6 +747,19 @@ class ControlJoints:
         rpy.header.stamp = rospy.Time.now()
         rpy.vector.x, rpy.vector.y, rpy.vector.z = roll, pitch, yaw
         self.baselink_rpy_pub.publish(rpy)
+
+        if self.publish_baselink_motion:
+            q = tft.quaternion_from_matrix(m_world_bl)
+            motion = Odometry()
+            motion.header.stamp = rpy.header.stamp
+            # DragonNavigator::targetRotationMotionCallback expects exactly
+            # "baselink" here and applies the target immediately.
+            motion.header.frame_id = "baselink"
+            motion.pose.pose.orientation.x = q[0]
+            motion.pose.pose.orientation.y = q[1]
+            motion.pose.pose.orientation.z = q[2]
+            motion.pose.pose.orientation.w = q[3]
+            self.baselink_motion_pub.publish(motion)
 
     def main(self):
         rate = rospy.Rate(self.rate_hz)

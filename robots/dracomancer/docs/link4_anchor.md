@@ -26,10 +26,14 @@ link1〜3 が振れる挙動が望ましい。これを distal の標準挙動�
 ## DRAGON 制御の前提（確認済み）
 
 - 位置制御点は **COG**（[../../../aerial_robot_control/src/flight_navigation.cpp](../../../aerial_robot_control/src/flight_navigation.cpp) は位置目標を COG として扱う）。
-- 姿勢は **baselink = link2(`fc`)** を保持。`/<robot>/final_target_baselink_rpy`(Vector3Stamped, [r,p,y]) で
-  絶対姿勢を指令可能（[../../dragon/src/dragon_navigation.cpp](../../dragon/src/dragon_navigation.cpp) `targetBaselinkRPYCallback`）。
-- baselink 姿勢はスルーレート制限あり（`baselink_rot_change_thresh`≈0.04 / `baselink_rot_pub_interval`≈0.2s
-  → 約 0.2 rad/s）。
+- `/<robot>/uav/nav` は DRAGON の `HOVER_STATE == 5` でのみ受理される。`LAND_STATE` や
+  DRAGON独自の `PRE_LAND_STATE` 中は nav が無視され、link4アンカーは成立しない。
+- 姿勢は **baselink = link2(`fc`)** を保持。link4アンカーでは `/<robot>/target_rotation_motion`
+  (nav_msgs/Odometry, `header.frame_id=baselink`) で絶対姿勢を即時指令する。互換・可視化用に
+  `/<robot>/final_target_baselink_rpy`(Vector3Stamped, [r,p,y]) も同時publishする。
+- `final_target_baselink_rpy` 単独では baselink 姿勢にスルーレート制限が入る
+  （`baselink_rot_change_thresh`≈0.04 / `baselink_rot_pub_interval`≈0.2s → 約 0.2 rad/s）ため、
+  関節変形に対するlink4固定補償が後れる。
 - baselink を link4 に変えるのは不可（IMU/FC が物理的に link2 にある）。
 - **DRAGON コア改造は不要**。Dracomancer 側で nav + baselink_rpy + joints を協調送信する。
 
@@ -41,7 +45,7 @@ baselink 姿勢を補償指令する。目標関節角 `q`（distal が算出）
 
 ```text
 COG_world      = T_anchor · T_cog→link4(q)^{-1}          # uav/nav の COG 位置目標 (POS_MODE)
-baselink_world.M = T_anchor.M · R_baselink→link4(q)^{-1} # final_target_baselink_rpy (RPY)
+baselink_world.M = T_anchor.M · R_baselink→link4(q)^{-1} # target_rotation_motion / final_target_baselink_rpy
 joints_ctrl    = q                                       # 形状
 ```
 
@@ -60,7 +64,7 @@ flowchart TD
     CAP --> COMP
     FK --> COMP["COG位置・baselink姿勢を逆算"]
     COMP --> NAV["uav/nav (COG, POS_MODE)"]
-    COMP --> RPY["final_target_baselink_rpy"]
+    COMP --> RPY["target_rotation_motion<br/>+ final_target_baselink_rpy"]
     Q --> JC["joints_ctrl"]
     NAV --> DRAGON
     RPY --> DRAGON
@@ -86,7 +90,9 @@ flowchart TD
 | `~world_frame` | `world` | アンカー基準のワールドフレーム |
 | `~cog_frame` / `~baselink_frame` | `<robot>/cog` / `<robot>/fc` | COG・baselink の TF フレーム |
 | `~nav_topic` / `~baselink_rpy_topic` | `/<robot>/uav/nav` / `/<robot>/final_target_baselink_rpy` | 出力先 |
+| `~baselink_motion_topic` / `~publish_baselink_motion` | `/<robot>/target_rotation_motion` / `true` | link4アンカー用のbaselink即時姿勢指令 |
 | `~dragon_link_length` / `~dragon_inter_joint_x_offset` / `~dragon_link2_fc_xyz` | `0.474` / `0.02575` / `[0.3245, -0.0010, 0.0280]` | link4 アンカー用の最小 DRAGON FK パラメータ |
+| `~hover_flight_state` | `5` | DRAGON の HOVER_STATE。link4アンカー補償を出す flight_state |
 | `~recapture_anchor`(Empty) | – | 基準の再キャプチャ要求 |
 
 ## 残課題 / TODO
