@@ -3,7 +3,8 @@
 > 状態: **実装済み**（[../scripts/control/control_joint_angle.py](../scripts/control/control_joint_angle.py)
 > `update_link4_anchor`）。distal マッピングの標準設計の一部として、関節操作時に DRAGON の
 > **link4（腕先端側）をワールドにおおよそ固定**する。既定 ON（`enable_link4_anchor:=true`）。
-> 「完全静止」は要求しない（スルーレート/フィージビリティによる多少のズレは許容）。実機（Gazebo）
+> `joints_ctrl` と同じ目標関節角から link4 の相対姿勢を先に計算し、COG 位置と baselink 姿勢を
+> 同周期で補償する。「完全静止」は要求しない（スルーレート/フィージビリティによる多少のズレは許容）。実機（Gazebo）
 > での挙動確認は teleoperation.launch 再起動後に行うこと。
 
 ## 背景・目的
@@ -44,10 +45,13 @@ baselink_world.M = T_anchor.M · R_baselink→link4(q)^{-1} # final_target_basel
 joints_ctrl    = q                                       # 形状
 ```
 
-これら3つを**同時送信**する。実装では `T_anchor`・`T_cog→link4`・`T_baselink→link4` をすべて
-**TF（tf2）から取得**する（フレーム: `world`、`<robot>/cog`、`<robot>/fc`、`<robot>/link4`）。
-形状は `max_step` で緩やかに変わるため、現在 TF を使う実質フィードバック方式で収束する（厳密 FK は不要）。
-キャプチャ時点では `COG_world = (world→cog)` と一致するため**指令ジャンプは生じない**（代数的に保証）。
+これら3つを**同時送信**する。実装では `T_anchor` を TF（`world`→`<robot>/link4`）から取得し、
+`T_baselink→link4(q)` は DRAGON v1/v1.5 の最小FK（`fc` 固定先の link2 から joint2/joint3 をたどる）で
+`joints_ctrl` と同じ目標関節角から計算する。`T_cog→link4(q)` は現在TFの `cog→fc` と目標FKの
+`fc→link4(q)` を合成する近似とする。
+形状は `max_step` で緩やかに変わるが、link4 補償は現在 link4 TF の後追いではなく、目標形状への
+フィードフォワードとして行う。
+キャプチャ直後の初回補償は、現在TFの `cog→fc` と目標FKを使うため、通常は現在姿勢に近い指令から始まる。
 
 ```mermaid
 flowchart TD
@@ -82,6 +86,7 @@ flowchart TD
 | `~world_frame` | `world` | アンカー基準のワールドフレーム |
 | `~cog_frame` / `~baselink_frame` | `<robot>/cog` / `<robot>/fc` | COG・baselink の TF フレーム |
 | `~nav_topic` / `~baselink_rpy_topic` | `/<robot>/uav/nav` / `/<robot>/final_target_baselink_rpy` | 出力先 |
+| `~dragon_link_length` / `~dragon_inter_joint_x_offset` / `~dragon_link2_fc_xyz` | `0.474` / `0.02575` / `[0.3245, -0.0010, 0.0280]` | link4 アンカー用の最小 DRAGON FK パラメータ |
 | `~recapture_anchor`(Empty) | – | 基準の再キャプチャ要求 |
 
 ## 残課題 / TODO
@@ -89,4 +94,4 @@ flowchart TD
 - 実機（Gazebo）での挙動確認（ズレ量、追従、フィージビリティ）。
 - z（高度）・yaw の追従品質確認（baselink yaw が大きく回る局面の評価）。
 - 移動制御（操縦桿）との両立（uav/nav の合成）。
-- 必要なら厳密 FK（aerial_robot_model）に切替えて目標形状ベースで先行補償。
+- 必要なら COG 変化も含むモデルFK（aerial_robot_model）に切替えて、位置補償の精度を上げる。

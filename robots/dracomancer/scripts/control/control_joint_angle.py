@@ -125,7 +125,7 @@ class ControlJoints:
         distal_signs = rospy.get_param("~distal_signs", [1.0, -1.0, 1.0, 1.0, -1.0])
         distal_scales = rospy.get_param("~distal_scales", [1.0, 1.0, 1.0, 1.0, 1.0])
         # Per-joint additive offset [rad]: target = clamp(sign*scale*source + offset).
-        # shoulder flexion (joint3_pitch) uses offset=pi/2 with sign=-1 so that a 90deg
+        # shoulder flexion (joint3_pitch) uses offset=pi/2 with sign=+1 so that a 90deg
         # operator shoulder maps to joint3_pitch = 0.
         distal_offsets = rospy.get_param("~distal_offsets", [0.0, 0.0, 0.0, np.pi / 2.0, 0.0])
         self.distal_map = []  # list of (source_joint, target_joint, sign, scale, offset)
@@ -146,9 +146,9 @@ class ControlJoints:
         # in the world while joints bend, so the operator's wrist swings link1 and the
         # shoulder swings link1-3. The anchor (link4 world pose) is captured at hover
         # start; each cycle the COG position and baselink attitude that place link4 at
-        # the anchor are computed from TF and sent (uav/nav POS_MODE + baselink rpy),
-        # coordinated with joints_ctrl. Not a perfect hold (slew-rate / feasibility
-        # limited). See docs/link4_anchor.md.
+        # the anchor are computed from the same target joints sent to joints_ctrl
+        # (uav/nav POS_MODE + baselink rpy). Not a perfect hold (slew-rate /
+        # feasibility limited). See docs/link4_anchor.md.
         self.enable_link4_anchor = rospy.get_param("~enable_link4_anchor", True)
         self.world_frame = rospy.get_param("~world_frame", "world")
         anchor_link = rospy.get_param("~anchor_link", "link4")
@@ -158,8 +158,14 @@ class ControlJoints:
         self.nav_topic = rospy.get_param("~nav_topic", "/" + self.robot_name + "/uav/nav")
         self.baselink_rpy_topic = rospy.get_param(
             "~baselink_rpy_topic", "/" + self.robot_name + "/final_target_baselink_rpy")
+        # Minimal DRAGON v1/v1.5 kinematics used for target-shape feed-forward.
+        # fc is fixed to link2; link4 is reached through joint2 and joint3.
+        self.dragon_link_length = float(rospy.get_param("~dragon_link_length", 0.474))
+        self.dragon_inter_joint_x_offset = float(rospy.get_param("~dragon_inter_joint_x_offset", 0.02575))
+        self.dragon_link2_fc_xyz = rospy.get_param("~dragon_link2_fc_xyz", [0.3245, -0.0010, 0.0280])
         self.anchor_mat = None
         self.want_capture_anchor = False
+        self.cog_fc_mat = None
 
         # --- geometric (long-term) mapping ---------------------------------------
         # Arm kinematic chain (parent->child joint origins / axes) taken from
@@ -644,24 +650,50 @@ class ControlJoints:
         m[0, 3], m[1, 3], m[2, 3] = t.x, t.y, t.z
         return m
 
+    @staticmethod
+    def xyz_to_matrix(xyz):
+        return tft.translation_matrix([float(xyz[0]), float(xyz[1]), float(xyz[2])])
+
     def lookup_matrix(self, target_frame, source_frame):
         # pose of source_frame expressed in target_frame
         tr = self.tf_buffer.lookup_transform(target_frame, source_frame,
                                              rospy.Time(0), rospy.Duration(0.1))
         return self.tf_to_matrix(tr)
 
-    def update_link4_anchor(self):
+    def dragon_joint_value(self, joints, name):
+        idx = self.joint_index.get(name)
+        if idx is None or joints is None or idx >= len(joints):
+            return 0.0
+        return float(joints[idx])
+
+    def dragon_fc_to_link4_matrix(self, joints):
+        # URDF v1/v1.5 chain:
+        # fc fixed on link2, then link2 -> joint2_pitch -> joint2_yaw -> link3
+        # -> joint3_pitch -> joint3_yaw -> link4.
+        m = tft.inverse_matrix(self.xyz_to_matrix(self.dragon_link2_fc_xyz))
+        for joint_id in (2, 3):
+            pitch = self.dragon_joint_value(joints, "joint%d_pitch" % joint_id)
+            yaw = self.dragon_joint_value(joints, "joint%d_yaw" % joint_id)
+            m = m.dot(tft.translation_matrix([self.dragon_link_length, 0.0, 0.0]))
+            m = m.dot(tft.rotation_matrix(pitch, [0.0, 1.0, 0.0]))
+            m = m.dot(tft.translation_matrix([2.0 * self.dragon_inter_joint_x_offset, 0.0, 0.0]))
+            m = m.dot(tft.rotation_matrix(yaw, [0.0, 0.0, 1.0]))
+        return m
+
+    def update_link4_anchor(self, target_joints=None):
         # Keep the anchor link (link4) at the pose captured at hover start by
         # commanding the COG position and baselink attitude that place it there.
         if not self.enable_link4_anchor or self.mapping_mode != "distal":
             return
         if not self.robot_hovering:
             self.anchor_mat = None  # re-capture on next hover
+            self.cog_fc_mat = None
             return
         # capture at hover start (or on request)
         if self.anchor_mat is None or self.want_capture_anchor:
             try:
                 self.anchor_mat = self.lookup_matrix(self.world_frame, self.anchor_frame)
+                self.cog_fc_mat = self.lookup_matrix(self.cog_frame, self.baselink_frame)
                 self.want_capture_anchor = False
                 rospy.loginfo("link4 anchor captured (%s in %s)", self.anchor_frame, self.world_frame)
             except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
@@ -671,13 +703,18 @@ class ControlJoints:
         # only steer the body while the operator is actively shaping
         if self.teleop_mode != "teleoperation":
             return
+        if target_joints is None:
+            return
         try:
-            m_cog_link4 = self.lookup_matrix(self.cog_frame, self.anchor_frame)
-            m_bl_link4 = self.lookup_matrix(self.baselink_frame, self.anchor_frame)
+            # Keep cog->fc fresh, but do not read cog/fc->link4 from live TF here:
+            # link4 must be compensated for the target shape we are about to command.
+            self.cog_fc_mat = self.lookup_matrix(self.cog_frame, self.baselink_frame)
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
                 tf2_ros.ExtrapolationException) as e:
-            rospy.logwarn_throttle(2.0, "link4 anchor tf lookup failed: %s", str(e))
+            rospy.logwarn_throttle(2.0, "link4 anchor cog->fc lookup failed: %s", str(e))
             return
+        m_bl_link4 = self.dragon_fc_to_link4_matrix(target_joints)
+        m_cog_link4 = self.cog_fc_mat.dot(m_bl_link4)
         # world poses that hold link4 at the anchor: T_world_x = T_anchor * T_x_link4^-1
         m_world_cog = self.anchor_mat.dot(tft.inverse_matrix(m_cog_link4))
         m_world_bl = self.anchor_mat.dot(tft.inverse_matrix(m_bl_link4))
@@ -704,8 +741,11 @@ class ControlJoints:
 
         while not rospy.is_shutdown():
             if self.can_publish_joint_command():
-                self.joints_ctrl_pub.publish(self.make_joint_msg())
-            self.update_link4_anchor()
+                joint_msg = self.make_joint_msg()
+                self.update_link4_anchor(joint_msg.position)
+                self.joints_ctrl_pub.publish(joint_msg)
+            else:
+                self.update_link4_anchor()
             rate.sleep()
 
 
