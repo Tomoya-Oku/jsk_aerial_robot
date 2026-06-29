@@ -171,7 +171,7 @@ class ControlJoints:
             "upper_arm_external_internal_rotation_joint",
             "wrist_supination_joint",
         ])
-        self.baselink_roll_signs = rospy.get_param("~baselink_roll_signs", [1.0, 1.0])
+        self.baselink_roll_signs = rospy.get_param("~baselink_roll_signs", [-1.0, -1.0])
         self.baselink_roll_scales = rospy.get_param("~baselink_roll_scales", [1.0, 1.0])
         self.baselink_roll_offset = float(rospy.get_param("~baselink_roll_offset", 0.0))
         self.baselink_roll_limit = abs(float(rospy.get_param("~baselink_roll_limit", np.pi / 2.0)))

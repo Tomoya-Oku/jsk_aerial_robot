@@ -244,7 +244,7 @@
     <param name="enable_baselink_roll_mapping" value="$(arg enable_baselink_roll_mapping)"/>
     <param name="baselink_roll_limit" value="$(arg baselink_roll_limit)"/>
     <rosparam param="baselink_roll_source_joints">["upper_arm_external_internal_rotation_joint", "wrist_supination_joint"]</rosparam>
-    <rosparam param="baselink_roll_signs">[1.0, 1.0]</rosparam>
+    <rosparam param="baselink_roll_signs">[-1.0, -1.0]</rosparam>
     <rosparam param="baselink_roll_scales">[1.0, 1.0]</rosparam>
     <param name="hover_flight_state" value="$(arg hover_flight_state)"/>
     <param name="publish_only_when_hovering" value="$(arg publish_joints_only_when_hovering)"/>

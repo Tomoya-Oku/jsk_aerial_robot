@@ -389,7 +389,7 @@ flowchart TD
 | `publish_link4_anchor_baselink_motion` | `true` | link4アンカー時に `/dragon/target_rotation_motion` へbaselink姿勢を即時指令する |
 | `enable_baselink_roll_mapping` | `true` | `distal` 時に上腕ロールと前腕ロールの中立値からの差分和をbaselink rollへ加算 |
 | `baselink_roll_source_joints` | `[upper_arm_external_internal_rotation_joint, wrist_supination_joint]` | baselink roll に使う Dracomancer ロール関節 |
-| `baselink_roll_signs` | `[1.0, 1.0]` | baselink roll 差分の符号。回転方向が逆なら該当要素を反転 |
+| `baselink_roll_signs` | `[-1.0, -1.0]` | baselink roll 差分の符号。回転方向が逆なら該当要素を反転 |
 | `baselink_roll_scales` | `[1.0, 1.0]` | baselink roll 差分の各ゲイン |
 | `baselink_roll_limit` | `π/2` | baselink roll へ加算する差分の絶対値上限 [rad] |
 | `hover_flight_state` | `5` | DRAGON の HOVER_STATE。`/dragon/uav/nav` はHOVER以外では無視されるため、link4アンカーもこの状態でのみ有効 |

@@ -95,7 +95,7 @@ flowchart TD
 | `~nav_topic` / `~baselink_rpy_topic` | `/<robot>/uav/nav` / `/<robot>/final_target_baselink_rpy` | 出力先 |
 | `~baselink_motion_topic` / `~publish_baselink_motion` | `/<robot>/target_rotation_motion` / `true` | link4アンカー用のbaselink即時姿勢指令 |
 | `~enable_baselink_roll_mapping` | `true` | 上腕ロール+前腕ロールの差分和をbaselink rollへ加算 |
-| `~baselink_roll_source_joints` / `~baselink_roll_signs` / `~baselink_roll_scales` | `[upper_arm_external_internal_rotation_joint, wrist_supination_joint]` / `[1,1]` / `[1,1]` | baselink roll 差分の入力・符号・ゲイン |
+| `~baselink_roll_source_joints` / `~baselink_roll_signs` / `~baselink_roll_scales` | `[upper_arm_external_internal_rotation_joint, wrist_supination_joint]` / `[-1,-1]` / `[1,1]` | baselink roll 差分の入力・符号・ゲイン |
 | `~baselink_roll_limit` | `pi/2` | baselink roll へ加算する差分の絶対値上限 [rad] |
 | `~dragon_link_length` / `~dragon_inter_joint_x_offset` / `~dragon_link2_fc_xyz` | `0.474` / `0.02575` / `[0.3245, -0.0010, 0.0280]` | link4 アンカー用の最小 DRAGON FK パラメータ |
 | `~hover_flight_state` | `5` | DRAGON の HOVER_STATE。link4アンカー補償を出す flight_state |
