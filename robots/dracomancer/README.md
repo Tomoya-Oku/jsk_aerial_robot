@@ -199,7 +199,7 @@ Dracomancer の腕関節を、DRAGON を1本の直列アームとみなして対
 | --- | --- |
 | `joint_pairing` | 3つの屈曲関節を DRAGON の3つの yaw に1:1対応、pitch は 0 固定で平面保持 |
 | `geometric` | 腕の順運動学からリンク方向ベクトルを求め、面内(yaw)/面外(pitch)成分に分解 |
-| `distal`（**既定**） | 遠位腕関節（手首・肘）を DRAGON 関節へ絶対角で一致させる（手首屈曲→joint1_pitch、手首内外転→joint1_yaw、肘屈曲→joint2_yaw。未対応関節は現状維持）。旧名 `elbow_only` も後方互換で可 |
+| `distal`（**既定**） | 遠位腕関節（手首・肘）を DRAGON 関節へ絶対角で一致させる（手首屈曲→joint1_pitch、手首内外転→joint1_yaw、肘屈曲→joint2_yaw、肩屈曲→joint3_pitch、肩内外転→joint3_yaw。上腕ロール+前腕ロールの差分和はbaselink rollへ加算）。旧名 `elbow_only` も後方互換で可 |
 
 ### joint_pairing（中期方式）
 
@@ -227,7 +227,7 @@ target        = clamp(mapped, -joint_limit, joint_limit)
 - `joint_pairing_scale` は全関節の写像ゲインに掛かる一括係数。安全ゲートを残す試験では `0.2〜0.4` 程度から始める。
 - `capture_neutral_on_first_msg=true` にすると、最初に受け取った Dracomancer 関節角を `neutral` として記憶し、以後はそこからの差分を使う。
 - `joint_limit=pi/2` が既定。
-- 捻り（supination, upper_arm_rotation）と外転は未使用。面外形状が必要なら pitch に source を割り当てる。
+- `distal` では捻り（`upper_arm_external_internal_rotation_joint` と `wrist_supination_joint`）を最初の受信値・ホバー開始時・link4アンカー再取得時の中立値からの差分として合算し、baselink roll に加算する（`enable_baselink_roll_mapping`）。
 
 推奨する形状制御試験設定:
 
@@ -387,6 +387,11 @@ flowchart TD
 | `distal_offsets` | `[0, 0, 0, π/2, 0]` | `distal` の各加算オフセット[rad]（`sign*scale*source + offset`。肩屈曲=π/2 で 90°→0°） |
 | `enable_link4_anchor` | `true` | `distal` 時に link4 をワールド固定（COG位置+baselink姿勢を補償）。`enable_position_control` とは併用不可 |
 | `publish_link4_anchor_baselink_motion` | `true` | link4アンカー時に `/dragon/target_rotation_motion` へbaselink姿勢を即時指令する |
+| `enable_baselink_roll_mapping` | `true` | `distal` 時に上腕ロールと前腕ロールの中立値からの差分和をbaselink rollへ加算 |
+| `baselink_roll_source_joints` | `[upper_arm_external_internal_rotation_joint, wrist_supination_joint]` | baselink roll に使う Dracomancer ロール関節 |
+| `baselink_roll_signs` | `[1.0, 1.0]` | baselink roll 差分の符号。回転方向が逆なら該当要素を反転 |
+| `baselink_roll_scales` | `[1.0, 1.0]` | baselink roll 差分の各ゲイン |
+| `baselink_roll_limit` | `π/2` | baselink roll へ加算する差分の絶対値上限 [rad] |
 | `hover_flight_state` | `5` | DRAGON の HOVER_STATE。`/dragon/uav/nav` はHOVER以外では無視されるため、link4アンカーもこの状態でのみ有効 |
 | `capture_neutral_on_first_msg` | `false` | 最初の Dracomancer 関節角を中立姿勢として記憶（`elbow_only` では不使用） |
 | `enable_feasibility_gate` | `false` | 予測ゲートの有効化（既定 OFF：フルベクタリング DRAGON で予測 fc≈0 となり全変形が凍結するため。「既知の課題」参照）。false で候補をそのまま採用 |

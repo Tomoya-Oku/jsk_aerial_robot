@@ -20,7 +20,7 @@ link1〜3 が振れる挙動が望ましい。これを distal の標準挙動�
 
 1. **distal の標準設計の一つ**として `control_joint_angle.py` 内に実装（別ノードにしない）。
 2. **基準（link4 の固定目標姿勢）はホバー開始時にキャプチャ**する。
-   - `flight_state >= 4`（hovering）への遷移時に、その時点の link4 world pose を記録。
+   - `flight_state == 5`（HOVER_STATE）への遷移時に、その時点の link4 world pose を記録。
    - `~recapture_anchor`(std_msgs/Empty) で再キャプチャ可能。ホバリングを抜けると基準は破棄し次のホバーで再取得。
 
 ## DRAGON 制御の前提（確認済み）
@@ -28,7 +28,9 @@ link1〜3 が振れる挙動が望ましい。これを distal の標準挙動�
 - 位置制御点は **COG**（[../../../aerial_robot_control/src/flight_navigation.cpp](../../../aerial_robot_control/src/flight_navigation.cpp) は位置目標を COG として扱う）。
 - `/<robot>/uav/nav` は DRAGON の `HOVER_STATE == 5` でのみ受理される。`LAND_STATE` や
   DRAGON独自の `PRE_LAND_STATE` 中は nav が無視され、link4アンカーは成立しない。
-- 姿勢は **baselink = link2(`fc`)** を保持。link4アンカーでは `/<robot>/target_rotation_motion`
+- 姿勢は **baselink = link2(`fc`)** を保持。さらに `enable_baselink_roll_mapping` が有効なら、
+  上腕ロールと前腕ロールの中立値からの差分和を、逆算した baselink roll に加算する。
+- link4アンカーでは `/<robot>/target_rotation_motion`
   (nav_msgs/Odometry, `header.frame_id=baselink`) で絶対姿勢を即時指令する。互換・可視化用に
   `/<robot>/final_target_baselink_rpy`(Vector3Stamped, [r,p,y]) も同時publishする。
 - `final_target_baselink_rpy` 単独では baselink 姿勢にスルーレート制限が入る
@@ -46,6 +48,7 @@ baselink 姿勢を補償指令する。目標関節角 `q`（distal が算出）
 ```text
 COG_world      = T_anchor · T_cog→link4(q)^{-1}          # uav/nav の COG 位置目標 (POS_MODE)
 baselink_world.M = T_anchor.M · R_baselink→link4(q)^{-1} # target_rotation_motion / final_target_baselink_rpy
+baselink_roll += sum(upper_arm_roll_delta, forearm_roll_delta)
 joints_ctrl    = q                                       # 形状
 ```
 
@@ -59,7 +62,7 @@ joints_ctrl    = q                                       # 形状
 
 ```mermaid
 flowchart TD
-    H["hover 開始 (flight_state>=4)"] --> CAP["link4 world pose をキャプチャ = T_anchor"]
+    H["hover 開始 (flight_state==5)"] --> CAP["link4 world pose をキャプチャ = T_anchor"]
     Q["distal: 目標関節角 q"] --> FK["TF/モデルで T_cog->link4(q), R_baselink->link4(q)"]
     CAP --> COMP
     FK --> COMP["COG位置・baselink姿勢を逆算"]
@@ -91,6 +94,9 @@ flowchart TD
 | `~cog_frame` / `~baselink_frame` | `<robot>/cog` / `<robot>/fc` | COG・baselink の TF フレーム |
 | `~nav_topic` / `~baselink_rpy_topic` | `/<robot>/uav/nav` / `/<robot>/final_target_baselink_rpy` | 出力先 |
 | `~baselink_motion_topic` / `~publish_baselink_motion` | `/<robot>/target_rotation_motion` / `true` | link4アンカー用のbaselink即時姿勢指令 |
+| `~enable_baselink_roll_mapping` | `true` | 上腕ロール+前腕ロールの差分和をbaselink rollへ加算 |
+| `~baselink_roll_source_joints` / `~baselink_roll_signs` / `~baselink_roll_scales` | `[upper_arm_external_internal_rotation_joint, wrist_supination_joint]` / `[1,1]` / `[1,1]` | baselink roll 差分の入力・符号・ゲイン |
+| `~baselink_roll_limit` | `pi/2` | baselink roll へ加算する差分の絶対値上限 [rad] |
 | `~dragon_link_length` / `~dragon_inter_joint_x_offset` / `~dragon_link2_fc_xyz` | `0.474` / `0.02575` / `[0.3245, -0.0010, 0.0280]` | link4 アンカー用の最小 DRAGON FK パラメータ |
 | `~hover_flight_state` | `5` | DRAGON の HOVER_STATE。link4アンカー補償を出す flight_state |
 | `~recapture_anchor`(Empty) | – | 基準の再キャプチャ要求 |

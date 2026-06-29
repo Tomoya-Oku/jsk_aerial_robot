@@ -166,6 +166,17 @@ class ControlJoints:
         self.baselink_motion_topic = rospy.get_param(
             "~baselink_motion_topic", "/" + self.robot_name + "/target_rotation_motion")
         self.publish_baselink_motion = rospy.get_param("~publish_baselink_motion", True)
+        self.enable_baselink_roll_mapping = rospy.get_param("~enable_baselink_roll_mapping", True)
+        self.baselink_roll_source_joints = rospy.get_param("~baselink_roll_source_joints", [
+            "upper_arm_external_internal_rotation_joint",
+            "wrist_supination_joint",
+        ])
+        self.baselink_roll_signs = rospy.get_param("~baselink_roll_signs", [1.0, 1.0])
+        self.baselink_roll_scales = rospy.get_param("~baselink_roll_scales", [1.0, 1.0])
+        self.baselink_roll_offset = float(rospy.get_param("~baselink_roll_offset", 0.0))
+        self.baselink_roll_limit = abs(float(rospy.get_param("~baselink_roll_limit", np.pi / 2.0)))
+        self.baselink_roll_neutral_joints = {}
+        self.want_capture_baselink_roll_neutral = True
         # Minimal DRAGON v1/v1.5 kinematics used for target-shape feed-forward.
         # fc is fixed to link2; link4 is reached through joint2 and joint3.
         self.dragon_link_length = float(rospy.get_param("~dragon_link_length", 0.474))
@@ -341,10 +352,55 @@ class ControlJoints:
     def clamp_target(self, target):
         return [self.clamp(v) for v in target]
 
+    def maybe_capture_baselink_roll_neutral(self, force=False):
+        if not self.enable_baselink_roll_mapping:
+            return
+        if not force and not self.want_capture_baselink_roll_neutral:
+            return
+        missing = [
+            name for name in self.baselink_roll_source_joints
+            if name not in self.latest_device_joints
+        ]
+        if missing:
+            rospy.logwarn_throttle(
+                2.0,
+                "baselink roll neutral capture waiting for joints: %s",
+                ", ".join(missing))
+            return
+        self.baselink_roll_neutral_joints = {
+            name: self.latest_device_joints[name]
+            for name in self.baselink_roll_source_joints
+        }
+        self.want_capture_baselink_roll_neutral = False
+        rospy.loginfo("Captured dracomancer roll neutral joints for baselink roll mapping")
+
+    def baselink_roll_delta(self):
+        if not self.enable_baselink_roll_mapping:
+            return 0.0
+        self.maybe_capture_baselink_roll_neutral()
+        if not self.baselink_roll_neutral_joints:
+            return 0.0
+
+        total = self.baselink_roll_offset
+        for i, name in enumerate(self.baselink_roll_source_joints):
+            if name not in self.latest_device_joints:
+                return 0.0
+            neutral = self.baselink_roll_neutral_joints.get(name)
+            if neutral is None:
+                return 0.0
+            sign = float(self.baselink_roll_signs[i]) if i < len(self.baselink_roll_signs) else 1.0
+            scale = float(self.baselink_roll_scales[i]) if i < len(self.baselink_roll_scales) else 1.0
+            total += sign * scale * self.wrap(self.latest_device_joints[name] - neutral)
+
+        if self.baselink_roll_limit > 0.0:
+            total = max(-self.baselink_roll_limit, min(self.baselink_roll_limit, total))
+        return total
+
     def device_joint_cb(self, msg):
         self.latest_device_joints = {
             name: float(pos) for name, pos in zip(msg.name, msg.position)
         }
+        self.maybe_capture_baselink_roll_neutral()
         if self.capture_neutral and not self.neutral_device_joints:
             # Capture the joints actually used as mapping sources. In joint_pairing the
             # empty (constant) entries are skipped; in geometric every chain joint is
@@ -364,10 +420,12 @@ class ControlJoints:
         # Capture the link4 anchor at the moment hovering starts.
         if hovering and not self.robot_hovering:
             self.want_capture_anchor = True
+            self.want_capture_baselink_roll_neutral = True
         self.robot_hovering = hovering
 
     def recapture_anchor_cb(self, msg):
         self.want_capture_anchor = True
+        self.want_capture_baselink_roll_neutral = True
         rospy.loginfo("link4 anchor recapture requested")
 
     def force_threshold_cb(self, msg):
@@ -707,6 +765,7 @@ class ControlJoints:
                 self.anchor_mat = self.lookup_matrix(self.world_frame, self.anchor_frame)
                 self.cog_fc_mat = self.lookup_matrix(self.cog_frame, self.baselink_frame)
                 self.want_capture_anchor = False
+                self.maybe_capture_baselink_roll_neutral(force=True)
                 rospy.loginfo("link4 anchor captured (%s in %s)", self.anchor_frame, self.world_frame)
             except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
                     tf2_ros.ExtrapolationException) as e:
@@ -743,13 +802,14 @@ class ControlJoints:
         self.nav_pub.publish(nav)
 
         roll, pitch, yaw = tft.euler_from_matrix(m_world_bl)
+        roll += self.baselink_roll_delta()
         rpy = Vector3Stamped()
         rpy.header.stamp = rospy.Time.now()
         rpy.vector.x, rpy.vector.y, rpy.vector.z = roll, pitch, yaw
         self.baselink_rpy_pub.publish(rpy)
 
         if self.publish_baselink_motion:
-            q = tft.quaternion_from_matrix(m_world_bl)
+            q = tft.quaternion_from_euler(roll, pitch, yaw)
             motion = Odometry()
             motion.header.stamp = rpy.header.stamp
             # DragonNavigator::targetRotationMotionCallback expects exactly

@@ -69,6 +69,10 @@
        (default ON). See docs/link4_anchor.md. -->
   <arg name="enable_link4_anchor" default="true"/>
   <arg name="publish_link4_anchor_baselink_motion" default="true"/>
+  <!-- Baselink roll mapping: sum upper-arm roll and forearm roll deltas from the
+       captured neutral pose, then add the result to the link4-anchor baselink roll. -->
+  <arg name="enable_baselink_roll_mapping" default="true"/>
+  <arg name="baselink_roll_limit" default="1.5707963267948966"/>
   <!-- Joystick movement control is OFF by default: control_position publishes a
        POS_VEL_MODE FlightNav whose target_pos is unset (=0), which commands DRAGON
        toward origin/ground (fall). Enable only once that is addressed. -->
@@ -237,6 +241,11 @@
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
     <param name="enable_link4_anchor" value="$(arg enable_link4_anchor)"/>
     <param name="publish_baselink_motion" value="$(arg publish_link4_anchor_baselink_motion)"/>
+    <param name="enable_baselink_roll_mapping" value="$(arg enable_baselink_roll_mapping)"/>
+    <param name="baselink_roll_limit" value="$(arg baselink_roll_limit)"/>
+    <rosparam param="baselink_roll_source_joints">["upper_arm_external_internal_rotation_joint", "wrist_supination_joint"]</rosparam>
+    <rosparam param="baselink_roll_signs">[1.0, 1.0]</rosparam>
+    <rosparam param="baselink_roll_scales">[1.0, 1.0]</rosparam>
     <param name="hover_flight_state" value="$(arg hover_flight_state)"/>
     <param name="publish_only_when_hovering" value="$(arg publish_joints_only_when_hovering)"/>
     <param name="publish_before_device_ready" value="$(arg publish_joints_before_device_ready)"/>
