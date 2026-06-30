@@ -177,6 +177,12 @@ class ControlJoints:
         self.baselink_roll_limit = abs(float(rospy.get_param("~baselink_roll_limit", np.pi / 2.0)))
         self.baselink_roll_neutral_joints = {}
         self.want_capture_baselink_roll_neutral = True
+        self.enable_link4_anchor_body_step_scaling = rospy.get_param(
+            "~enable_link4_anchor_body_step_scaling", True)
+        self.link4_anchor_max_body_pos_rate = float(rospy.get_param(
+            "~link4_anchor_max_body_pos_rate", 0.4))
+        self.link4_anchor_max_body_rpy_rate = float(rospy.get_param(
+            "~link4_anchor_max_body_rpy_rate", 0.8))
         # Minimal DRAGON v1/v1.5 kinematics used for target-shape feed-forward.
         # fc is fixed to link2; link4 is reached through joint2 and joint3.
         self.dragon_link_length = float(rospy.get_param("~dragon_link_length", 0.474))
@@ -319,6 +325,10 @@ class ControlJoints:
                       self.cog_frame, self.baselink_frame)
         rospy.loginfo("link4 anchor baselink motion: enable=%s, topic=%s",
                       self.publish_baselink_motion, self.baselink_motion_topic)
+        rospy.loginfo("link4 anchor body step scaling: enable=%s, pos/rpy rate=%.3f/%.3f",
+                      self.enable_link4_anchor_body_step_scaling,
+                      self.link4_anchor_max_body_pos_rate,
+                      self.link4_anchor_max_body_rpy_rate)
 
     def connect_feasibility_service(self):
         try:
@@ -685,7 +695,46 @@ class ControlJoints:
         for cur, dst in zip(self.current_target, target):
             delta = max(-self.max_step, min(self.max_step, dst - cur))
             limited.append(cur + delta)
-        return limited
+        return self.link4_body_step_scale(limited)
+
+    def link4_body_step_scale(self, target):
+        if not self.enable_link4_anchor_body_step_scaling:
+            return target
+        if not self.enable_link4_anchor or self.mapping_mode != "distal":
+            return target
+        if not self.robot_hovering or self.teleop_mode != "teleoperation":
+            return target
+        if self.anchor_mat is None or self.cog_fc_mat is None:
+            return target
+
+        current_body = self.link4_anchor_body_target(self.current_target)
+        target_body = self.link4_anchor_body_target(target)
+        if current_body is None or target_body is None:
+            return target
+
+        pos_limit = self.link4_anchor_max_body_pos_rate / self.rate_hz if self.rate_hz > 0.0 else 0.0
+        rpy_limit = self.link4_anchor_max_body_rpy_rate / self.rate_hz if self.rate_hz > 0.0 else 0.0
+        if pos_limit <= 0.0 and rpy_limit <= 0.0:
+            return target
+
+        cur_pos, cur_rpy = current_body
+        dst_pos, dst_rpy = target_body
+        pos_delta = float(np.linalg.norm(dst_pos - cur_pos))
+        rpy_delta = max(abs(self.wrap(dst_rpy[i] - cur_rpy[i])) for i in range(3))
+
+        scale = 1.0
+        if pos_limit > 0.0 and pos_delta > pos_limit:
+            scale = min(scale, pos_limit / pos_delta)
+        if rpy_limit > 0.0 and rpy_delta > rpy_limit:
+            scale = min(scale, rpy_limit / rpy_delta)
+        if scale >= 1.0:
+            return target
+
+        rospy.loginfo_throttle(
+            1.0,
+            "link4 anchor body step scaling: scale=%.3f pos=%.4f/%.4f rpy=%.4f/%.4f",
+            scale, pos_delta, pos_limit, rpy_delta, rpy_limit)
+        return self.interpolate_target(self.current_target, target, scale)
 
     def publish_shape_error(self, desired, target):
         msg = Float64MultiArray()
@@ -750,6 +799,19 @@ class ControlJoints:
             m = m.dot(tft.rotation_matrix(yaw, [0.0, 0.0, 1.0]))
         return m
 
+    def link4_anchor_body_target(self, target_joints):
+        if self.anchor_mat is None or self.cog_fc_mat is None or target_joints is None:
+            return None
+        m_bl_link4 = self.dragon_fc_to_link4_matrix(target_joints)
+        m_cog_link4 = self.cog_fc_mat.dot(m_bl_link4)
+        # world poses that hold link4 at the anchor: T_world_x = T_anchor * T_x_link4^-1
+        m_world_cog = self.anchor_mat.dot(tft.inverse_matrix(m_cog_link4))
+        m_world_bl = self.anchor_mat.dot(tft.inverse_matrix(m_bl_link4))
+        roll, pitch, yaw = tft.euler_from_matrix(m_world_bl)
+        roll += self.baselink_roll_delta()
+        return np.array([m_world_cog[0, 3], m_world_cog[1, 3], m_world_cog[2, 3]], dtype=float), \
+            [roll, pitch, yaw]
+
     def update_link4_anchor(self, target_joints=None):
         # Keep the anchor link (link4) at the pose captured at hover start by
         # commanding the COG position and baselink attitude that place it there.
@@ -784,11 +846,10 @@ class ControlJoints:
                 tf2_ros.ExtrapolationException) as e:
             rospy.logwarn_throttle(2.0, "link4 anchor cog->fc lookup failed: %s", str(e))
             return
-        m_bl_link4 = self.dragon_fc_to_link4_matrix(target_joints)
-        m_cog_link4 = self.cog_fc_mat.dot(m_bl_link4)
-        # world poses that hold link4 at the anchor: T_world_x = T_anchor * T_x_link4^-1
-        m_world_cog = self.anchor_mat.dot(tft.inverse_matrix(m_cog_link4))
-        m_world_bl = self.anchor_mat.dot(tft.inverse_matrix(m_bl_link4))
+        body_target = self.link4_anchor_body_target(target_joints)
+        if body_target is None:
+            return
+        pos, rpy_target = body_target
 
         nav = FlightNav()
         nav.header.stamp = rospy.Time.now()
@@ -796,13 +857,12 @@ class ControlJoints:
         nav.target = FlightNav.COG
         nav.pos_xy_nav_mode = FlightNav.POS_MODE
         nav.pos_z_nav_mode = FlightNav.POS_MODE
-        nav.target_pos_x = float(m_world_cog[0, 3])
-        nav.target_pos_y = float(m_world_cog[1, 3])
-        nav.target_pos_z = float(m_world_cog[2, 3])
+        nav.target_pos_x = float(pos[0])
+        nav.target_pos_y = float(pos[1])
+        nav.target_pos_z = float(pos[2])
         self.nav_pub.publish(nav)
 
-        roll, pitch, yaw = tft.euler_from_matrix(m_world_bl)
-        roll += self.baselink_roll_delta()
+        roll, pitch, yaw = rpy_target
         rpy = Vector3Stamped()
         rpy.header.stamp = rospy.Time.now()
         rpy.vector.x, rpy.vector.y, rpy.vector.z = roll, pitch, yaw

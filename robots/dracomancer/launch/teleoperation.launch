@@ -69,6 +69,11 @@
        (default ON). See docs/link4_anchor.md. -->
   <arg name="enable_link4_anchor" default="true"/>
   <arg name="publish_link4_anchor_baselink_motion" default="true"/>
+  <!-- Limit joint-step progress so the link4-anchor body compensation target does
+       not require excessive COG position / baselink attitude motion. -->
+  <arg name="enable_link4_anchor_body_step_scaling" default="true"/>
+  <arg name="link4_anchor_max_body_pos_rate" default="0.4"/>
+  <arg name="link4_anchor_max_body_rpy_rate" default="0.8"/>
   <!-- Baselink roll mapping: sum upper-arm roll and forearm roll deltas from the
        captured neutral pose, then add the result to the link4-anchor baselink roll. -->
   <arg name="enable_baselink_roll_mapping" default="true"/>
@@ -241,6 +246,9 @@
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
     <param name="enable_link4_anchor" value="$(arg enable_link4_anchor)"/>
     <param name="publish_baselink_motion" value="$(arg publish_link4_anchor_baselink_motion)"/>
+    <param name="enable_link4_anchor_body_step_scaling" value="$(arg enable_link4_anchor_body_step_scaling)"/>
+    <param name="link4_anchor_max_body_pos_rate" value="$(arg link4_anchor_max_body_pos_rate)"/>
+    <param name="link4_anchor_max_body_rpy_rate" value="$(arg link4_anchor_max_body_rpy_rate)"/>
     <param name="enable_baselink_roll_mapping" value="$(arg enable_baselink_roll_mapping)"/>
     <param name="baselink_roll_limit" value="$(arg baselink_roll_limit)"/>
     <rosparam param="baselink_roll_source_joints">["upper_arm_external_internal_rotation_joint", "wrist_supination_joint"]</rosparam>

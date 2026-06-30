@@ -58,6 +58,10 @@ joints_ctrl    = q                                       # 形状
 `fc→link4(q)` を合成する近似とする。
 形状は `max_step` で緩やかに変わるが、link4 補償は現在 link4 TF の後追いではなく、目標形状への
 フィードフォワードとして行う。
+`enable_link4_anchor_body_step_scaling` が有効な場合、`max_step` 適用後の候補姿勢が必要とする
+COG位置目標・baselink姿勢目標の変化量を予測し、`link4_anchor_max_body_pos_rate` /
+`link4_anchor_max_body_rpy_rate` を超えると関節ステップ全体を縮小する。これにより、形状変化の速さを
+body補償が追従できる範囲へ合わせる。
 キャプチャ直後の初回補償は、現在TFの `cog→fc` と目標FKを使うため、通常は現在姿勢に近い指令から始まる。
 
 ```mermaid
@@ -94,6 +98,8 @@ flowchart TD
 | `~cog_frame` / `~baselink_frame` | `<robot>/cog` / `<robot>/fc` | COG・baselink の TF フレーム |
 | `~nav_topic` / `~baselink_rpy_topic` | `/<robot>/uav/nav` / `/<robot>/final_target_baselink_rpy` | 出力先 |
 | `~baselink_motion_topic` / `~publish_baselink_motion` | `/<robot>/target_rotation_motion` / `true` | link4アンカー用のbaselink即時姿勢指令 |
+| `~enable_link4_anchor_body_step_scaling` | `true` | body目標の必要変化量に基づいて関節ステップを自動縮小 |
+| `~link4_anchor_max_body_pos_rate` / `~link4_anchor_max_body_rpy_rate` | `0.4` / `0.8` | body step scalingで許容するCOG位置・baselink姿勢の最大変化速度 |
 | `~enable_baselink_roll_mapping` | `true` | 上腕ロール+前腕ロールの差分和をbaselink rollへ加算 |
 | `~baselink_roll_source_joints` / `~baselink_roll_signs` / `~baselink_roll_scales` | `[upper_arm_external_internal_rotation_joint, wrist_supination_joint]` / `[-1,-1]` / `[1,1]` | baselink roll 差分の入力・符号・ゲイン |
 | `~baselink_roll_limit` | `pi/2` | baselink roll へ加算する差分の絶対値上限 [rad] |
