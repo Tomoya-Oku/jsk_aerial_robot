@@ -1,0 +1,5 @@
+samples: 83
+fc_f_min: min=0.034609 p5=0.070544 p25=0.107721 median=0.170928 p75=0.278451 max=1.516738
+fc_t_min: min=0.000000 p5=0.000345 p25=0.006505 median=0.073452 p75=0.267838 max=1.891705
+force_thresholds hard_min=0.070544 min=0.136743
+torque_thresholds hard_min=0.000345 min=0.058762
