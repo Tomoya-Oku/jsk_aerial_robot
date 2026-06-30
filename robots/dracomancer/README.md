@@ -360,7 +360,7 @@ flowchart TD
 | `/dracomancer/force_volume_radius_threshold_cmd` | `std_msgs/Float64MultiArray` | 力のしきい値 `[hard_min, min]` を実行時に設定（subscribe） |
 | `/dracomancer/torque_volume_radius_threshold_cmd` | `std_msgs/Float64MultiArray` | トルクのしきい値 `[hard_min, min]` を実行時に設定（subscribe） |
 
-`control_joint_angle.py` はこれらの `[hard_min, min]` の **`hard_min`（先頭）をゲートの下限しきい値**として使います。トピック未受信時は `force_radius_threshold`/`torque_radius_threshold` パラメータ（`teleoperation.launch` 既定 `0.05`/`0.002`）を使います。しきい値更新は `hard_min <= min` の場合のみ反映します。
+`control_joint_angle.py` はこれらの `[hard_min, min]` の **`hard_min`（先頭）をゲートの下限しきい値**として使います。トピック未受信時は `force_radius_threshold`/`torque_radius_threshold` パラメータ（`teleoperation.launch` 既定 `0.070544`/`0.000345`）を使います。しきい値更新は `hard_min <= min` の場合のみ反映します。
 
 ### 送信ゲート（ホバリング以外では位置・姿勢・関節角操作を無効化）
 
@@ -401,8 +401,8 @@ flowchart TD
 | `feasibility_soft_min_scale` | `0.0` | `soft_scale` の移動倍率下限 |
 | `feasibility_service` | `/dragon/shape_feasibility/check_shape` | 予測サービス名 |
 | `feasibility_rate` | `20.0` | 候補評価のスロットル周波数 [Hz] |
-| `force_radius_threshold` | `0.05` | 力の下限しきい値（topic 未受信時のフォールバック） |
-| `torque_radius_threshold` | `0.002` | トルクの下限しきい値（同上） |
+| `force_radius_threshold` | `0.070544` | 力の下限しきい値（topic 未受信時のフォールバック） |
+| `torque_radius_threshold` | `0.000345` | トルクの下限しきい値（同上） |
 | `max_step` | `0.04` | 1周期あたりの最大変化量 |
 | `startup_pose` | `[0, pi/2, 0, pi/2, 0, pi/2]` | 立ち上げ時の通常姿勢 |
 
@@ -417,8 +417,8 @@ flowchart TD
 | パラメータ | 既定 | 説明 |
 | --- | --- | --- |
 | `enable_shape_safety` | `true` | ライブスケール算出の有効化 |
-| `force_inradius_min` / `force_inradius_hard_min` | `0.2` / `0.1` | 力のしきい値（帯） |
-| `torque_inradius_min` / `torque_inradius_hard_min` | `0.02` / `0.01` | トルクのしきい値（帯） |
+| `force_inradius_min` / `force_inradius_hard_min` | `0.136743` / `0.070544` | 力のしきい値（帯） |
+| `torque_inradius_min` / `torque_inradius_hard_min` | `0.058762` / `0.000345` | トルクのしきい値（帯） |
 | `inradius_timeout` | `0.5` | 内接半径の有効期限 [s] |
 
 モニタリング:
