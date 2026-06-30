@@ -47,6 +47,8 @@ class FcDataCollector:
         self.n_1d = rospy.get_param("~n_points_1d", 9)      # samples per 1-D joint sweep
         self.n_random = rospy.get_param("~n_random", 60)    # random multi-joint samples
         self.n_grid = rospy.get_param("~n_points_grid", 4)  # samples per joint for full grid
+        self.grid_start = int(rospy.get_param("~grid_start", 0))
+        self.grid_count = int(rospy.get_param("~grid_count", -1))
         self.settle_time = rospy.get_param("~settle_time", 3.0)
         self.sample_time = rospy.get_param("~sample_time", 1.0)
         self.max_step = rospy.get_param("~max_step", 0.05)   # rad per cmd, gradual move
@@ -177,14 +179,21 @@ class FcDataCollector:
         if self.sample_mode == "grid":
             ranges = [self.joint_grid_range(idx) for idx in range(len(self.joint_names))]
             total = int(np.prod([len(r) for r in ranges]))
-            rospy.loginfo("sample_mode=grid: %d joints x %d points -> %d samples",
-                          len(self.joint_names), self.n_grid, total)
+            start = max(0, min(self.grid_start, total))
+            stop = total if self.grid_count < 0 else min(total, start + max(0, self.grid_count))
+            rospy.loginfo("sample_mode=grid: %d joints x %d points -> %d samples, range [%d, %d)",
+                          len(self.joint_names), self.n_grid, total, start, stop)
             for k, target in enumerate(self.grid_targets(ranges)):
+                if k < start:
+                    continue
+                if k >= stop:
+                    break
                 if not self.move_to(target):
                     self.finish(); return
                 self.sample("grid_%04d" % k)
-                if (k + 1) % 100 == 0:
-                    rospy.loginfo("grid progress: %d/%d samples", k + 1, total)
+                done = k - start + 1
+                if done % 100 == 0:
+                    rospy.loginfo("grid progress: %d/%d samples in assigned range", done, stop - start)
         else:
             # Baseline at nominal.
             if not self.move_to(self.nominal):
