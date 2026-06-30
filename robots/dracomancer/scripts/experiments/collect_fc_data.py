@@ -19,7 +19,6 @@ robot lose control), restoring the nominal shape before exiting.
 
 import os
 import csv
-import itertools
 import rospy
 import numpy as np
 from std_msgs.msg import Float64, UInt8
@@ -41,8 +40,13 @@ class FcDataCollector:
         # Sweep ranges per joint (used by the 1-D sweeps and random sampling).
         self.pitch_range = rospy.get_param("~pitch_range", [-0.6, 0.6])
         self.yaw_range = rospy.get_param("~yaw_range", [0.0, np.pi / 2])
+        self.sample_mode = str(rospy.get_param("~sample_mode", "sweep_random")).lower()
+        if self.sample_mode not in ("sweep_random", "grid"):
+            rospy.logwarn("unknown sample_mode '%s'; fall back to sweep_random", self.sample_mode)
+            self.sample_mode = "sweep_random"
         self.n_1d = rospy.get_param("~n_points_1d", 9)      # samples per 1-D joint sweep
         self.n_random = rospy.get_param("~n_random", 60)    # random multi-joint samples
+        self.n_grid = rospy.get_param("~n_points_grid", 4)  # samples per joint for full grid
         self.settle_time = rospy.get_param("~settle_time", 3.0)
         self.sample_time = rospy.get_param("~sample_time", 1.0)
         self.max_step = rospy.get_param("~max_step", 0.05)   # rad per cmd, gradual move
@@ -147,38 +151,69 @@ class FcDataCollector:
         lo, hi = (self.pitch_range if self.is_pitch[idx] else self.yaw_range)
         return np.linspace(lo, hi, self.n_1d)
 
+    def joint_grid_range(self, idx):
+        lo, hi = (self.pitch_range if self.is_pitch[idx] else self.yaw_range)
+        return np.linspace(lo, hi, self.n_grid)
+
+    def grid_targets(self, ranges, prefix=None, reverse=False):
+        """Yield full-grid targets in a serpentine order to reduce large jumps."""
+        prefix = [] if prefix is None else prefix
+        if not ranges:
+            yield list(prefix)
+            return
+        vals = list(ranges[0])
+        if reverse:
+            vals.reverse()
+        child_reverse = False
+        for v in vals:
+            for target in self.grid_targets(ranges[1:], prefix + [float(v)], child_reverse):
+                yield target
+            child_reverse = not child_reverse
+
     def run(self):
         if self.flight_state != 5:
             rospy.logwarn("flight_state=%s (expected 5/HOVER). Continuing anyway.", self.flight_state)
 
-        # Baseline at nominal.
-        if not self.move_to(self.nominal):
-            self.finish(); return
-        self.sample("nominal")
-
-        # 1-D sweeps: vary one joint across its range, others at nominal.
-        for idx, name in enumerate(self.joint_names):
-            for v in self.joint_value_range(idx):
-                target = list(self.nominal)
-                target[idx] = float(v)
+        if self.sample_mode == "grid":
+            ranges = [self.joint_grid_range(idx) for idx in range(len(self.joint_names))]
+            total = int(np.prod([len(r) for r in ranges]))
+            rospy.loginfo("sample_mode=grid: %d joints x %d points -> %d samples",
+                          len(self.joint_names), self.n_grid, total)
+            for k, target in enumerate(self.grid_targets(ranges)):
                 if not self.move_to(target):
                     self.finish(); return
-                self.sample("sweep_%s_%.3f" % (name, v))
-            # return to nominal between joints to stay near a feasible region
-            self.move_to(self.nominal)
-
-        # Random multi-joint samples within ranges.
-        rng = np.random.default_rng(self.seed)
-        for k in range(self.n_random):
-            target = []
-            for idx in range(len(self.joint_names)):
-                lo, hi = (self.pitch_range if self.is_pitch[idx] else self.yaw_range)
-                target.append(float(rng.uniform(lo, hi)))
-            if not self.move_to(target):
+                self.sample("grid_%04d" % k)
+                if (k + 1) % 100 == 0:
+                    rospy.loginfo("grid progress: %d/%d samples", k + 1, total)
+        else:
+            # Baseline at nominal.
+            if not self.move_to(self.nominal):
                 self.finish(); return
-            self.sample("random_%03d" % k)
-            if k % 10 == 9:
-                self.move_to(self.nominal)  # periodically recover
+            self.sample("nominal")
+
+            # 1-D sweeps: vary one joint across its range, others at nominal.
+            for idx, name in enumerate(self.joint_names):
+                for v in self.joint_value_range(idx):
+                    target = list(self.nominal)
+                    target[idx] = float(v)
+                    if not self.move_to(target):
+                        self.finish(); return
+                    self.sample("sweep_%s_%.3f" % (name, v))
+                # return to nominal between joints to stay near a feasible region
+                self.move_to(self.nominal)
+
+            # Random multi-joint samples within ranges.
+            rng = np.random.default_rng(self.seed)
+            for k in range(self.n_random):
+                target = []
+                for idx in range(len(self.joint_names)):
+                    lo, hi = (self.pitch_range if self.is_pitch[idx] else self.yaw_range)
+                    target.append(float(rng.uniform(lo, hi)))
+                if not self.move_to(target):
+                    self.finish(); return
+                self.sample("random_%03d" % k)
+                if k % 10 == 9:
+                    self.move_to(self.nominal)  # periodically recover
 
         self.move_to(self.nominal)
         self.finish()
