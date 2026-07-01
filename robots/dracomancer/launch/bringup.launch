@@ -50,12 +50,12 @@
   <arg name="enable_shape_safety"      default="true" />
   <arg name="missing_inradius_scale"   default="1.0" />
   <arg name="min_safety_scale"         default="0.0" />
-  <!-- Threshold range [hard_min, min], data-driven from the 83-sample DRAGON
+  <!-- Threshold range [hard_min, min], data-driven from the 4096-grid DRAGON
        shape sweep (2026-06-30; see docs/fc_threshold_calibration.md). -->
-  <arg name="force_inradius_min"       default="0.136743" />
-  <arg name="torque_inradius_min"      default="0.058762" />
-  <arg name="force_inradius_hard_min"  default="0.070544" />
-  <arg name="torque_inradius_hard_min" default="0.000345" />
+  <arg name="force_inradius_min"       default="0.249220" />
+  <arg name="torque_inradius_min"      default="0.278159" />
+  <arg name="force_inradius_hard_min"  default="0.108990" />
+  <arg name="torque_inradius_hard_min" default="0.015400" />
   <arg name="inradius_timeout"         default="0.5" />
   <arg name="safety_log_period"        default="1.0" />
   <!-- Low-pass the (noisy) measured fc_f_min / fc_t_min before the danger

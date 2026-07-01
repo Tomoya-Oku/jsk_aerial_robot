@@ -287,7 +287,7 @@ roslaunch dracomancer teleoperation.launch \
   teleop_mode:=teleoperation
 ```
 
-3方式とも出力はフィージビリティ・ゲートを通って DRAGON へ送られます。ただし**現状ゲートは既定 OFF**（`enable_feasibility_gate:=false`、後述「形状安全機構」「既知の課題」参照）なので、既定では候補姿勢がそのまま送られます。
+3方式とも出力はフィージビリティ・ゲートを通って DRAGON へ送られます。既定では `enable_feasibility_gate:=true` で、Force/Torque Volume radius の下限を満たさない候補姿勢は `feasibility_gate_mode` に従って抑制されます。予測器が過度に保守的で変形が凍結する場合は、起動時に `enable_feasibility_gate:=false` を指定して候補姿勢をそのまま送れます。
 
 サーボIDと Dracomancer 関節名:
 
@@ -313,7 +313,7 @@ rad = (tick - 2048) * 2*pi / 4096 + offset
 
 ### 1. 予測フィージビリティ・ゲート（teleoperation モード）
 
-> **現状このゲートは既定 OFF（`enable_feasibility_gate:=false`）です。** フルベクタリング DRAGON では、`shape_feasibility_node` の単発 `updateRobotModel` で候補を評価するとジンバルが水平のままになり、ロータ法線が縮退して予測 `fc_f_min`/`fc_t_min` が**どの姿勢でも ≈0**（フィージブルな円形姿勢でも 0）になります。その結果ゲートが全変形を却下し DRAGON が凍結するため、当面は無効化しています。詳細は「既知の課題」。
+> **既定で有効（`enable_feasibility_gate:=true`）です。** 候補姿勢の予測 `fc_f_min` / `fc_t_min` がしきい値を下回る場合、危険姿勢回避として候補を抑制します。フルベクタリング DRAGON のモデル/設定によって予測器が過度に保守的になり変形が凍結する場合は、検証用に `enable_feasibility_gate:=false` で無効化できます。
 
 腕関節を DRAGON 形状にマッピングした**候補姿勢**を、実際に送る前に評価します。
 
@@ -360,7 +360,7 @@ flowchart TD
 | `/dracomancer/force_volume_radius_threshold_cmd` | `std_msgs/Float64MultiArray` | 力のしきい値 `[hard_min, min]` を実行時に設定（subscribe） |
 | `/dracomancer/torque_volume_radius_threshold_cmd` | `std_msgs/Float64MultiArray` | トルクのしきい値 `[hard_min, min]` を実行時に設定（subscribe） |
 
-`control_joint_angle.py` はこれらの `[hard_min, min]` の **`hard_min`（先頭）をゲートの下限しきい値**として使います。トピック未受信時は `force_radius_threshold`/`torque_radius_threshold` パラメータ（`teleoperation.launch` 既定 `0.070544`/`0.000345`）を使います。しきい値更新は `hard_min <= min` の場合のみ反映します。
+`control_joint_angle.py` はこれらの `[hard_min, min]` の **`hard_min`（先頭）をゲートの下限しきい値**として使います。トピック未受信時は `force_radius_threshold`/`torque_radius_threshold` パラメータ（`teleoperation.launch` 既定 `0.108990`/`0.015400`）を使います。しきい値更新は `hard_min <= min` の場合のみ反映します。
 
 ### 送信ゲート（ホバリング以外では位置・姿勢・関節角操作を無効化）
 
@@ -397,15 +397,15 @@ flowchart TD
 | `baselink_roll_limit` | `π/2` | baselink roll へ加算する差分の絶対値上限 [rad] |
 | `hover_flight_state` | `5` | DRAGON の HOVER_STATE。`/dragon/uav/nav` はHOVER以外では無視されるため、link4アンカーもこの状態でのみ有効 |
 | `capture_neutral_on_first_msg` | `false` | 最初の Dracomancer 関節角を中立姿勢として記憶（`elbow_only` では不使用） |
-| `enable_feasibility_gate` | `false` | 予測ゲートの有効化（既定 OFF：フルベクタリング DRAGON で予測 fc≈0 となり全変形が凍結するため。「既知の課題」参照）。false で候補をそのまま採用 |
+| `enable_feasibility_gate` | `true` | 予測ゲートの有効化。true でForce/Torque Volume radiusに基づく危険姿勢回避を行う。false で候補をそのまま採用 |
 | `feasibility_gate_mode` | `hold` | 不可行候補への対処。`hold` / `step_search` / `soft_scale` |
 | `feasibility_step_fraction` | `0.25` | `step_search` の初期探索ステップ |
 | `feasibility_min_step_fraction` | `0.03` | `step_search` の最小探索ステップ |
 | `feasibility_soft_min_scale` | `0.0` | `soft_scale` の移動倍率下限 |
 | `feasibility_service` | `/dragon/shape_feasibility/check_shape` | 予測サービス名 |
 | `feasibility_rate` | `20.0` | 候補評価のスロットル周波数 [Hz] |
-| `force_radius_threshold` | `0.070544` | 力の下限しきい値（topic 未受信時のフォールバック） |
-| `torque_radius_threshold` | `0.000345` | トルクの下限しきい値（同上） |
+| `force_radius_threshold` | `0.108990` | 力の下限しきい値（topic 未受信時のフォールバック） |
+| `torque_radius_threshold` | `0.015400` | トルクの下限しきい値（同上） |
 | `max_step` | `0.04` | 1周期あたりの最大変化量 |
 | `startup_pose` | `[0, pi/2, 0, pi/2, 0, pi/2]` | 立ち上げ時の通常姿勢 |
 
@@ -420,8 +420,8 @@ flowchart TD
 | パラメータ | 既定 | 説明 |
 | --- | --- | --- |
 | `enable_shape_safety` | `true` | ライブスケール算出の有効化 |
-| `force_inradius_min` / `force_inradius_hard_min` | `0.136743` / `0.070544` | 力のしきい値（帯） |
-| `torque_inradius_min` / `torque_inradius_hard_min` | `0.058762` / `0.000345` | トルクのしきい値（帯） |
+| `force_inradius_min` / `force_inradius_hard_min` | `0.249220` / `0.108990` | 力のしきい値（帯、4096グリッド分布由来） |
+| `torque_inradius_min` / `torque_inradius_hard_min` | `0.278159` / `0.015400` | トルクのしきい値（帯、4096グリッド分布由来） |
 | `inradius_timeout` | `0.5` | 内接半径の有効期限 [s] |
 
 モニタリング:
@@ -627,7 +627,7 @@ roslaunch dracomancer teleoperation.launch \
 | 項目 | 現状 |
 | --- | --- |
 | 操縦桿による移動制御 | 既定 OFF（`enable_position_control:=false`）。`control_position.py` が `POS_VEL_MODE` で `target_pos` 未設定（=0）の FlightNav を送るため、ON にすると DRAGON が原点・高度0へ指令され落下する。`VEL_MODE` 化など修正が必要 |
-| 予測フィージビリティ・ゲート | 既定 OFF（`enable_feasibility_gate:=false`）。`shape_feasibility_node` の単発 `updateRobotModel` ではフルベクタリング DRAGON のジンバルが水平のままで、予測 fc がどの姿勢でも ≈0 になり全変形を却下＝形状が凍結する。コントローラのベクタリング最適化済み fc（`/dragon/debug/fc_f_min` は非ゼロ）を予測器側で再現する作り込みが必要 |
+| 予測フィージビリティ・ゲート | 既定 ON（`enable_feasibility_gate:=true`）。Force/Torque Volume radius に基づき危険姿勢を抑制する。モデル/設定によって予測 fc が過小になり全変形を却下する場合は、`enable_feasibility_gate:=false` で一時的に無効化して予測器側を調整する |
 | 立ち上げ時の通常形状保持 | `startup` モードで実装。DRAGON 側の preflight joint control 設定に依存 |
 | 力覚提示 | 提示トルク相当量の計算とトルク ON/OFF 出力のみ対応。XL430-W250-T では所望電流・所望トルク入力ができないため、Mk-Iでの連続的な反力・反トルク提示は Mk-II 以降の展望。既存の電流指令経路は互換サーボ向け任意機能として保持 |
 | Force/Torque Volume に基づく厳密な姿勢制限 | DRAGON の内接半径を使ったスケーリングのみ実装 |
