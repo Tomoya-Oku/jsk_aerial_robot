@@ -77,14 +77,16 @@
   <arg name="enable_link4_anchor_body_step_scaling" default="true"/>
   <arg name="link4_anchor_max_body_pos_rate" default="0.4"/>
   <arg name="link4_anchor_max_body_rpy_rate" default="0.8"/>
-  <!-- Reject link4-anchor targets that would require unsafe body attitude/altitude.
+  <!-- Reject link4-anchor targets that would require unsafe body attitude,
+       altitude, or horizontal drift from the hover-start COG.
        These limits are evaluated after max_step/body-step scaling; rejected targets
        hold the previous joint command and publish no rejected body command. -->
   <arg name="enable_link4_anchor_body_safety" default="true"/>
   <arg name="link4_anchor_max_abs_roll" default="0.6"/>
   <arg name="link4_anchor_max_abs_pitch" default="0.6"/>
   <arg name="link4_anchor_min_cog_z" default="0.6"/>
-  <arg name="link4_anchor_max_cog_z" default="0.0"/>
+  <arg name="link4_anchor_max_cog_z" default="2.5"/>
+  <arg name="link4_anchor_max_cog_xy_offset" default="1.0"/>
   <!-- Baselink roll mapping: sum upper-arm roll and forearm roll deltas from the
        captured neutral pose, then add the result to the link4-anchor baselink roll. -->
   <arg name="enable_baselink_roll_mapping" default="true"/>
@@ -266,6 +268,7 @@
     <param name="link4_anchor_max_abs_pitch" value="$(arg link4_anchor_max_abs_pitch)"/>
     <param name="link4_anchor_min_cog_z" value="$(arg link4_anchor_min_cog_z)"/>
     <param name="link4_anchor_max_cog_z" value="$(arg link4_anchor_max_cog_z)"/>
+    <param name="link4_anchor_max_cog_xy_offset" value="$(arg link4_anchor_max_cog_xy_offset)"/>
     <param name="enable_baselink_roll_mapping" value="$(arg enable_baselink_roll_mapping)"/>
     <param name="baselink_roll_limit" value="$(arg baselink_roll_limit)"/>
     <rosparam param="baselink_roll_source_joints">["upper_arm_external_internal_rotation_joint", "wrist_supination_joint"]</rosparam>

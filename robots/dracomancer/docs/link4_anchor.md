@@ -28,8 +28,9 @@ baselink姿勢を大きく動かす必要があり、飛行安定性と衝突し
    - `link4_anchor_mode:=position_only` では `uav/nav` の COG 位置だけを補償し、baselink RPY はpublishしない。
    - `link4_anchor_mode:=full` では旧来の6DoF寄り補償として COG位置 + baselink姿勢を補償する。
 4. **危険なbody補償は送らない**。
-   - `max_step` と body step scaling 後に、position_only では予測COG高度、full では予測COG高度とbaselink roll/pitchを検査する。
+   - `max_step` と body step scaling 後に、position_only では予測COG高度とホバー開始時COGからの水平距離、full ではさらにbaselink roll/pitchを検査する。
    - 安全域外なら `joints_ctrl` も body 補償も直前姿勢で保持する。
+   - TFが取得できず補償目標を計算できない周期も、fail-safeとして直前姿勢を保持する。
    - `/target_rotation_motion` への即時姿勢指令は full モードでも既定OFF。
 
 ## DRAGON 制御の前提（確認済み）
@@ -77,9 +78,11 @@ COG位置目標の変化量を予測し、`link4_anchor_max_body_pos_rate` を�
 full モードでは baselink姿勢目標の変化量も `link4_anchor_max_body_rpy_rate` で抑える。これにより、
 形状変化の速さをbody補償が追従できる範囲へ合わせる。
 さらに `enable_link4_anchor_body_safety` が有効な場合、縮小後の候補が必要とする
-COG高度を検査する。full モードでは baselink roll/pitch も絶対値で検査する。`link4_anchor_min_cog_z` を下回る、または
-full モードで `link4_anchor_max_abs_roll` / `link4_anchor_max_abs_pitch` を超える場合、その候補姿勢は採用せず
+COG高度とホバー開始時COGからの水平距離を検査する。full モードでは baselink roll/pitch も絶対値で検査する。
+`link4_anchor_min_cog_z` を下回る、`link4_anchor_max_cog_z` を超える、`link4_anchor_max_cog_xy_offset`
+を超える、または full モードで `link4_anchor_max_abs_roll` / `link4_anchor_max_abs_pitch` を超える場合、その候補姿勢は採用せず
 直前の関節姿勢を保持し、拒否されたbody補償はpublishしない。
+同一制御周期内の step scaling / safety gate / nav publish は、周期先頭で更新した同じ TF を使う。
 キャプチャ直後の初回補償は、現在TFの `cog→fc` と目標FKを使うため、通常は現在姿勢に近い指令から始まる。
 
 ```mermaid
@@ -127,7 +130,8 @@ SVG版の全体図は [../figures/link4_anchor_algorithm.svg](../figures/link4_a
 | `~link4_anchor_max_body_pos_rate` / `~link4_anchor_max_body_rpy_rate` | `0.4` / `0.8` | body step scalingで許容するCOG位置・baselink姿勢の最大変化速度。姿勢側はfullモードのみ使用 |
 | `~enable_link4_anchor_body_safety` | `true` | body補償後のCOG高度を検査し、安全域外なら直前姿勢を保持。fullモードではbaselink姿勢も検査 |
 | `~link4_anchor_max_abs_roll` / `~link4_anchor_max_abs_pitch` | `0.6` / `0.6` | fullモードのbody補償で許容するbaselink roll/pitch絶対値 [rad] |
-| `~link4_anchor_min_cog_z` / `~link4_anchor_max_cog_z` | `0.6` / `0.0` | body補償で許容するCOG高度範囲 [m]。max `0.0` は上限無効 |
+| `~link4_anchor_min_cog_z` / `~link4_anchor_max_cog_z` | `0.6` / `2.5` | body補償で許容するCOG高度範囲 [m]。max `0.0` は上限無効 |
+| `~link4_anchor_max_cog_xy_offset` | `1.0` | ホバー開始時COGから許容する水平距離 [m]。`0.0` 以下で無効 |
 | `~enable_baselink_roll_mapping` | `true` | fullモード時に上腕ロール+前腕ロールの差分和をbaselink rollへ加算 |
 | `~baselink_roll_source_joints` / `~baselink_roll_signs` / `~baselink_roll_scales` | `[upper_arm_external_internal_rotation_joint, wrist_supination_joint]` / `[-1,-1]` / `[1,1]` | baselink roll 差分の入力・符号・ゲイン |
 | `~baselink_roll_limit` | `pi/2` | baselink roll へ加算する差分の絶対値上限 [rad] |
