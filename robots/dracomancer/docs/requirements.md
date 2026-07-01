@@ -64,7 +64,7 @@ flowchart LR
 | CON-1 | 計算機 | 親機PC: Ubuntu 22.04 / ROS1 Noetic。子機PC: Khadas VIM4（背中搭載） |
 | CON-2 | 通信 | ROS master は親機PCに固定。子機との間は無線LAN想定（帯域・遅延は TBD） |
 | CON-3 | マイコン | Spinal（STM32H7_v2）経由でサーボ・IMUを接続 |
-| CON-4 | アクチュエータ | Mk-I は DYNAMIXEL XL430-W250-T ×7。**電流/トルク指令には非対応**（トルク ON/OFF のみ） |
+| CON-4 | アクチュエータ | Mk-I は DYNAMIXEL XL430-W250-T ×7。**電流/トルク指令には非対応**。既定は提示トルク相当量の監視のみ、明示有効化時にトルク ON/OFF または固定アンカーからの位置目標オフセットと高周期ON/OFFパルスによる近似提示 |
 | CON-5 | 表示環境 | 子機は表示なし運用が前提（RViz は既定で起動しない、`headless`） |
 | CON-6 | 編集範囲 | 実装変更は原則 `robots/dracomancer/` 内に限定 |
 | CON-7 | 操縦対象前提 | 形状安全予測は操縦対象（DRAGON）のモデル起動を前提とする |
@@ -118,7 +118,7 @@ stateDiagram-v2
 | ID | 要件 | 受け入れ基準（案） | 実装 |
 | --- | --- | --- | --- |
 | FR-13 | 形状抑制量から提示量を算出する | 抑制差から提示トルク相当量を計算・publish | 実装済 |
-| FR-14 | 安全余裕の低下を操縦者へ提示する | Mk-I: 該当関節のトルク ON/OFF で警告 | 部分 |
+| FR-14 | 安全余裕の低下を操縦者へ提示する | Mk-I: 該当関節のトルク ON/OFF、または閾値以上での位置オフセット近似で警告 | 部分 |
 | FR-15 | 接触反力・反トルクを連続的に提示する | TBD（Mk-II の連続トルク提示で達成予定） | 未 |
 | FR-16 | 提示の数学的自由度を明確化する | 何自由度まで提示可能かを定式化（**研究上重要**） | 未 |
 
@@ -142,7 +142,7 @@ stateDiagram-v2
 | HW-1 | 操縦者上肢の主要関節角を取得する | 7関節サーボで取得（Mk-I 実装済） |
 | HW-2 | 操縦者の身体姿勢を計測する | 背中IMU（取付角の再現性が要） |
 | HW-3 | 移動入力デバイスを備える | グリップ部の操縦桿 |
-| HW-4 | 力覚提示に十分な関節トルク・可動域を確保する | Mk-I は ON/OFF。Mk-II で連続トルク対象関節を強化（肩・肘優先） |
+| HW-4 | 力覚提示に十分な関節トルク・可動域を確保する | Mk-I は ON/OFF と位置オフセット近似。Mk-II で連続トルク対象関節を強化（肩・肘優先） |
 | HW-5 | リンク長を操縦者に合わせて調整できる | Mk-II でインデックスプランジャ採用 |
 | HW-6 | 脱力・非常停止時に装着者を拘束しすぎない | 機械ストッパとソフトリミットを分離（Mk-II 設計要件） |
 | HW-7 | 装着のためのベースウェアを備える | 背中・腰でデバイスを固定（Mk-I 実装済） |
@@ -159,7 +159,7 @@ stateDiagram-v2
 | IF-4 | 移動指令 | `aerial_robot_msgs/FlightNav` | `/<robot>/uav/nav` |
 | IF-5 | 形状指令 | `sensor_msgs/JointState` | `/<robot>/joints_ctrl` |
 | IF-6 | 形状フィージビリティ予測 | service `check_shape` | `fc_f_min` / `fc_t_min` を返す |
-| IF-7 | 力覚提示出力 | `JointState` / `ServoTorqueCmd` / `ServoControlCmd` | ON/OFF 既定、電流指令は任意 |
+| IF-7 | 力覚提示出力 | `JointState` / `ServoTorqueCmd` / `ServoControlCmd` | 既定は監視のみ。明示有効化時にON/OFF、XL430向け位置オフセット近似、または電流指令を使用 |
 | IF-8 | しきい値設定 | `Float64MultiArray`（`[hard_min, min]`） | force/torque 各々 |
 
 > 詳細トピック表は [README.md](../README.md) を参照。本書では契約として満たすべきインタフェースのみを定義する。

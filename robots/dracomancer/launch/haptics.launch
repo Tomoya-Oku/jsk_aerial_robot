@@ -5,15 +5,30 @@
   <arg name="shape_error_topic" default="/$(arg device_ns)/shape_control_error"/>
   <arg name="mode_topic" default="/$(arg device_ns)/teleop_mode"/>
   <arg name="teleop_mode" default="startup"/>
-  <arg name="rate" default="40.0"/>
+  <arg name="rate" default="100.0"/>
 
-  <!-- Default hardware output is torque on/off for XL430-W250-T. Current output remains available for compatible servos. -->
-  <arg name="enable_haptic_torque_onoff" default="true"/>
+  <!-- Hardware haptics must be enabled explicitly.  The node still publishes
+       /dracomancer/haptic_torque for monitoring when hardware outputs are off. -->
+  <arg name="enable_haptic_torque_onoff" default="false"/>
   <arg name="haptic_torque_on_threshold" default="0.02"/>
-  <arg name="haptic_torque_enable_topic" default="/servo/torque_enable"/>
+  <arg name="haptic_torque_enable_topic" default="/$(arg device_ns)/servo/torque_enable"/>
   <arg name="enable_haptic_current_command" default="false"/>
   <arg name="haptic_current_per_nm" default="0.0"/>
-  <arg name="haptic_current_topic" default="/servo/target_current"/>
+  <arg name="haptic_current_topic" default="/$(arg device_ns)/servo/target_current"/>
+  <arg name="enable_haptic_position_command" default="false"/>
+  <arg name="haptic_position_topic" default="/$(arg device_ns)/servo/target_states"/>
+  <arg name="haptic_position_torque_threshold" default="$(arg haptic_torque_on_threshold)"/>
+  <arg name="haptic_position_offset_per_nm" default="0.25"/>
+  <arg name="haptic_position_max_offset" default="0.03"/>
+  <arg name="haptic_position_offset_sign" default="1.0"/>
+  <arg name="haptic_position_republish_interval" default="0.02"/>
+  <arg name="haptic_position_output_mode" default="pulse"/>
+  <arg name="haptic_position_pulse_rate" default="25.0"/>
+  <arg name="haptic_position_pulse_duty" default="0.4"/>
+  <arg name="haptic_torque_deadband" default="0.0"/>
+  <arg name="haptic_position_reference_mode" default="anchor"/>
+  <arg name="release_torque_on_start" default="true"/>
+  <arg name="release_torque_on_shutdown" default="true"/>
   <arg name="haptic_debug_topic" default="/$(arg device_ns)/haptic_torque"/>
 
   <node pkg="dracomancer"
@@ -33,5 +48,19 @@
     <param name="haptic_current_topic" value="$(arg haptic_current_topic)"/>
     <param name="enable_haptic_current_command" value="$(arg enable_haptic_current_command)"/>
     <param name="haptic_current_per_nm" value="$(arg haptic_current_per_nm)"/>
+    <param name="haptic_position_topic" value="$(arg haptic_position_topic)"/>
+    <param name="enable_haptic_position_command" value="$(arg enable_haptic_position_command)"/>
+    <param name="haptic_position_torque_threshold" value="$(arg haptic_position_torque_threshold)"/>
+    <param name="haptic_position_offset_per_nm" value="$(arg haptic_position_offset_per_nm)"/>
+    <param name="haptic_position_max_offset" value="$(arg haptic_position_max_offset)"/>
+    <param name="haptic_position_offset_sign" value="$(arg haptic_position_offset_sign)"/>
+    <param name="haptic_position_republish_interval" value="$(arg haptic_position_republish_interval)"/>
+    <param name="haptic_position_output_mode" value="$(arg haptic_position_output_mode)"/>
+    <param name="haptic_position_pulse_rate" value="$(arg haptic_position_pulse_rate)"/>
+    <param name="haptic_position_pulse_duty" value="$(arg haptic_position_pulse_duty)"/>
+    <param name="haptic_torque_deadband" value="$(arg haptic_torque_deadband)"/>
+    <param name="haptic_position_reference_mode" value="$(arg haptic_position_reference_mode)"/>
+    <param name="release_torque_on_start" value="$(arg release_torque_on_start)"/>
+    <param name="release_torque_on_shutdown" value="$(arg release_torque_on_shutdown)"/>
   </node>
 </launch>

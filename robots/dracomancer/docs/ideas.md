@@ -5,13 +5,13 @@
 
 ## 現状との差分
 
-現在の実装では、`startup` / `precision` / `wide` の3モード、ジョイスティックと背中IMUによる広域移動、腕関節からDRAGON関節への形状マッピング、Force/Torque内接半径に基づく安全スケーリングが実装されています。
+現在の実装では、`startup` / `teleoperation` の2モード、ジョイスティックと背中IMUによる広域移動、腕関節からDRAGON関節への形状マッピング、Force/Torque内接半径に基づく安全スケーリングが実装されています。
 
 一方で、以下は未実装または設計段階です。
 
 | 項目 | 現状 | 研究アイデア |
 | --- | --- | --- |
-| 力覚提示 | Mk-I ではトルク ON/OFF のみ | 接触反力だけでなく、飛行可能性の余裕を二値的な関節ロック/解放として提示し、連続トルク提示は Mk-II 以降の展望にする |
+| 力覚提示 | Mk-I ではトルク ON/OFF が既定。固定アンカーからの位置目標オフセットによる近似提示を任意実装 | 接触反力だけでなく、飛行可能性の余裕を二値的な関節ロック/解放または弱い連続的な手応えとして提示し、真の連続トルク提示は Mk-II 以降の展望にする |
 | Force/Torque Volume制約 | 内接半径による一様スケーリング | 姿勢空間上のvirtual fixtureとして制限する |
 | 精密動作モード | 腕関節からDRAGON関節への直接写像 | 直接写像とタスク方向射影型写像を比較する |
 | 広域移動モード | ジョイスティック + IMU相対yawが既定 | 操縦座標系の違いを被験者実験で比較する |
@@ -20,7 +20,7 @@
 ## 1. 安全余裕を返す力覚提示
 
 力覚提示を、ロボットが接触したときの反力提示だけに限定しない。
-DRAGONのForce/Torque内接半径が小さくなったとき、Mk-I では Dracomancer側の対応関節サーボをトルク ON/OFF で切り替え、操作者に「その姿勢は飛行可能性を削っている」と知らせる。XL430-W250-T では個々のサーボへ所望トルクを入力できないため、連続的な抵抗トルク提示は Mk-II 以降の展望とする。
+DRAGONのForce/Torque内接半径が小さくなったとき、Mk-I では Dracomancer側の対応関節サーボをトルク ON/OFF で切り替え、操作者に「その姿勢は飛行可能性を削っている」と知らせる。XL430-W250-T では個々のサーボへ所望トルクを入力できないため、真の連続的な抵抗トルク提示は Mk-II 以降の展望とする。一方で、提示トルク相当量を固定アンカーからの小さな位置目標オフセットへ変換し、高周期の短いON/OFFパルスとして出す近似提示は Mk-I でも任意に使える。
 
 考え方:
 
@@ -28,6 +28,7 @@ DRAGONのForce/Torque内接半径が小さくなったとき、Mk-I では Draco
 safety_margin = min(force_margin, torque_margin)
 tau_equiv = K(q) * (1 - safety_margin) * direction_to_safe_pose
 torque_enable_i = 1 if |tau_equiv_i| >= tau_on_threshold else 0
+q_goal_i = q_anchor_i + clamp(tau_equiv_i * offset_per_nm, -max_offset, max_offset)
 ```
 
 期待できる主張:
