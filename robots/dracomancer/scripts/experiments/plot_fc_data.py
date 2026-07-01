@@ -16,6 +16,20 @@ import os
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
+
+
+def setup_paper_style():
+    matplotlib.rcParams.update({
+        "font.family": "Times New Roman",
+        "font.size": 16,
+        "axes.titlesize": 18,
+        "axes.labelsize": 18,
+        "xtick.labelsize": 16,
+        "ytick.labelsize": 16,
+        "legend.fontsize": 14,
+        "svg.fonttype": "none",
+    })
 
 
 def _as_float(value):
@@ -75,30 +89,47 @@ def save(fig, out_dir, base_name, formats):
     return paths
 
 
-def add_threshold_lines(ax, hard_min, soft_min):
+def add_threshold_lines(ax, hard_min, soft_min, label_values=False):
     if hard_min is not None:
-        ax.axvline(hard_min, color="tab:red", linestyle="--", linewidth=1.5,
-                   label="hard_min")
+        label = "Critical threshold"
+        if label_values:
+            label += " = %.3f" % hard_min
+        ax.axvline(hard_min, color="tab:red", linestyle="-", linewidth=3.0,
+                   label=label)
     if soft_min is not None:
-        ax.axvline(soft_min, color="tab:green", linestyle="--", linewidth=1.5,
-                   label="min")
+        label = "Warning threshold"
+        if label_values:
+            label += " = %.3f" % soft_min
+        ax.axvline(soft_min, color="tab:green", linestyle="-", linewidth=3.0,
+                   label=label)
 
 
-def plot_histograms(rows, out_dir, thresholds, bins, formats, name_prefix):
+def hide_zero_tick(value, pos):
+    return "" if abs(value) < 1e-12 else "%g" % value
+
+
+def plot_histograms(rows, out_dir, thresholds, bins, formats, name_prefix, paper_style=False):
     f = values(rows, "fc_f_min_mean")
     t = values(rows, "fc_t_min_mean")
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
-    for ax, xs, title, xlabel, th in (
-        (axes[0], f, "Force volume radius", "fc_f_min", thresholds["force"]),
-        (axes[1], t, "Torque volume radius", "fc_t_min", thresholds["torque"]),
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5.0))
+    for ax, xs, title, xlabel, th, xlim in (
+        (axes[0], f, "Force Volume", "Force volume radius [N]", thresholds["force"], (0.0, 2.5)),
+        (axes[1], t, "Torque Volume", "Torque volume radius [N m]", thresholds["torque"], (0.0, 2.5)),
     ):
-        ax.hist(xs, bins=bins, color="0.35", edgecolor="white")
-        add_threshold_lines(ax, th[0], th[1])
+        hist_kwargs = {"range": xlim} if paper_style else {}
+        ax.hist(xs, bins=bins, color="0.35", edgecolor="white", **hist_kwargs)
+        add_threshold_lines(ax, th[0], th[1], label_values=paper_style)
         ax.set_title(title)
         ax.set_xlabel(xlabel)
-        ax.set_ylabel("count")
+        ax.set_ylabel("Samples")
+        if paper_style:
+            ax.set_xlim(xlim)
+            ax.set_ylim(bottom=0.0)
+            ax.set_xticks([0.5 * k for k in range(int(xlim[1] / 0.5) + 1)])
+            ax.yaxis.set_major_formatter(FuncFormatter(hide_zero_tick))
+            ax.tick_params(axis="both", which="both", length=0, top=False, right=False)
         ax.grid(True, alpha=0.25)
-        ax.legend(loc="best")
+        ax.legend(loc="upper right", frameon=True)
     return save(fig, out_dir, name_prefix + "_distribution", formats)
 
 
@@ -216,7 +247,14 @@ def main():
                         help="figure formats to write")
     parser.add_argument("--name-prefix", default="fc",
                         help="prefix for output figure and summary file names")
+    parser.add_argument("--paper-style", action="store_true",
+                        help="use publication-oriented labels, fonts, ticks, and axes")
+    parser.add_argument("--plots", nargs="+", default=["all"],
+                        choices=["all", "distribution", "scatter", "sequence", "joint"],
+                        help="which plots to write")
     args = parser.parse_args()
+    if args.paper_style:
+        setup_paper_style()
 
     rows = load_rows(args.csv)
     out_dir = args.out_dir or os.path.join(os.path.dirname(os.path.abspath(args.csv)), "figures")
@@ -229,14 +267,21 @@ def main():
                                      args.hard_pct, args.min_frac, args.safety),
     }
 
-    outputs = [
-        plot_histograms(rows, out_dir, thresholds, args.bins, args.formats, args.name_prefix),
-        plot_scatter(rows, out_dir, thresholds, args.formats, args.name_prefix),
-        plot_sequence(rows, out_dir, thresholds, args.formats, args.name_prefix),
-    ]
-    joint_plot = plot_joint_relations(rows, out_dir, args.formats, args.name_prefix)
-    if joint_plot:
-        outputs.append(joint_plot)
+    plots = set(args.plots)
+    write_all = "all" in plots
+    outputs = []
+    if write_all or "distribution" in plots:
+        outputs.append(plot_histograms(
+            rows, out_dir, thresholds, args.bins, args.formats, args.name_prefix,
+            paper_style=args.paper_style))
+    if write_all or "scatter" in plots:
+        outputs.append(plot_scatter(rows, out_dir, thresholds, args.formats, args.name_prefix))
+    if write_all or "sequence" in plots:
+        outputs.append(plot_sequence(rows, out_dir, thresholds, args.formats, args.name_prefix))
+    if write_all or "joint" in plots:
+        joint_plot = plot_joint_relations(rows, out_dir, args.formats, args.name_prefix)
+        if joint_plot:
+            outputs.append(joint_plot)
     outputs.append(write_summary(rows, out_dir, thresholds, args.name_prefix))
 
     for output in outputs:
