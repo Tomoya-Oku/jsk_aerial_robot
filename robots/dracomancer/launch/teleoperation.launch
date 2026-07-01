@@ -57,13 +57,24 @@
   <arg name="joint_pairing_reference" default="circular"/>  <!-- deprecated alias of mapping_reference -->
   <arg name="mapping_reference" default="$(arg joint_pairing_reference)"/>
   <arg name="joint_pairing_scale" default="1.0"/>
+  <!-- Elbow-plane mapping for distal mode: route elbow flexion to joint2_pitch
+       when upper-arm roll is near 0, then smoothly move it to joint2_yaw as the
+       roll angle leaves the pitch zone. Defaults: pitch <=30deg, yaw >=60deg. -->
+  <arg name="enable_elbow_roll_switching" default="true"/>
+  <arg name="elbow_roll_pitch_zone" default="0.5235987755982988"/>
+  <arg name="elbow_roll_yaw_zone" default="1.0471975511965976"/>
+  <arg name="elbow_pitch_sign" default="1.0"/>
+  <arg name="elbow_yaw_sign" default="1.0"/>
+  <arg name="elbow_pitch_scale" default="1.0"/>
+  <arg name="elbow_yaw_scale" default="1.0"/>
   <!-- distal mapping lists are set as private params inside the control_joint_angle
        node below (parallel lists: human source joint -> DRAGON target joint, sign,
        scale). Default: wrist flexion -> joint1_pitch, wrist abduction -> joint1_yaw,
-       elbow flexion -> joint2_yaw, shoulder flexion -> joint3_pitch, shoulder
-       abduction -> joint3_yaw; target=clamp(sign*scale*source+offset), signs=
-       [1,-1,1,1,-1], offsets=[0,0,0,pi/2,0] (device shoulder ~-pi/2 at 90deg ->
-       joint3_pitch 0), scales=1.0. joint2_pitch unmapped (reserve), held. -->
+       elbow flexion -> joint2_pitch/yaw selected by upper-arm roll, shoulder
+       flexion -> joint3_pitch, shoulder abduction -> joint3_yaw;
+       target=clamp(sign*scale*source+offset), signs=[1,-1,1,1,-1],
+       offsets=[0,0,0,pi/2,0] (device shoulder ~-pi/2 at 90deg -> joint3_pitch 0),
+       scales=1.0. -->
   <arg name="capture_neutral_on_first_msg" default="false"/>
   <!-- distal link4 anchor: helper to keep the arm-tip link (link4) ~fixed in
        world while joints bend. Default mode anchors only link4 position by
@@ -255,6 +266,13 @@
     <rosparam param="distal_signs">[1.0, -1.0, 1.0, 1.0, -1.0]</rosparam>
     <rosparam param="distal_scales">[1.0, 1.0, 1.0, 1.0, 1.0]</rosparam>
     <rosparam param="distal_offsets">[0.0, 0.0, 0.0, 1.5707963267948966, 0.0]</rosparam>
+    <param name="enable_elbow_roll_switching" value="$(arg enable_elbow_roll_switching)"/>
+    <param name="elbow_roll_pitch_zone" value="$(arg elbow_roll_pitch_zone)"/>
+    <param name="elbow_roll_yaw_zone" value="$(arg elbow_roll_yaw_zone)"/>
+    <param name="elbow_pitch_sign" value="$(arg elbow_pitch_sign)"/>
+    <param name="elbow_yaw_sign" value="$(arg elbow_yaw_sign)"/>
+    <param name="elbow_pitch_scale" value="$(arg elbow_pitch_scale)"/>
+    <param name="elbow_yaw_scale" value="$(arg elbow_yaw_scale)"/>
     <param name="joint_limit" value="$(arg joint_limit)"/>
     <param name="max_step" value="$(arg max_step)"/>
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>

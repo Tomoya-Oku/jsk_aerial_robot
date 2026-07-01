@@ -103,15 +103,14 @@ class ControlJoints:
         # Each listed human arm joint is matched in ABSOLUTE angle to a DRAGON joint:
         #   target_joint = clamp(sign * scale * source_angle + offset)  (no neutral).
         # Default: wrist flexion (beckoning) -> joint1_pitch, wrist abduction (sweep
-        # parallel to the palm) -> joint1_yaw, elbow flexion -> joint2_yaw, shoulder
-        # flexion -> joint3_pitch, shoulder abduction -> joint3_yaw. Signs default to
-        # [1, -1, 1, 1, -1] (flip per joint if DRAGON bends the wrong way); scales 1.0
-        # give a 1:1 angle match; offsets shift the zero. The device measures shoulder
-        # flexion as negative (~-pi/2 at a 90deg operator shoulder), so joint3_pitch
-        # uses sign=+1, offset=pi/2 -> source -pi/2 maps to joint3_pitch = 0. Joints
-        # not listed
-        # (e.g. joint2_pitch, kept as a redundancy reserve) are held at their last
-        # commanded value, so only the mapped joints move.
+        # parallel to the palm) -> joint1_yaw, elbow flexion -> joint2 (pitch/yaw
+        # selected by upper-arm roll below), shoulder flexion -> joint3_pitch,
+        # shoulder abduction -> joint3_yaw. Signs default to [1, -1, 1, 1, -1] (flip
+        # per joint if DRAGON bends the wrong way); scales 1.0 give a 1:1 angle match;
+        # offsets shift the zero. The device measures shoulder flexion as negative
+        # (~-pi/2 at a 90deg operator shoulder), so joint3_pitch uses sign=+1,
+        # offset=pi/2 -> source -pi/2 maps to joint3_pitch = 0. Joints not listed are
+        # held at their last commanded value, so only the mapped joints move.
         self.joint_index = {name: i for i, name in enumerate(self.joint_names)}
         distal_sources = rospy.get_param("~distal_source_joints", [
             "wrist_flexion_extension_joint",
@@ -145,6 +144,34 @@ class ControlJoints:
             self.distal_map.append((distal_sources[k], dst, sign, scale, offset))
         if self.mapping_mode == "distal" and not self.distal_map:
             rospy.logwarn("distal: no valid source->target mapping; no joint will move")
+
+        # Route elbow flexion to the DRAGON joint2 axis that matches the operator's
+        # visible elbow plane. When upper-arm roll is near zero, the forearm is close
+        # to vertical and elbow flexion should bend joint2_pitch. When upper-arm roll
+        # is far from zero, the elbow opens/closes in a ground-parallel plane and
+        # should bend joint2_yaw. The transition band avoids a command jump.
+        self.enable_elbow_roll_switching = rospy.get_param("~enable_elbow_roll_switching", True)
+        self.elbow_source_joint = rospy.get_param(
+            "~elbow_source_joint", "elbow_flexion_extension_joint")
+        self.elbow_roll_joint = rospy.get_param(
+            "~elbow_roll_joint", "upper_arm_external_internal_rotation_joint")
+        self.elbow_pitch_target_joint = rospy.get_param(
+            "~elbow_pitch_target_joint", "joint2_pitch")
+        self.elbow_yaw_target_joint = rospy.get_param(
+            "~elbow_yaw_target_joint", "joint2_yaw")
+        self.elbow_roll_pitch_zone = abs(float(rospy.get_param(
+            "~elbow_roll_pitch_zone", np.deg2rad(30.0))))
+        self.elbow_roll_yaw_zone = abs(float(rospy.get_param(
+            "~elbow_roll_yaw_zone", np.deg2rad(60.0))))
+        if self.elbow_roll_yaw_zone < self.elbow_roll_pitch_zone:
+            rospy.logwarn("elbow_roll_yaw_zone is smaller than pitch_zone; using pitch_zone")
+            self.elbow_roll_yaw_zone = self.elbow_roll_pitch_zone
+        self.elbow_pitch_sign = float(rospy.get_param("~elbow_pitch_sign", 1.0))
+        self.elbow_yaw_sign = float(rospy.get_param("~elbow_yaw_sign", 1.0))
+        self.elbow_pitch_scale = float(rospy.get_param("~elbow_pitch_scale", 1.0))
+        self.elbow_yaw_scale = float(rospy.get_param("~elbow_yaw_scale", 1.0))
+        self.elbow_pitch_offset = float(rospy.get_param("~elbow_pitch_offset", 0.0))
+        self.elbow_yaw_offset = float(rospy.get_param("~elbow_yaw_offset", 0.0))
 
         # --- distal link4 anchor -------------------------------------------------
         # Experimental helper: keep the arm-tip link (default link4) roughly fixed in
@@ -328,6 +355,15 @@ class ControlJoints:
             rospy.loginfo("distal absolute match: %s", ", ".join(
                 "{}<-clamp({:+.1f}*{:.2f}*{}{:+.3f})".format(dst, sign, scale, src, offset)
                 for src, dst, sign, scale, offset in self.distal_map))
+            rospy.loginfo(
+                "distal elbow roll switching: enable=%s, elbow=%s, roll=%s, pitch=%s, yaw=%s, zones=%.3f/%.3f rad",
+                self.enable_elbow_roll_switching,
+                self.elbow_source_joint,
+                self.elbow_roll_joint,
+                self.elbow_pitch_target_joint,
+                self.elbow_yaw_target_joint,
+                self.elbow_roll_pitch_zone,
+                self.elbow_roll_yaw_zone)
         rospy.loginfo("joint mapping: %s",
                       ", ".join("{}<-{}".format(dst, src)
                                 for dst, src in zip(self.joint_names, self.source_joint_names)))
@@ -513,7 +549,50 @@ class ControlJoints:
             if val is None:
                 continue
             target[self.joint_index[dst]] = self.clamp(sign * scale * val + offset)
+        self.apply_elbow_roll_switching(target)
         return target
+
+    def apply_elbow_roll_switching(self, target):
+        if not self.enable_elbow_roll_switching:
+            return
+        if (self.elbow_pitch_target_joint not in self.joint_index or
+                self.elbow_yaw_target_joint not in self.joint_index):
+            rospy.logwarn_throttle(
+                2.0,
+                "elbow roll switching skipped: target joint is missing (%s, %s)",
+                self.elbow_pitch_target_joint,
+                self.elbow_yaw_target_joint)
+            return
+
+        elbow = self.latest_device_joints.get(self.elbow_source_joint)
+        upper_roll = self.latest_device_joints.get(self.elbow_roll_joint)
+        if elbow is None or upper_roll is None:
+            rospy.logwarn_throttle(
+                2.0,
+                "elbow roll switching waiting for joints: elbow=%s roll=%s",
+                elbow is not None,
+                upper_roll is not None)
+            return
+
+        abs_roll = abs(self.wrap(upper_roll))
+        if abs_roll <= self.elbow_roll_pitch_zone:
+            yaw_ratio = 0.0
+        elif abs_roll >= self.elbow_roll_yaw_zone:
+            yaw_ratio = 1.0
+        else:
+            width = max(1e-9, self.elbow_roll_yaw_zone - self.elbow_roll_pitch_zone)
+            yaw_ratio = self.smoothstep((abs_roll - self.elbow_roll_pitch_zone) / width)
+
+        # Treat pitch/yaw as a bend vector: the transition preserves elbow command
+        # magnitude while rotating it from pitch to yaw as upper-arm roll increases.
+        theta = yaw_ratio * np.pi / 2.0
+        pitch_weight = np.cos(theta)
+        yaw_weight = np.sin(theta)
+        pitch = self.elbow_pitch_offset + pitch_weight * self.elbow_pitch_sign * self.elbow_pitch_scale * elbow
+        yaw = self.elbow_yaw_offset + yaw_weight * self.elbow_yaw_sign * self.elbow_yaw_scale * elbow
+
+        target[self.joint_index[self.elbow_pitch_target_joint]] = self.clamp(pitch)
+        target[self.joint_index[self.elbow_yaw_target_joint]] = self.clamp(yaw)
 
     # --- geometric (long-term) mapping --------------------------------------
     @staticmethod
@@ -578,6 +657,11 @@ class ControlJoints:
     @staticmethod
     def wrap(angle):
         return (angle + np.pi) % (2.0 * np.pi) - np.pi
+
+    @staticmethod
+    def smoothstep(x):
+        x = max(0.0, min(1.0, float(x)))
+        return x * x * (3.0 - 2.0 * x)
 
     def geometric_relative(self, joints):
         # Inter-segment (child - parent) azimuth/elevation per arm joint, ordered
