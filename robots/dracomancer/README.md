@@ -334,7 +334,7 @@ flowchart TD
 
 - **判定基準**：force・torque **両方**の予測半径が下限しきい値以上なら変形可。
 - **NG時**：`feasibility_gate_mode` に応じて、保持・小ステップ探索・縮小移動のいずれかを行う。
-- 予測はサービス `shape_feasibility/check_shape` が `dragon/full_vectoring_robot_model` プラグインで計算します。**ジンバルの公称計画を含む近似予測**で、DRAGON が実際に達成する半径に近い値です（オンラインの角度制限・ロックは無視）。
+- 予測はサービス `shape_feasibility/check_shape` が `dragon/full_vectoring_robot_model` プラグインで計算します。既定の `shape_feasibility_prediction_mode=optimized_gimbal` では、候補形状の `updateRobotModel()` 後にDRAGONフルベクタリングモデルのジンバル処理済み状態から `calcFeasibleControlFxyDists()` / `calcFeasibleControlTDists()` を再評価します。将来、controller と同じ割当器を共有する場合は `controller` モードへ差し替える想定です。
 - 最適化が毎回走るため、評価は `feasibility_rate`（既定 20Hz）にスロットルされます。
 
 > `shape_feasibility_node` は DRAGON の namespace（`ns=dragon`）で起動し、モデルが `/dragon/robot_description` と機体パラメータを読みます。**DRAGON が起動している必要があります。**
@@ -404,6 +404,7 @@ flowchart TD
 | `feasibility_soft_min_scale` | `0.0` | `soft_scale` の移動倍率下限 |
 | `feasibility_service` | `/dragon/shape_feasibility/check_shape` | 予測サービス名 |
 | `feasibility_rate` | `20.0` | 候補評価のスロットル周波数 [Hz] |
+| `shape_feasibility_prediction_mode` | `optimized_gimbal` | 予測fcの計算方法。`model` / `optimized_gimbal` / `controller`（予約、現状はoptimized_gimbalへfallback） |
 | `force_radius_threshold` | `0.108990` | 力の下限しきい値（topic 未受信時のフォールバック） |
 | `torque_radius_threshold` | `0.015400` | トルクの下限しきい値（同上） |
 | `max_step` | `0.04` | 1周期あたりの最大変化量 |
@@ -627,7 +628,7 @@ roslaunch dracomancer teleoperation.launch \
 | 項目 | 現状 |
 | --- | --- |
 | 操縦桿による移動制御 | 既定 OFF（`enable_position_control:=false`）。`control_position.py` が `POS_VEL_MODE` で `target_pos` 未設定（=0）の FlightNav を送るため、ON にすると DRAGON が原点・高度0へ指令され落下する。`VEL_MODE` 化など修正が必要 |
-| 予測フィージビリティ・ゲート | 既定 ON（`enable_feasibility_gate:=true`）。Force/Torque Volume radius に基づき危険姿勢を抑制する。モデル/設定によって予測 fc が過小になり全変形を却下する場合は、`enable_feasibility_gate:=false` で一時的に無効化して予測器側を調整する |
+| 予測フィージビリティ・ゲート | 既定 ON（`enable_feasibility_gate:=true`）。Force/Torque Volume radius に基づき危険姿勢を抑制する。予測fcは既定 `shape_feasibility_prediction_mode=optimized_gimbal` でDRAGONモデルのジンバル処理済み状態を使う。モデル/設定によって予測 fc が過小になり全変形を却下する場合は、`enable_feasibility_gate:=false` で一時的に無効化して予測器側を調整する |
 | 立ち上げ時の通常形状保持 | `startup` モードで実装。DRAGON 側の preflight joint control 設定に依存 |
 | 力覚提示 | 提示トルク相当量の計算とトルク ON/OFF 出力のみ対応。XL430-W250-T では所望電流・所望トルク入力ができないため、Mk-Iでの連続的な反力・反トルク提示は Mk-II 以降の展望。既存の電流指令経路は互換サーボ向け任意機能として保持 |
 | Force/Torque Volume に基づく厳密な姿勢制限 | DRAGON の内接半径を使ったスケーリングのみ実装 |

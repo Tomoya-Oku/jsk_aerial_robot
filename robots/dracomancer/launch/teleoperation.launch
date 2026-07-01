@@ -31,6 +31,11 @@
   <arg name="feasibility_soft_min_scale" default="0.0"/>
   <arg name="feasibility_service" default="/$(arg robot_ns)/shape_feasibility/check_shape"/>
   <arg name="robot_model_plugin_name" default="dragon/full_vectoring_robot_model"/>
+  <!-- shape_feasibility prediction mode:
+         model            : legacy getFeasibleControlF/TMin() after updateRobotModel().
+         optimized_gimbal : DRAGON full-vectoring model's gimbal-processed state (default).
+         controller       : reserved for a future shared controller allocator; currently falls back to optimized_gimbal. -->
+  <arg name="shape_feasibility_prediction_mode" default="optimized_gimbal"/>
   <!-- Gate fallback (hard_min) used only until the threshold topic arrives;
        matches volume_radius_monitor hard_min defaults (data-driven, see
        docs/fc_threshold_calibration.md). -->
@@ -275,5 +280,6 @@
         output="screen"
         if="$(arg enable_feasibility_gate)">
     <param name="robot_model_plugin_name" value="$(arg robot_model_plugin_name)"/>
+    <param name="prediction_mode" value="$(arg shape_feasibility_prediction_mode)"/>
   </node>
 </launch>
