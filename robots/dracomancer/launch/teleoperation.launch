@@ -65,11 +65,11 @@
        [1,-1,1,1,-1], offsets=[0,0,0,pi/2,0] (device shoulder ~-pi/2 at 90deg ->
        joint3_pitch 0), scales=1.0. joint2_pitch unmapped (reserve), held. -->
   <arg name="capture_neutral_on_first_msg" default="false"/>
-  <!-- distal link4 anchor: experimental helper to keep the arm-tip link (link4)
-       ~fixed in world while joints bend. Default mode anchors only link4 position
-       by commanding COG position (uav/nav POS_MODE) alongside joints_ctrl. The full
+  <!-- distal link4 anchor: helper to keep the arm-tip link (link4) ~fixed in
+       world while joints bend. Default mode anchors only link4 position by
+       commanding COG position (uav/nav POS_MODE) alongside joints_ctrl. The full
        mode also compensates baselink attitude and is much more aggressive. -->
-  <arg name="enable_link4_anchor" default="false"/>
+  <arg name="enable_link4_anchor" default="true"/>
   <arg name="link4_anchor_mode" default="position_only"/> <!-- position_only / full -->
   <arg name="publish_link4_anchor_baselink_motion" default="false"/>
   <!-- Limit joint-step progress so the link4-anchor body compensation target does
@@ -98,7 +98,8 @@
   <arg name="enable_attitude_control" default="false"/>
   <arg name="enable_joint_angle_control" default="true"/>
   <!-- teleop_mode: startup / teleoperation ('teleop' alias accepted).
-       In teleoperation, joystick movement and arm-shape mapping are both active.
+       Startup mode keeps the default safe shape until the operator switches to
+       teleoperation; joystick movement still depends on enable_position_control.
        Runtime switch: rostopic pub -1 /dracomancer/teleop_mode std_msgs/String "data: 'teleoperation'" -->
   <arg name="teleop_mode" default="startup"/>
   <arg name="mode_topic" default="/$(arg device_ns)/teleop_mode"/>

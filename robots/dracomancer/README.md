@@ -104,14 +104,15 @@ stateDiagram-v2
     startup --> teleoperation: 操作開始（移動＋形状）
     teleoperation --> startup: 安全姿勢へ復帰
     note right of teleoperation
-      操縦桿移動と腕形状写像を同時に提供
+      腕形状写像を提供
+      操縦桿移動はenable_position_control=true時のみ
     end note
 ```
 
 | モード | 移動指令 `/dragon/uav/nav` | 形状指令 `/dragon/joints_ctrl` | 用途 |
 | --- | --- | --- | --- |
 | `startup` | 送信しない | `startup_pose` を保持 | 離陸前後に DRAGON を通常姿勢へ保つ |
-| `teleoperation` | ジョイスティック + IMU 相対移動を送信 | Dracomancer 腕関節を DRAGON へマッピング | 接触作業。移動と形状変形を同時に行う |
+| `teleoperation` | `enable_position_control=true` のときジョイスティック + IMU 相対移動を送信 | Dracomancer 腕関節を DRAGON へマッピング | 接触作業。既定では形状変形とlink4固定を行う |
 
 切り替え例:
 
@@ -278,7 +279,7 @@ target_joint[k] = clamp(sign[k] * scale[k] * source_angle[k] + offset[k],  -join
 - 絶対角の直接対応なので中立姿勢の記録（`capture_neutral_on_first_msg`）は不要・不使用。
 - `distal_signs` 既定は `[1.0, -1.0, 1.0, 1.0, -1.0]`（手首内外転・肩内外転が -1、他は +1。各関節ごとに、DRAGON が逆向きに動く場合に反転）。`distal_scales` 既定 `1.0` で 1:1 角度一致。
 - `distal_offsets` 既定は `[0, 0, 0, π/2, 0]`：**device は肩屈曲を負で測る**（90° で約 -π/2）ため、joint3_pitch は `sign=+1`＋`offset=π/2` で **操縦者の肩 90° → joint3_pitch 0°**（rosbag 解析で確定。`sign=-1` だと全域 +π/2 に飽和した）。肩内外転の向きは未検証なので sim で要確認。
-- **link4 アンカー（実験機能、`enable_link4_anchor` 既定 OFF）**: 関節を曲げても DRAGON の **link4（腕先端）位置をワールドにおおよそ固定**するため、ホバー開始時に link4 位置を基準化し、`joints_ctrl` と同じ目標関節角からCOG位置（`uav/nav` POS_MODE）を逆算する。既定の `link4_anchor_mode:=position_only` ではbaselink姿勢補償を送らない。`link4_anchor_mode:=full` ではCOG位置+baselink姿勢でlink4姿勢も補償できるが、姿勢failsafeに近づきやすいため明示指定時のみ使う。ON時も `enable_link4_anchor_body_safety` がCOG高度・水平リーシュ・full時の姿勢を検査し、危険なbody補償やTF断時は関節/補償指令を保持する。詳細は [docs/link4_anchor.md](docs/link4_anchor.md)。**移動制御（`enable_position_control`）とは併用不可**（`uav/nav` が競合）。
+- **link4 アンカー（`enable_link4_anchor` 既定 ON）**: 関節を曲げても DRAGON の **link4（腕先端）位置をワールドにおおよそ固定**するため、ホバー開始時に link4 位置を基準化し、`joints_ctrl` と同じ目標関節角からCOG位置（`uav/nav` POS_MODE）を逆算する。既定の `link4_anchor_mode:=position_only` ではbaselink姿勢補償を送らない。`link4_anchor_mode:=full` ではCOG位置+baselink姿勢でlink4姿勢も補償できるが、姿勢failsafeに近づきやすいため明示指定時のみ使う。ON時も `enable_link4_anchor_body_safety` がCOG高度・水平リーシュ・full時の姿勢を検査し、危険なbody補償やTF断時は関節/補償指令を保持する。詳細は [docs/link4_anchor.md](docs/link4_anchor.md)。**移動制御（`enable_position_control`）とは併用不可**（`uav/nav` が競合）。
 - 未対応の関節は `mapping_reference` の straight/circular に関係なく動かない。
 - 対応関係は平行リスト `distal_source_joints` / `distal_target_joints` / `distal_signs` / `distal_scales`（同じ長さ）で自由に変更可。
 
@@ -385,7 +386,7 @@ flowchart TD
 | `distal_signs` | `[1.0, -1.0, 1.0, 1.0, -1.0]` | `distal` の各符号（逆向きに動く関節を反転） |
 | `distal_scales` | `[1.0, 1.0, 1.0, 1.0, 1.0]` | `distal` の各ゲイン（`1.0` で 1:1 角度一致） |
 | `distal_offsets` | `[0, 0, 0, π/2, 0]` | `distal` の各加算オフセット[rad]（`sign*scale*source + offset`。肩屈曲=π/2 で 90°→0°） |
-| `enable_link4_anchor` | `false` | 実験機能。`distal` 時に link4 位置をワールド固定するためCOG位置を補償。`enable_position_control` とは併用不可 |
+| `enable_link4_anchor` | `true` | `distal` 時に link4 位置をワールド固定するためCOG位置を補償。`enable_position_control` とは併用不可 |
 | `link4_anchor_mode` | `position_only` | `position_only`: link4位置だけ固定 / `full`: COG位置+baselink姿勢でlink4姿勢も補償 |
 | `publish_link4_anchor_baselink_motion` | `false` | `full` 時に `/dragon/target_rotation_motion` へbaselink姿勢を即時指令する。姿勢failsafeに近づきやすいため既定OFF |
 | `enable_link4_anchor_body_step_scaling` | `true` | link4アンカーのCOG位置、またはfull時のbaselink姿勢の必要変化量が大きすぎる場合、関節ステップを自動縮小 |
@@ -599,7 +600,7 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | `xy_vel` | `0.3` | XY速度スケール |
 | `z_vel` | `0.2` | Z速度スケール |
 | `max_step` | `0.04` | 関節指令のレート制限 |
-| `enable_link4_anchor` | `false` | link4固定補償を有効化する実験機能 |
+| `enable_link4_anchor` | `true` | link4固定補償を有効化する |
 | `link4_anchor_mode` | `position_only` | link4固定の補償方式。既定はCOG位置だけ補償 |
 | `enable_link4_anchor_body_safety` | `true` | link4固定ON時にbody補償後の高度・水平距離、full時は姿勢も検査 |
 

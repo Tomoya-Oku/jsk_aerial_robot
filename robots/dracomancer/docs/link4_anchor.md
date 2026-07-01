@@ -5,7 +5,7 @@
 > するため、`joints_ctrl` と同じ目標関節角から link4 の相対位置を先に計算し、COG 位置を
 > 同周期で補償する。既定は `link4_anchor_mode:=position_only` で、baselink 姿勢補償は行わない。
 > `link4_anchor_mode:=full` では link4 姿勢まで補償するが、姿勢failsafeや高度低下に直結しやすいため
-> 明示指定時のみ使う。機能全体は既定 OFF（`enable_link4_anchor:=false`）。
+> 明示指定時のみ使う。機能全体は既定 ON（`enable_link4_anchor:=true`）。
 
 ## 背景・目的
 
@@ -113,13 +113,13 @@ SVG版の全体図は [../figures/link4_anchor_algorithm.svg](../figures/link4_a
   未設定で落下するバグがあるため（[../README.md](../README.md) 既知の課題）、本機能は**絶対 COG 位置
   (POS_MODE)** を送る別ロジックで実装する。
 - 操縦桿による移動（control_position）と同時利用すると、両者が `uav/nav` を書いて競合する。
-  本機能 ON 時は移動制御（`enable_position_control`）を OFF にすること（既定で OFF）。
+  本機能 ON 時は移動制御（`enable_position_control`）を OFF にすること（移動制御は既定で OFF）。
 
 ## パラメータ（control_joint_angle）
 
 | param | 既定 | 説明 |
 | --- | --- | --- |
-| `~enable_link4_anchor` | `false` | distal 時に link4 アンカーを有効化する実験機能 |
+| `~enable_link4_anchor` | `true` | distal 時に link4 アンカーを有効化する |
 | `~link4_anchor_mode` | `position_only` | `position_only`: link4位置だけをCOG位置で補償 / `full`: COG位置+baselink姿勢でlink4姿勢も補償 |
 | `~anchor_link` | `link4` | 固定するリンク名（`<robot>/<anchor_link>`） |
 | `~world_frame` | `world` | アンカー基準のワールドフレーム |
