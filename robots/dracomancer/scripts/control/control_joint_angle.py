@@ -147,14 +147,17 @@ class ControlJoints:
             rospy.logwarn("distal: no valid source->target mapping; no joint will move")
 
         # --- distal link4 anchor -------------------------------------------------
-        # Standard part of distal: keep the arm-tip link (default link4) roughly fixed
-        # in the world while joints bend, so the operator's wrist swings link1 and the
-        # shoulder swings link1-3. The anchor (link4 world pose) is captured at hover
-        # start; each cycle the COG position and baselink attitude that place link4 at
-        # the anchor are computed from the same target joints sent to joints_ctrl
-        # (uav/nav POS_MODE + baselink rpy). Not a perfect hold (slew-rate /
-        # feasibility limited). See docs/link4_anchor.md.
-        self.enable_link4_anchor = rospy.get_param("~enable_link4_anchor", True)
+        # Experimental helper: keep the arm-tip link (default link4) roughly fixed in
+        # the world while joints bend. The default mode anchors only the link4
+        # position via COG POS_MODE; full pose anchoring also compensates baselink
+        # attitude, but is much more aggressive for a flying platform.
+        self.enable_link4_anchor = rospy.get_param("~enable_link4_anchor", False)
+        self.link4_anchor_mode = rospy.get_param("~link4_anchor_mode", "position_only")
+        if self.link4_anchor_mode not in ("position_only", "full"):
+            rospy.logwarn("unknown link4_anchor_mode '%s'; fallback to position_only",
+                          self.link4_anchor_mode)
+            self.link4_anchor_mode = "position_only"
+        self.link4_anchor_full_pose = self.link4_anchor_mode == "full"
         self.world_frame = rospy.get_param("~world_frame", "world")
         anchor_link = rospy.get_param("~anchor_link", "link4")
         self.anchor_frame = rospy.get_param("~anchor_frame", self.robot_name + "/" + anchor_link)
@@ -165,7 +168,7 @@ class ControlJoints:
             "~baselink_rpy_topic", "/" + self.robot_name + "/final_target_baselink_rpy")
         self.baselink_motion_topic = rospy.get_param(
             "~baselink_motion_topic", "/" + self.robot_name + "/target_rotation_motion")
-        self.publish_baselink_motion = rospy.get_param("~publish_baselink_motion", True)
+        self.publish_baselink_motion = rospy.get_param("~publish_baselink_motion", False)
         self.enable_baselink_roll_mapping = rospy.get_param("~enable_baselink_roll_mapping", True)
         self.baselink_roll_source_joints = rospy.get_param("~baselink_roll_source_joints", [
             "upper_arm_external_internal_rotation_joint",
@@ -183,6 +186,20 @@ class ControlJoints:
             "~link4_anchor_max_body_pos_rate", 0.4))
         self.link4_anchor_max_body_rpy_rate = float(rospy.get_param(
             "~link4_anchor_max_body_rpy_rate", 0.8))
+        self.enable_link4_anchor_body_safety = rospy.get_param(
+            "~enable_link4_anchor_body_safety", True)
+        # Keep these below DRAGON's attitude failsafe (about 1.0 rad in the simulator
+        # log) so a link4 target that requires large body tilt is rejected before it is
+        # sent to the flight controller.
+        self.link4_anchor_max_abs_roll = abs(float(rospy.get_param(
+            "~link4_anchor_max_abs_roll", 0.6)))
+        self.link4_anchor_max_abs_pitch = abs(float(rospy.get_param(
+            "~link4_anchor_max_abs_pitch", 0.6)))
+        self.link4_anchor_min_cog_z = float(rospy.get_param(
+            "~link4_anchor_min_cog_z", 0.6))
+        # A non-positive max disables the upper altitude check.
+        self.link4_anchor_max_cog_z = float(rospy.get_param(
+            "~link4_anchor_max_cog_z", 0.0))
         # Minimal DRAGON v1/v1.5 kinematics used for target-shape feed-forward.
         # fc is fixed to link2; link4 is reached through joint2 and joint3.
         self.dragon_link_length = float(rospy.get_param("~dragon_link_length", 0.474))
@@ -191,6 +208,7 @@ class ControlJoints:
         self.anchor_mat = None
         self.want_capture_anchor = False
         self.cog_fc_mat = None
+        self.world_cog_mat = None
 
         # --- geometric (long-term) mapping ---------------------------------------
         # Arm kinematic chain (parent->child joint origins / axes) taken from
@@ -264,6 +282,7 @@ class ControlJoints:
         self.current_target = list(self.safe_pose)
         self.last_feasible_target = list(self.safe_pose)
         self.robot_hovering = False
+        self.last_link4_body_safe = None
         self.last_gate_log_stamp = rospy.Time(0)
         self.last_gate_feasible = None
         self.last_feasibility_eval_stamp = rospy.Time(0)
@@ -320,8 +339,8 @@ class ControlJoints:
         rospy.loginfo("joint command gating: only_when_hovering=%s, before_device_ready=%s",
                       self.publish_only_when_hovering, self.publish_before_device_ready)
         rospy.loginfo("hover flight_state for joint/link4 commands: %d", self.hover_flight_state)
-        rospy.loginfo("link4 anchor: enable=%s, anchor=%s, world=%s, cog=%s, baselink=%s",
-                      self.enable_link4_anchor, self.anchor_frame, self.world_frame,
+        rospy.loginfo("link4 anchor: enable=%s, mode=%s, anchor=%s, world=%s, cog=%s, baselink=%s",
+                      self.enable_link4_anchor, self.link4_anchor_mode, self.anchor_frame, self.world_frame,
                       self.cog_frame, self.baselink_frame)
         rospy.loginfo("link4 anchor baselink motion: enable=%s, topic=%s",
                       self.publish_baselink_motion, self.baselink_motion_topic)
@@ -329,6 +348,12 @@ class ControlJoints:
                       self.enable_link4_anchor_body_step_scaling,
                       self.link4_anchor_max_body_pos_rate,
                       self.link4_anchor_max_body_rpy_rate)
+        rospy.loginfo("link4 anchor body safety: enable=%s, max roll/pitch=%.3f/%.3f, z min/max=%.3f/%.3f",
+                      self.enable_link4_anchor_body_safety,
+                      self.link4_anchor_max_abs_roll,
+                      self.link4_anchor_max_abs_pitch,
+                      self.link4_anchor_min_cog_z,
+                      self.link4_anchor_max_cog_z)
 
     def connect_feasibility_service(self):
         try:
@@ -720,12 +745,14 @@ class ControlJoints:
         cur_pos, cur_rpy = current_body
         dst_pos, dst_rpy = target_body
         pos_delta = float(np.linalg.norm(dst_pos - cur_pos))
-        rpy_delta = max(abs(self.wrap(dst_rpy[i] - cur_rpy[i])) for i in range(3))
+        rpy_delta = 0.0
+        if self.link4_anchor_full_pose:
+            rpy_delta = max(abs(self.wrap(dst_rpy[i] - cur_rpy[i])) for i in range(3))
 
         scale = 1.0
         if pos_limit > 0.0 and pos_delta > pos_limit:
             scale = min(scale, pos_limit / pos_delta)
-        if rpy_limit > 0.0 and rpy_delta > rpy_limit:
+        if self.link4_anchor_full_pose and rpy_limit > 0.0 and rpy_delta > rpy_limit:
             scale = min(scale, rpy_limit / rpy_delta)
         if scale >= 1.0:
             return target
@@ -736,6 +763,55 @@ class ControlJoints:
             scale, pos_delta, pos_limit, rpy_delta, rpy_limit)
         return self.interpolate_target(self.current_target, target, scale)
 
+    def link4_body_target_safe(self, body_target):
+        if not self.enable_link4_anchor_body_safety:
+            return True
+        if not self.enable_link4_anchor or self.mapping_mode != "distal":
+            return True
+        if body_target is None:
+            return True
+
+        pos, rpy = body_target
+        reasons = []
+        if self.link4_anchor_full_pose:
+            roll, pitch, _ = rpy
+            if self.link4_anchor_max_abs_roll > 0.0 and abs(roll) > self.link4_anchor_max_abs_roll:
+                reasons.append("roll %.3f > %.3f" % (roll, self.link4_anchor_max_abs_roll))
+            if self.link4_anchor_max_abs_pitch > 0.0 and abs(pitch) > self.link4_anchor_max_abs_pitch:
+                reasons.append("pitch %.3f > %.3f" % (pitch, self.link4_anchor_max_abs_pitch))
+        if pos[2] < self.link4_anchor_min_cog_z:
+            reasons.append("cog_z %.3f < %.3f" % (pos[2], self.link4_anchor_min_cog_z))
+        if self.link4_anchor_max_cog_z > 0.0 and pos[2] > self.link4_anchor_max_cog_z:
+            reasons.append("cog_z %.3f > %.3f" % (pos[2], self.link4_anchor_max_cog_z))
+
+        safe = not reasons
+        if safe:
+            self.last_link4_body_safe = True
+            return True
+
+        if self.last_link4_body_safe is not False:
+            self.last_link4_body_safe = False
+        rospy.logwarn_throttle(
+            1.0,
+            "link4 anchor body safety rejected target: %s",
+            "; ".join(reasons))
+        return False
+
+    def link4_body_safety_gate(self, target):
+        if not self.enable_link4_anchor or self.mapping_mode != "distal":
+            return target
+        if not self.robot_hovering or self.teleop_mode != "teleoperation":
+            return target
+        if self.anchor_mat is None or self.cog_fc_mat is None:
+            return target
+        body_target = self.link4_anchor_body_target(target)
+        if self.link4_body_target_safe(body_target):
+            return target
+        # Do not advance the joint target if holding link4 would require an unsafe
+        # body command. Keeping current_target also prevents update_link4_anchor()
+        # from publishing the rejected body command for the same cycle.
+        return list(self.current_target)
+
     def publish_shape_error(self, desired, target):
         msg = Float64MultiArray()
         msg.data = [float(d - t) for d, t in zip(desired, target)]
@@ -745,8 +821,8 @@ class ControlJoints:
         target = self.desired_target()
         # desired (raw mapping) vs target (feasible-gated) error, for haptic feedback.
         desired = self.mapped_target() if self.teleop_mode == "teleoperation" else target
-        self.publish_shape_error(desired, target)
-        self.current_target = self.rate_limit(target)
+        self.current_target = self.link4_body_safety_gate(self.rate_limit(target))
+        self.publish_shape_error(desired, self.current_target)
 
         msg = JointState()
         msg.header.stamp = rospy.Time.now()
@@ -804,7 +880,19 @@ class ControlJoints:
             return None
         m_bl_link4 = self.dragon_fc_to_link4_matrix(target_joints)
         m_cog_link4 = self.cog_fc_mat.dot(m_bl_link4)
-        # world poses that hold link4 at the anchor: T_world_x = T_anchor * T_x_link4^-1
+
+        if not self.link4_anchor_full_pose:
+            if self.world_cog_mat is None:
+                return None
+            # In position_only mode we do not command baselink attitude. Compute the
+            # COG position that places link4 at the anchor under the current body
+            # orientation, instead of using the full-pose inverse solution.
+            rot_world_cog = self.world_cog_mat[0:3, 0:3]
+            pos = self.anchor_mat[0:3, 3] - rot_world_cog.dot(m_cog_link4[0:3, 3])
+            return np.array(pos, dtype=float), [0.0, 0.0, 0.0]
+
+        # Full mode: world poses that hold link4 at the anchor:
+        # T_world_x = T_anchor * T_x_link4^-1
         m_world_cog = self.anchor_mat.dot(tft.inverse_matrix(m_cog_link4))
         m_world_bl = self.anchor_mat.dot(tft.inverse_matrix(m_bl_link4))
         roll, pitch, yaw = tft.euler_from_matrix(m_world_bl)
@@ -813,19 +901,22 @@ class ControlJoints:
             [roll, pitch, yaw]
 
     def update_link4_anchor(self, target_joints=None):
-        # Keep the anchor link (link4) at the pose captured at hover start by
-        # commanding the COG position and baselink attitude that place it there.
+        # Keep the anchor link (link4) near the hover-start reference. The default
+        # mode fixes only the link4 position by commanding COG position; full mode
+        # additionally commands baselink attitude to fix the link4 pose.
         if not self.enable_link4_anchor or self.mapping_mode != "distal":
             return
         if not self.robot_hovering:
             self.anchor_mat = None  # re-capture on next hover
             self.cog_fc_mat = None
+            self.world_cog_mat = None
             return
         # capture at hover start (or on request)
         if self.anchor_mat is None or self.want_capture_anchor:
             try:
                 self.anchor_mat = self.lookup_matrix(self.world_frame, self.anchor_frame)
                 self.cog_fc_mat = self.lookup_matrix(self.cog_frame, self.baselink_frame)
+                self.world_cog_mat = self.lookup_matrix(self.world_frame, self.cog_frame)
                 self.want_capture_anchor = False
                 self.maybe_capture_baselink_roll_neutral(force=True)
                 rospy.loginfo("link4 anchor captured (%s in %s)", self.anchor_frame, self.world_frame)
@@ -842,12 +933,15 @@ class ControlJoints:
             # Keep cog->fc fresh, but do not read cog/fc->link4 from live TF here:
             # link4 must be compensated for the target shape we are about to command.
             self.cog_fc_mat = self.lookup_matrix(self.cog_frame, self.baselink_frame)
+            self.world_cog_mat = self.lookup_matrix(self.world_frame, self.cog_frame)
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
                 tf2_ros.ExtrapolationException) as e:
             rospy.logwarn_throttle(2.0, "link4 anchor cog->fc lookup failed: %s", str(e))
             return
         body_target = self.link4_anchor_body_target(target_joints)
         if body_target is None:
+            return
+        if not self.link4_body_target_safe(body_target):
             return
         pos, rpy_target = body_target
 
@@ -862,24 +956,25 @@ class ControlJoints:
         nav.target_pos_z = float(pos[2])
         self.nav_pub.publish(nav)
 
-        roll, pitch, yaw = rpy_target
-        rpy = Vector3Stamped()
-        rpy.header.stamp = rospy.Time.now()
-        rpy.vector.x, rpy.vector.y, rpy.vector.z = roll, pitch, yaw
-        self.baselink_rpy_pub.publish(rpy)
+        if self.link4_anchor_full_pose:
+            roll, pitch, yaw = rpy_target
+            rpy = Vector3Stamped()
+            rpy.header.stamp = rospy.Time.now()
+            rpy.vector.x, rpy.vector.y, rpy.vector.z = roll, pitch, yaw
+            self.baselink_rpy_pub.publish(rpy)
 
-        if self.publish_baselink_motion:
-            q = tft.quaternion_from_euler(roll, pitch, yaw)
-            motion = Odometry()
-            motion.header.stamp = rpy.header.stamp
-            # DragonNavigator::targetRotationMotionCallback expects exactly
-            # "baselink" here and applies the target immediately.
-            motion.header.frame_id = "baselink"
-            motion.pose.pose.orientation.x = q[0]
-            motion.pose.pose.orientation.y = q[1]
-            motion.pose.pose.orientation.z = q[2]
-            motion.pose.pose.orientation.w = q[3]
-            self.baselink_motion_pub.publish(motion)
+            if self.publish_baselink_motion:
+                q = tft.quaternion_from_euler(roll, pitch, yaw)
+                motion = Odometry()
+                motion.header.stamp = rpy.header.stamp
+                # DragonNavigator::targetRotationMotionCallback expects exactly
+                # "baselink" here and applies the target immediately.
+                motion.header.frame_id = "baselink"
+                motion.pose.pose.orientation.x = q[0]
+                motion.pose.pose.orientation.y = q[1]
+                motion.pose.pose.orientation.z = q[2]
+                motion.pose.pose.orientation.w = q[3]
+                self.baselink_motion_pub.publish(motion)
 
     def main(self):
         rate = rospy.Rate(self.rate_hz)

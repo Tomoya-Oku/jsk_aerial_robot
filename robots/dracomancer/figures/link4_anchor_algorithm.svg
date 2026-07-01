@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1040" viewBox="0 0 1800 1040" role="img" aria-labelledby="title desc">
+  <title id="title">Link4 Position Anchor Algorithm with Body Safety Gate</title>
+  <desc id="desc">System diagram of the experimental Link4 position anchor algorithm, including anchor capture, shape gating, COG position compensation, optional full-pose compensation, rate limiting, body safety checks, and command publishing.</desc>
+  <defs>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1f4e79"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2f6f4e"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9f2d2d"/>
+    </marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/>
+    </marker>
+    <style>
+      .bg { fill: #ffffff; }
+      .title { font: 700 40px Arial, Helvetica, sans-serif; fill: #111827; }
+      .subtitle { font: 400 22px Arial, Helvetica, sans-serif; fill: #4b5563; }
+      .lane { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 2; }
+      .lane-title { font: 700 22px Arial, Helvetica, sans-serif; fill: #334155; }
+      .box { fill: #ffffff; stroke: #334155; stroke-width: 2.2; }
+      .box-blue { fill: #eaf3fb; stroke: #1f4e79; stroke-width: 2.5; }
+      .box-green { fill: #edf7f0; stroke: #2f6f4e; stroke-width: 2.5; }
+      .box-amber { fill: #fff7e6; stroke: #9a6a00; stroke-width: 2.5; }
+      .box-red { fill: #fff0f0; stroke: #9f2d2d; stroke-width: 2.5; }
+      .decision { fill: #fff7e6; stroke: #9a6a00; stroke-width: 2.5; }
+      .label { font: 700 20px Arial, Helvetica, sans-serif; fill: #111827; }
+      .small { font: 400 17px Arial, Helvetica, sans-serif; fill: #374151; }
+      .mono { font: 400 16px Consolas, Menlo, monospace; fill: #334155; }
+      .arrow { fill: none; stroke: #1f4e79; stroke-width: 3.1; marker-end: url(#arrow-blue); }
+      .arrow-green { fill: none; stroke: #2f6f4e; stroke-width: 3.1; marker-end: url(#arrow-green); }
+      .arrow-red { fill: none; stroke: #9f2d2d; stroke-width: 3.1; marker-end: url(#arrow-red); }
+      .arrow-gray { fill: none; stroke: #6b7280; stroke-width: 2.5; marker-end: url(#arrow-gray); stroke-dasharray: 8 7; }
+      .caption { font: 400 18px Arial, Helvetica, sans-serif; fill: #4b5563; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1800" height="1040"/>
+  <text class="title" x="70" y="70">Link4 Position Anchor Algorithm with Body Safety Gate</text>
+  <text class="subtitle" x="70" y="108">Default position_only mode fixes Link4 position with COG POS_MODE; full mode also compensates baselink attitude</text>
+
+  <rect class="lane" x="60" y="145" width="1680" height="150" rx="16"/>
+  <text class="lane-title" x="95" y="188">1. Activation and anchor reference</text>
+
+  <rect class="box-amber" x="105" y="215" width="245" height="58" rx="10"/>
+  <text class="label" x="132" y="249">Link4 anchor arg</text>
+  <text class="mono" x="132" y="269">OFF, mode=position_only</text>
+
+  <rect class="box-blue" x="440" y="215" width="245" height="58" rx="10"/>
+  <text class="label" x="475" y="249">Hover detected</text>
+  <text class="mono" x="475" y="269">flight_state == 5</text>
+
+  <rect class="box-green" x="775" y="215" width="270" height="58" rx="10"/>
+  <text class="label" x="810" y="249">Capture Link4 pose</text>
+  <text class="mono" x="810" y="269">T_anchor = world-&gt;link4</text>
+
+  <rect class="box" x="1135" y="215" width="285" height="58" rx="10"/>
+  <text class="label" x="1168" y="249">Capture roll neutral</text>
+  <text class="mono" x="1168" y="269">upper arm + forearm</text>
+
+  <path class="arrow" d="M 350 244 L 440 244"/>
+  <path class="arrow" d="M 685 244 L 775 244"/>
+  <path class="arrow" d="M 1045 244 L 1135 244"/>
+
+  <rect class="lane" x="60" y="335" width="1680" height="230" rx="16"/>
+  <text class="lane-title" x="95" y="378">2. Shape candidate path</text>
+
+  <rect class="box-blue" x="105" y="425" width="250" height="70" rx="10"/>
+  <text class="label" x="132" y="454">Dracomancer joints</text>
+  <text class="small" x="132" y="482">operator arm posture</text>
+
+  <rect class="box" x="435" y="425" width="260" height="70" rx="10"/>
+  <text class="label" x="468" y="454">Distal mapping</text>
+  <text class="mono" x="468" y="482">candidate q</text>
+
+  <rect class="box-amber" x="775" y="425" width="270" height="70" rx="10"/>
+  <text class="label" x="806" y="454">Shape feasibility</text>
+  <text class="mono" x="806" y="482">fc_f_min / fc_t_min</text>
+
+  <rect class="box-green" x="1125" y="425" width="260" height="70" rx="10"/>
+  <text class="label" x="1158" y="454">Accepted shape</text>
+  <text class="mono" x="1158" y="482">last_feasible_target</text>
+
+  <rect class="box" x="1465" y="425" width="220" height="70" rx="10"/>
+  <text class="label" x="1498" y="454">Joint max_step</text>
+  <text class="mono" x="1498" y="482">limited q</text>
+
+  <path class="arrow" d="M 355 460 L 435 460"/>
+  <path class="arrow" d="M 695 460 L 775 460"/>
+  <path class="arrow" d="M 1045 460 L 1125 460"/>
+  <path class="arrow" d="M 1385 460 L 1465 460"/>
+
+  <rect class="lane" x="60" y="610" width="1680" height="230" rx="16"/>
+  <text class="lane-title" x="95" y="653">3. Link4 position body target prediction</text>
+
+  <rect class="box" x="105" y="700" width="280" height="78" rx="10"/>
+  <text class="label" x="138" y="730">Target-shape FK</text>
+  <text class="mono" x="138" y="758">fc -&gt; link4(q)</text>
+
+  <rect class="box" x="475" y="700" width="320" height="78" rx="10"/>
+  <text class="label" x="508" y="730">Inverse position constraint</text>
+  <text class="mono" x="508" y="758">p_cog = p_anchor - R*p</text>
+
+  <rect class="box-amber" x="885" y="700" width="290" height="78" rx="10"/>
+  <text class="label" x="918" y="730">Body step scaling</text>
+  <text class="small" x="918" y="758">limit COG rate; RPY in full</text>
+
+  <polygon class="decision" points="1375,680 1538,739 1375,798 1212,739"/>
+  <text class="label" x="1300" y="729">Body target</text>
+  <text class="label" x="1315" y="754">safe?</text>
+
+  <text class="mono" x="1560" y="705">checks:</text>
+  <text class="mono" x="1560" y="730">COG z range</text>
+  <text class="mono" x="1560" y="753">full: |roll| limit</text>
+  <text class="mono" x="1560" y="776">full: |pitch| limit</text>
+
+  <path class="arrow-gray" d="M 1575 495 C 1575 585, 245 600, 245 700"/>
+  <path class="arrow" d="M 385 739 L 475 739"/>
+  <path class="arrow" d="M 795 739 L 885 739"/>
+  <path class="arrow" d="M 1175 739 L 1212 739"/>
+
+  <rect class="lane" x="60" y="880" width="1680" height="105" rx="16"/>
+  <text class="lane-title" x="95" y="923">4. Command output</text>
+
+  <rect class="box-green" x="290" y="925" width="330" height="46" rx="10"/>
+  <text class="label" x="325" y="955">Publish joints_ctrl</text>
+
+  <rect class="box-green" x="705" y="925" width="330" height="46" rx="10"/>
+  <text class="label" x="740" y="955">Publish uav/nav POS_MODE</text>
+
+  <rect class="box-green" x="1120" y="925" width="355" height="46" rx="10"/>
+  <text class="label" x="1155" y="955">Full only: publish RPY</text>
+
+  <rect class="box-red" x="1120" y="845" width="355" height="46" rx="10"/>
+  <text class="label" x="1155" y="875">Reject: hold previous target</text>
+
+  <path class="arrow-green" d="M 1375 798 C 1250 905, 760 905, 620 948"/>
+  <path class="arrow-green" d="M 1375 798 C 1260 900, 1000 900, 1035 948"/>
+  <path class="arrow-green" d="M 1375 798 C 1340 880, 1275 890, 1298 925"/>
+  <path class="arrow-red" d="M 1538 739 C 1605 780, 1545 846, 1475 868"/>
+
+  <text class="mono" x="1265" y="822">YES</text>
+  <text class="mono" x="1518" y="805">NO</text>
+  <text class="caption" x="70" y="1020">Caption: Link4 anchor algorithm. The default path fixes Link4 position; full-pose compensation is an explicit stronger mode.</text>
+</svg>

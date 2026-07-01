@@ -65,18 +65,26 @@
        [1,-1,1,1,-1], offsets=[0,0,0,pi/2,0] (device shoulder ~-pi/2 at 90deg ->
        joint3_pitch 0), scales=1.0. joint2_pitch unmapped (reserve), held. -->
   <arg name="capture_neutral_on_first_msg" default="false"/>
-  <!-- distal link4 anchor: keep the arm-tip link (link4) ~fixed in world while
-       joints bend, by commanding COG position + baselink attitude (uav/nav POS_MODE
-       + target_rotation_motion, with final_target_baselink_rpy kept for compatibility)
-       alongside joints_ctrl. Anchor captured at hover start. Standard part of distal
-       (default ON). See docs/link4_anchor.md. -->
-  <arg name="enable_link4_anchor" default="true"/>
-  <arg name="publish_link4_anchor_baselink_motion" default="true"/>
+  <!-- distal link4 anchor: experimental helper to keep the arm-tip link (link4)
+       ~fixed in world while joints bend. Default mode anchors only link4 position
+       by commanding COG position (uav/nav POS_MODE) alongside joints_ctrl. The full
+       mode also compensates baselink attitude and is much more aggressive. -->
+  <arg name="enable_link4_anchor" default="false"/>
+  <arg name="link4_anchor_mode" default="position_only"/> <!-- position_only / full -->
+  <arg name="publish_link4_anchor_baselink_motion" default="false"/>
   <!-- Limit joint-step progress so the link4-anchor body compensation target does
-       not require excessive COG position / baselink attitude motion. -->
+       not require excessive COG position, or baselink attitude motion in full mode. -->
   <arg name="enable_link4_anchor_body_step_scaling" default="true"/>
   <arg name="link4_anchor_max_body_pos_rate" default="0.4"/>
   <arg name="link4_anchor_max_body_rpy_rate" default="0.8"/>
+  <!-- Reject link4-anchor targets that would require unsafe body attitude/altitude.
+       These limits are evaluated after max_step/body-step scaling; rejected targets
+       hold the previous joint command and publish no rejected body command. -->
+  <arg name="enable_link4_anchor_body_safety" default="true"/>
+  <arg name="link4_anchor_max_abs_roll" default="0.6"/>
+  <arg name="link4_anchor_max_abs_pitch" default="0.6"/>
+  <arg name="link4_anchor_min_cog_z" default="0.6"/>
+  <arg name="link4_anchor_max_cog_z" default="0.0"/>
   <!-- Baselink roll mapping: sum upper-arm roll and forearm roll deltas from the
        captured neutral pose, then add the result to the link4-anchor baselink roll. -->
   <arg name="enable_baselink_roll_mapping" default="true"/>
@@ -248,10 +256,16 @@
     <param name="max_step" value="$(arg max_step)"/>
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
     <param name="enable_link4_anchor" value="$(arg enable_link4_anchor)"/>
+    <param name="link4_anchor_mode" value="$(arg link4_anchor_mode)"/>
     <param name="publish_baselink_motion" value="$(arg publish_link4_anchor_baselink_motion)"/>
     <param name="enable_link4_anchor_body_step_scaling" value="$(arg enable_link4_anchor_body_step_scaling)"/>
     <param name="link4_anchor_max_body_pos_rate" value="$(arg link4_anchor_max_body_pos_rate)"/>
     <param name="link4_anchor_max_body_rpy_rate" value="$(arg link4_anchor_max_body_rpy_rate)"/>
+    <param name="enable_link4_anchor_body_safety" value="$(arg enable_link4_anchor_body_safety)"/>
+    <param name="link4_anchor_max_abs_roll" value="$(arg link4_anchor_max_abs_roll)"/>
+    <param name="link4_anchor_max_abs_pitch" value="$(arg link4_anchor_max_abs_pitch)"/>
+    <param name="link4_anchor_min_cog_z" value="$(arg link4_anchor_min_cog_z)"/>
+    <param name="link4_anchor_max_cog_z" value="$(arg link4_anchor_max_cog_z)"/>
     <param name="enable_baselink_roll_mapping" value="$(arg enable_baselink_roll_mapping)"/>
     <param name="baselink_roll_limit" value="$(arg baselink_roll_limit)"/>
     <rosparam param="baselink_roll_source_joints">["upper_arm_external_internal_rotation_joint", "wrist_supination_joint"]</rosparam>
