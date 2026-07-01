@@ -33,7 +33,7 @@
   <text class="subtitle" x="80" y="110">ROS topics and processing nodes for pose commands, shape commands, and safety feedback</text>
 
   <rect class="lane" x="70" y="160" width="1560" height="170" rx="16"/>
-  <text class="lane-label" x="105" y="202">Wide-area motion command path</text>
+  <text class="lane-label" x="105" y="202">Optional motion command path</text>
 
   <rect class="node-blue" x="110" y="230" width="210" height="70" rx="10"/>
   <text class="label" x="145" y="258">Joystick serial</text>
@@ -45,7 +45,7 @@
 
   <rect class="node-green" x="760" y="230" width="260" height="70" rx="10"/>
   <text class="label" x="805" y="258">control_position.py</text>
-  <text class="topic" x="795" y="284">teleop_mode = wide</text>
+  <text class="topic" x="795" y="284">teleoperation</text>
 
   <rect class="node-red" x="1110" y="230" width="215" height="70" rx="10"/>
   <text class="label" x="1153" y="258">DRAGON nav</text>
@@ -53,7 +53,7 @@
 
   <rect class="node-amber" x="1410" y="230" width="175" height="70" rx="10"/>
   <text class="label" x="1448" y="258">Motion</text>
-  <text class="small" x="1442" y="284">COG / baselink</text>
+  <text class="small" x="1442" y="284">COG target</text>
 
   <path class="arrow" d="M 320 265 L 410 265"/>
   <path class="arrow" d="M 670 265 L 760 265"/>
@@ -79,7 +79,7 @@
 
   <rect class="node-green" x="760" y="535" width="260" height="70" rx="10"/>
   <text class="label" x="802" y="563">control_joint_angle.py</text>
-  <text class="topic" x="792" y="589">startup / precision / wide</text>
+  <text class="topic" x="792" y="589">startup / teleoperation</text>
 
   <rect class="node-red" x="1110" y="535" width="215" height="70" rx="10"/>
   <text class="label" x="1145" y="563">DRAGON shape</text>
@@ -102,14 +102,14 @@
 
   <rect class="node" x="1110" y="675" width="215" height="78" rx="10"/>
   <text class="label" x="1142" y="704">Safety monitor</text>
-  <text class="topic" x="1128" y="730">/dracomancer/</text>
-  <text class="topic" x="1128" y="750">dragon_shape_safety</text>
+  <text class="topic" x="1128" y="730">/dracomancer/dragon_</text>
+  <text class="topic" x="1128" y="750">shape_safety_scale</text>
   <path class="arrow-gray" d="M 1020 714 L 1110 714"/>
 
   <rect class="lane" x="70" y="800" width="1560" height="90" rx="16"/>
   <text class="lane-label" x="105" y="850">Runtime mode switch:</text>
   <text class="topic" x="390" y="850">/dracomancer/teleop_mode</text>
-  <text class="small" x="705" y="850">String values: startup, precision, wide</text>
+  <text class="small" x="705" y="850">String values: startup, teleoperation</text>
   <path class="arrow-gray" d="M 635 800 C 720 745, 790 655, 825 605"/>
   <path class="arrow-gray" d="M 730 800 C 760 700, 805 410, 835 300"/>
 

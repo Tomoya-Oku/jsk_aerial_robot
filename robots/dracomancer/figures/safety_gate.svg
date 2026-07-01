@@ -50,11 +50,11 @@
 
   <rect class="box" x="455" y="225" width="290" height="78" rx="10"/>
   <text class="label" x="492" y="256">control_joint_angle.py</text>
-  <text class="small" x="492" y="284">mapping + step limit</text>
+  <text class="small" x="492" y="284">distal mapping candidate</text>
 
   <rect class="box-green" x="835" y="225" width="285" height="78" rx="10"/>
   <text class="label" x="875" y="256">Candidate JointState</text>
-  <text class="mono" x="875" y="284">target DRAGON shape</text>
+  <text class="mono" x="875" y="284">pre-rate-limit shape</text>
 
   <rect class="box-amber" x="1210" y="225" width="255" height="78" rx="10"/>
   <text class="label" x="1242" y="256">Gate enabled?</text>
@@ -97,8 +97,8 @@
 
   <rect class="box-amber" x="880" y="688" width="320" height="96" rx="10"/>
   <text class="label" x="914" y="720">Threshold source</text>
-  <text class="mono" x="914" y="748">force_radius_threshold</text>
-  <text class="mono" x="914" y="771">torque_radius_threshold</text>
+  <text class="mono" x="914" y="748">*_volume_radius_threshold[0]</text>
+  <text class="mono" x="914" y="771">or launch fallback</text>
 
   <path class="arrow-gray" d="M 1040 688 C 1080 635, 1155 570, 1202 538"/>
   <text class="small" x="1215" y="632">topic value or launch fallback</text>
@@ -107,10 +107,10 @@
   <text class="lane-title" x="95" y="732">3. Command output</text>
 
   <rect class="box-green" x="115" y="765" width="250" height="58" rx="10"/>
-  <text class="label" x="150" y="800">Accept candidate</text>
+  <text class="label" x="150" y="800">Accept + max_step</text>
 
   <rect class="box-red" x="455" y="765" width="250" height="58" rx="10"/>
-  <text class="label" x="488" y="800">Hold last safe shape</text>
+  <text class="label" x="488" y="800">hold / search / scale</text>
 
   <path class="arrow-green" d="M 1335 595 C 1280 745, 520 720, 365 790"/>
   <text class="mono" x="715" y="716">YES</text>
@@ -119,7 +119,7 @@
   <text class="mono" x="1420" y="650">NO / service failure</text>
 
   <rect class="box-blue" x="115" y="842" width="590" height="42" rx="8"/>
-  <text class="mono" x="145" y="869">publish /dragon/joints_ctrl or keep previous feasible command</text>
+  <text class="mono" x="145" y="869">publish /dragon/joints_ctrl after rate limit and link4 body gate</text>
 
   <path class="arrow-gray" d="M 1338 303 C 1440 352, 1485 405, 1458 455"/>
   <text class="mono" x="1415" y="362">gate OFF: bypass</text>

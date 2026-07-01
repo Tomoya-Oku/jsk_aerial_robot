@@ -5,6 +5,9 @@
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#1f4e79"/>
     </marker>
+    <marker id="arrow-roll" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9a6a00"/>
+    </marker>
     <style>
       .bg { fill: #ffffff; }
       .title { font: 700 42px Arial, Helvetica, sans-serif; fill: #111827; }
@@ -21,46 +24,57 @@
       .map { fill: #ffffff; stroke: #334155; stroke-width: 1.8; }
       .head { fill: #eaf3fb; stroke: #1f4e79; stroke-width: 1.8; }
       .arrow { fill: none; stroke: #1f4e79; stroke-width: 3; marker-end: url(#arrow); }
+      .roll-arrow { fill: none; stroke: #9a6a00; stroke-width: 3; marker-end: url(#arrow-roll); }
+      .roll-map { fill: none; stroke: #9a6a00; stroke-width: 3; marker-end: url(#arrow-roll); stroke-dasharray: 8 6; }
       .caption { font: 400 18px Arial, Helvetica, sans-serif; fill: #4b5563; }
     </style>
   </defs>
 
   <rect class="bg" width="1600" height="920"/>
   <text class="title" x="80" y="72">Arm to Dragon Joint Mapping</text>
-  <text class="subtitle" x="80" y="110">Precision mode maps upper-limb posture to DRAGON as a single serial arm</text>
+  <text class="subtitle" x="80" y="110">Teleoperation distal mode maps upper-limb absolute angles to DRAGON serial joints</text>
 
   <rect class="panel" x="80" y="165" width="640" height="360" rx="18"/>
   <text class="panel-title" x="120" y="210">Dracomancer upper-limb joints</text>
-  <path class="link" d="M 170 410 L 270 330 L 390 340 L 515 275 L 620 285"/>
+  <path class="link" d="M 170 410 L 390 340 L 620 285"/>
   <circle class="joint3" cx="170" cy="410" r="26"/>
-  <circle class="joint3" cx="270" cy="330" r="26"/>
   <circle class="joint2" cx="390" cy="340" r="26"/>
-  <circle class="joint" cx="515" cy="275" r="26"/>
   <circle class="joint" cx="620" cy="285" r="26"/>
+  <path class="roll-arrow" d="M 260 365 C 275 333, 330 328, 350 356 C 370 386, 318 411, 282 391"/>
+  <path class="roll-arrow" d="M 485 306 C 500 274, 554 269, 575 296 C 596 325, 546 351, 510 333"/>
   <text class="label" x="120" y="460">shoulder</text>
   <text class="small" x="120" y="486">abduction / flexion</text>
   <text class="label" x="340" y="392">elbow</text>
   <text class="small" x="330" y="418">flexion-extension</text>
   <text class="label" x="535" y="240">wrist</text>
-  <text class="small" x="535" y="218">flexion / supination</text>
+  <text class="small" x="535" y="218">flexion / abduction</text>
+  <text class="small" x="285" y="318">upper-arm roll</text>
+  <text class="small" x="496" y="258">forearm roll</text>
 
   <rect class="panel" x="880" y="165" width="640" height="360" rx="18"/>
   <text class="panel-title" x="920" y="210">DRAGON serial-body joints</text>
-  <path class="link" d="M 1000 360 L 1120 300 L 1255 335 L 1390 285"/>
-  <circle class="joint" cx="1000" cy="360" r="28"/>
-  <circle class="joint2" cx="1120" cy="300" r="28"/>
-  <circle class="joint2" cx="1255" cy="335" r="28"/>
-  <circle class="joint3" cx="1390" cy="285" r="28"/>
-  <text class="label" x="950" y="415">joint1</text>
-  <text class="small" x="936" y="441">head side</text>
-  <text class="label" x="1168" y="385">joint2</text>
-  <text class="small" x="1158" y="411">middle</text>
-  <text class="label" x="1360" y="250">joint3</text>
-  <text class="small" x="1350" y="228">tail side</text>
+  <path class="link" d="M 960 385 L 1085 330 L 1210 360 L 1335 315 L 1460 350"/>
+  <text class="label" x="928" y="424">EE</text>
+  <circle class="joint" cx="1085" cy="330" r="28"/>
+  <circle class="joint2" cx="1210" cy="360" r="28"/>
+  <circle class="joint3" cx="1335" cy="315" r="28"/>
+  <path class="roll-arrow" d="M 1112 334 C 1128 302, 1180 300, 1200 328 C 1221 358, 1172 383, 1135 363"/>
+  <text class="label" x="1035" y="385">joint1</text>
+  <text class="small" x="1022" y="411">head side</text>
+  <text class="label" x="1125" y="300">baselink</text>
+  <text class="small" x="1125" y="324">link2 roll</text>
+  <text class="label" x="1183" y="415">joint2</text>
+  <text class="small" x="1173" y="441">middle</text>
+  <text class="label" x="1305" y="270">joint3</text>
+  <text class="small" x="1295" y="248">tail side</text>
+  <text class="small" x="1358" y="284">Pseudo-fixed link4</text>
+  <text class="small" x="1358" y="306">treated as baselink</text>
 
-  <path class="arrow" d="M 610 305 C 720 250, 845 300, 1000 360"/>
-  <path class="arrow" d="M 395 358 C 700 520, 980 500, 1195 330"/>
-  <path class="arrow" d="M 240 410 C 610 730, 1170 670, 1390 285"/>
+  <path class="arrow" d="M 620 285 C 730 250, 890 280, 1085 330"/>
+  <path class="arrow" d="M 390 340 C 700 520, 980 500, 1210 360"/>
+  <path class="arrow" d="M 170 410 C 425 188, 960 198, 1335 315"/>
+  <path class="roll-map" d="M 350 356 C 575 426, 900 408, 1148 376"/>
+  <path class="roll-map" d="M 575 296 C 742 360, 938 386, 1148 376"/>
 
   <rect class="map head" x="160" y="590" width="1280" height="48" rx="8"/>
   <text class="label" x="190" y="621">DRAGON joint</text>
@@ -74,43 +88,42 @@
   <text class="mono" x="470" y="665">wrist_flexion_extension_joint</text>
   <text class="mono" x="1045" y="665">+1</text>
   <text class="mono" x="1185" y="665">0</text>
-  <text class="mono" x="1320" y="665">precision</text>
+  <text class="mono" x="1320" y="665">distal</text>
 
   <rect class="map" x="160" y="680" width="1280" height="42"/>
   <text class="mono" x="190" y="707">joint1_yaw</text>
-  <text class="mono" x="470" y="707">wrist_supination_joint</text>
-  <text class="mono" x="1045" y="707">+1</text>
-  <text class="mono" x="1185" y="707">pi/2</text>
-  <text class="mono" x="1320" y="707">precision</text>
+  <text class="mono" x="470" y="707">wrist_abduction_adduction_joint</text>
+  <text class="mono" x="1045" y="707">-1</text>
+  <text class="mono" x="1185" y="707">0</text>
+  <text class="mono" x="1320" y="707">distal</text>
 
   <rect class="map" x="160" y="722" width="1280" height="42"/>
   <text class="mono" x="190" y="749">joint2_pitch</text>
-  <text class="mono" x="470" y="749">upper_arm_external_internal_rotation_joint</text>
-  <text class="mono" x="1045" y="749">+1</text>
-  <text class="mono" x="1185" y="749">0</text>
-  <text class="mono" x="1320" y="749">precision</text>
+  <text class="mono" x="470" y="749">held as redundancy</text>
+  <text class="mono" x="1045" y="749">--</text>
+  <text class="mono" x="1185" y="749">--</text>
+  <text class="mono" x="1320" y="749">held</text>
 
   <rect class="map" x="160" y="764" width="1280" height="42"/>
   <text class="mono" x="190" y="791">joint2_yaw</text>
   <text class="mono" x="470" y="791">elbow_flexion_extension_joint</text>
-  <text class="mono" x="1045" y="791">-1</text>
+  <text class="mono" x="1045" y="791">+1</text>
   <text class="mono" x="1185" y="791">0</text>
-  <text class="mono" x="1320" y="791">precision</text>
+  <text class="mono" x="1320" y="791">distal</text>
 
   <rect class="map" x="160" y="806" width="1280" height="42"/>
   <text class="mono" x="190" y="833">joint3_pitch</text>
   <text class="mono" x="470" y="833">shoulder_flexion_extension_joint</text>
   <text class="mono" x="1045" y="833">+1</text>
-  <text class="mono" x="1185" y="833">0</text>
-  <text class="mono" x="1320" y="833">precision</text>
+  <text class="mono" x="1185" y="833">pi/2</text>
+  <text class="mono" x="1320" y="833">distal</text>
 
   <rect class="map" x="160" y="848" width="1280" height="42"/>
   <text class="mono" x="190" y="875">joint3_yaw</text>
   <text class="mono" x="470" y="875">shoulder_abduction_adduction_joint</text>
-  <text class="mono" x="1045" y="875">+1</text>
-  <text class="mono" x="1185" y="875">pi/2</text>
-  <text class="mono" x="1320" y="875">precision</text>
+  <text class="mono" x="1045" y="875">-1</text>
+  <text class="mono" x="1185" y="875">0</text>
+  <text class="mono" x="1320" y="875">distal</text>
 
-  <text class="caption" x="80" y="535">Mapping equation: target = clamp(offset + sign * scale * (source - neutral), -joint_limit, joint_limit)</text>
-  <text class="caption" x="80" y="910">Caption: Arm to Dragon Joint Mapping</text>
+  <text class="caption" x="80" y="555">Mapping equation: target = clamp(sign * scale * source + offset, -joint_limit, joint_limit); joint2_pitch is held</text>
 </svg>

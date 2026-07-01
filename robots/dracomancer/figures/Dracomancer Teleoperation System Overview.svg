@@ -64,11 +64,11 @@
   <text class="label" x="965" y="278">startup mode</text>
   <text class="small" x="965" y="306">Hold takeoff posture</text>
   <rect class="box-green" x="935" y="352" width="250" height="78" rx="12"/>
-  <text class="label" x="965" y="385">precision mode</text>
+  <text class="label" x="965" y="385">teleoperation</text>
   <text class="small" x="965" y="413">Arm-to-robot mapping</text>
   <rect class="box-green" x="935" y="459" width="250" height="78" rx="12"/>
-  <text class="label" x="965" y="492">wide mode</text>
-  <text class="small" x="965" y="520">Joystick + IMU motion</text>
+  <text class="label" x="965" y="492">optional motion</text>
+  <text class="small" x="965" y="520">Position/attitude nodes</text>
   <rect class="box-amber" x="935" y="586" width="250" height="84" rx="12"/>
   <text class="label" x="965" y="620">Shape safety</text>
   <text class="small" x="965" y="650">Feasible control radius</text>
