@@ -58,11 +58,11 @@
   <arg name="mapping_reference" default="$(arg joint_pairing_reference)"/>
   <arg name="joint_pairing_scale" default="1.0"/>
   <!-- Elbow-plane mapping for distal mode: route elbow flexion to joint2_pitch
-       when upper-arm roll is near 0, then smoothly move it to joint2_yaw as the
-       roll angle leaves the pitch zone. Defaults: pitch <=30deg, yaw >=60deg. -->
+       when upper-arm roll is within +/-15deg, otherwise route it to joint2_yaw.
+       Set yaw_zone larger than pitch_zone only when a blend band is desired. -->
   <arg name="enable_elbow_roll_switching" default="true"/>
-  <arg name="elbow_roll_pitch_zone" default="0.5235987755982988"/>
-  <arg name="elbow_roll_yaw_zone" default="1.0471975511965976"/>
+  <arg name="elbow_roll_pitch_zone" default="0.2617993877991494"/>
+  <arg name="elbow_roll_yaw_zone" default="0.2617993877991494"/>
   <arg name="elbow_pitch_sign" default="1.0"/>
   <arg name="elbow_yaw_sign" default="1.0"/>
   <arg name="elbow_pitch_scale" default="1.0"/>

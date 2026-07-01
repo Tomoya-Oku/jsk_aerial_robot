@@ -149,7 +149,8 @@ class ControlJoints:
         # visible elbow plane. When upper-arm roll is near zero, the forearm is close
         # to vertical and elbow flexion should bend joint2_pitch. When upper-arm roll
         # is far from zero, the elbow opens/closes in a ground-parallel plane and
-        # should bend joint2_yaw. The transition band avoids a command jump.
+        # should bend joint2_yaw. By default pitch/yaw zones are both 15deg, so the
+        # mapping switches at +/-15deg; widening yaw_zone enables a blend band.
         self.enable_elbow_roll_switching = rospy.get_param("~enable_elbow_roll_switching", True)
         self.elbow_source_joint = rospy.get_param(
             "~elbow_source_joint", "elbow_flexion_extension_joint")
@@ -160,9 +161,9 @@ class ControlJoints:
         self.elbow_yaw_target_joint = rospy.get_param(
             "~elbow_yaw_target_joint", "joint2_yaw")
         self.elbow_roll_pitch_zone = abs(float(rospy.get_param(
-            "~elbow_roll_pitch_zone", np.deg2rad(30.0))))
+            "~elbow_roll_pitch_zone", np.deg2rad(15.0))))
         self.elbow_roll_yaw_zone = abs(float(rospy.get_param(
-            "~elbow_roll_yaw_zone", np.deg2rad(60.0))))
+            "~elbow_roll_yaw_zone", np.deg2rad(15.0))))
         if self.elbow_roll_yaw_zone < self.elbow_roll_pitch_zone:
             rospy.logwarn("elbow_roll_yaw_zone is smaller than pitch_zone; using pitch_zone")
             self.elbow_roll_yaw_zone = self.elbow_roll_pitch_zone
