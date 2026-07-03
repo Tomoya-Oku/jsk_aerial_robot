@@ -174,6 +174,39 @@ class ControlJoints:
         self.elbow_pitch_offset = float(rospy.get_param("~elbow_pitch_offset", 0.0))
         self.elbow_yaw_offset = float(rospy.get_param("~elbow_yaw_offset", 0.0))
 
+        # Same roll-plane routing for wrist flexion: upper-arm + forearm roll
+        # selects whether the wrist bend is expressed as DRAGON joint1 pitch or yaw.
+        self.enable_wrist_roll_switching = rospy.get_param("~enable_wrist_roll_switching", True)
+        self.wrist_source_joint = rospy.get_param(
+            "~wrist_source_joint", "wrist_flexion_extension_joint")
+        self.wrist_roll_joints = rospy.get_param("~wrist_roll_joints", [
+            "upper_arm_external_internal_rotation_joint",
+            "wrist_supination_joint",
+        ])
+        if isinstance(self.wrist_roll_joints, str):
+            self.wrist_roll_joints = [self.wrist_roll_joints]
+        self.wrist_yaw_source_joint = rospy.get_param(
+            "~wrist_yaw_source_joint", "wrist_abduction_adduction_joint")
+        self.wrist_pitch_target_joint = rospy.get_param(
+            "~wrist_pitch_target_joint", "joint1_pitch")
+        self.wrist_yaw_target_joint = rospy.get_param(
+            "~wrist_yaw_target_joint", "joint1_yaw")
+        self.wrist_roll_pitch_zone = abs(float(rospy.get_param(
+            "~wrist_roll_pitch_zone", np.deg2rad(15.0))))
+        self.wrist_roll_yaw_zone = abs(float(rospy.get_param(
+            "~wrist_roll_yaw_zone", np.deg2rad(15.0))))
+        if self.wrist_roll_yaw_zone < self.wrist_roll_pitch_zone:
+            rospy.logwarn("wrist_roll_yaw_zone is smaller than pitch_zone; using pitch_zone")
+            self.wrist_roll_yaw_zone = self.wrist_roll_pitch_zone
+        self.wrist_pitch_sign = float(rospy.get_param("~wrist_pitch_sign", 1.0))
+        self.wrist_yaw_sign = float(rospy.get_param("~wrist_yaw_sign", 1.0))
+        self.wrist_pitch_scale = float(rospy.get_param("~wrist_pitch_scale", 1.0))
+        self.wrist_yaw_scale = float(rospy.get_param("~wrist_yaw_scale", 1.0))
+        self.wrist_yaw_source_sign = float(rospy.get_param("~wrist_yaw_source_sign", -1.0))
+        self.wrist_yaw_source_scale = float(rospy.get_param("~wrist_yaw_source_scale", 1.0))
+        self.wrist_pitch_offset = float(rospy.get_param("~wrist_pitch_offset", 0.0))
+        self.wrist_yaw_offset = float(rospy.get_param("~wrist_yaw_offset", 0.0))
+
         # --- distal link4 anchor -------------------------------------------------
         # Experimental helper: keep the arm-tip link (default link4) roughly fixed in
         # the world while joints bend. The default mode anchors only the link4
@@ -372,6 +405,16 @@ class ControlJoints:
                 self.elbow_yaw_target_joint,
                 self.elbow_roll_pitch_zone,
                 self.elbow_roll_yaw_zone)
+            rospy.loginfo(
+                "distal wrist roll switching: enable=%s, wrist=%s, yaw_source=%s, roll=%s, pitch=%s, yaw=%s, zones=%.3f/%.3f rad",
+                self.enable_wrist_roll_switching,
+                self.wrist_source_joint,
+                self.wrist_yaw_source_joint,
+                "+".join(self.wrist_roll_joints),
+                self.wrist_pitch_target_joint,
+                self.wrist_yaw_target_joint,
+                self.wrist_roll_pitch_zone,
+                self.wrist_roll_yaw_zone)
         rospy.loginfo("joint mapping: %s",
                       ", ".join("{}<-{}".format(dst, src)
                                 for dst, src in zip(self.joint_names, self.source_joint_names)))
@@ -563,49 +606,111 @@ class ControlJoints:
                 continue
             target[self.joint_index[dst]] = self.clamp(sign * scale * val + offset)
         self.apply_elbow_roll_switching(target)
+        self.apply_wrist_roll_switching(target)
         return target
 
     def apply_elbow_roll_switching(self, target):
-        if not self.enable_elbow_roll_switching:
+        self.apply_roll_plane_switching(
+            target,
+            self.enable_elbow_roll_switching,
+            self.elbow_source_joint,
+            self.elbow_roll_joint,
+            self.elbow_pitch_target_joint,
+            self.elbow_yaw_target_joint,
+            self.elbow_roll_pitch_zone,
+            self.elbow_roll_yaw_zone,
+            self.elbow_pitch_sign,
+            self.elbow_yaw_sign,
+            self.elbow_pitch_scale,
+            self.elbow_yaw_scale,
+            self.elbow_pitch_offset,
+            self.elbow_yaw_offset,
+            "elbow",
+            None,
+            0.0,
+            0.0)
+
+    def apply_wrist_roll_switching(self, target):
+        self.apply_roll_plane_switching(
+            target,
+            self.enable_wrist_roll_switching,
+            self.wrist_source_joint,
+            self.wrist_roll_joints,
+            self.wrist_pitch_target_joint,
+            self.wrist_yaw_target_joint,
+            self.wrist_roll_pitch_zone,
+            self.wrist_roll_yaw_zone,
+            self.wrist_pitch_sign,
+            self.wrist_yaw_sign,
+            self.wrist_pitch_scale,
+            self.wrist_yaw_scale,
+            self.wrist_pitch_offset,
+            self.wrist_yaw_offset,
+            "wrist",
+            self.wrist_yaw_source_joint,
+            self.wrist_yaw_source_sign,
+            self.wrist_yaw_source_scale)
+
+    def apply_roll_plane_switching(self, target, enabled, source_joint, roll_joint,
+                                   pitch_target_joint, yaw_target_joint,
+                                   pitch_zone, yaw_zone, pitch_sign, yaw_sign,
+                                   pitch_scale, yaw_scale, pitch_offset, yaw_offset,
+                                   label, yaw_source_joint=None,
+                                   yaw_source_sign=1.0, yaw_source_scale=1.0):
+        if not enabled:
             return
-        if (self.elbow_pitch_target_joint not in self.joint_index or
-                self.elbow_yaw_target_joint not in self.joint_index):
+        if (pitch_target_joint not in self.joint_index or
+                yaw_target_joint not in self.joint_index):
             rospy.logwarn_throttle(
                 2.0,
-                "elbow roll switching skipped: target joint is missing (%s, %s)",
-                self.elbow_pitch_target_joint,
-                self.elbow_yaw_target_joint)
+                "%s roll switching skipped: target joint is missing (%s, %s)",
+                label,
+                pitch_target_joint,
+                yaw_target_joint)
             return
 
-        elbow = self.latest_device_joints.get(self.elbow_source_joint)
-        upper_roll = self.latest_device_joints.get(self.elbow_roll_joint)
-        if elbow is None or upper_roll is None:
+        source = self.latest_device_joints.get(source_joint)
+        roll_joint_names = roll_joint if isinstance(roll_joint, list) else [roll_joint]
+        roll_values = [self.latest_device_joints.get(name) for name in roll_joint_names]
+        yaw_source = None
+        if yaw_source_joint:
+            yaw_source = self.latest_device_joints.get(yaw_source_joint)
+        if (source is None or any(value is None for value in roll_values) or
+                (yaw_source_joint and yaw_source is None)):
             rospy.logwarn_throttle(
                 2.0,
-                "elbow roll switching waiting for joints: elbow=%s roll=%s",
-                elbow is not None,
-                upper_roll is not None)
+                "%s roll switching waiting for joints: source=%s yaw_source=%s roll=%s",
+                label,
+                source is not None,
+                (not yaw_source_joint) or (yaw_source is not None),
+                [value is not None for value in roll_values])
             return
 
-        abs_roll = abs(self.wrap(upper_roll))
-        if abs_roll <= self.elbow_roll_pitch_zone:
+        roll_sum = sum(self.wrap(value) for value in roll_values)
+        abs_roll = abs(self.wrap(roll_sum))
+        if abs_roll <= pitch_zone:
             yaw_ratio = 0.0
-        elif abs_roll >= self.elbow_roll_yaw_zone:
+        elif abs_roll >= yaw_zone:
             yaw_ratio = 1.0
         else:
-            width = max(1e-9, self.elbow_roll_yaw_zone - self.elbow_roll_pitch_zone)
-            yaw_ratio = self.smoothstep((abs_roll - self.elbow_roll_pitch_zone) / width)
+            width = max(1e-9, yaw_zone - pitch_zone)
+            yaw_ratio = self.smoothstep((abs_roll - pitch_zone) / width)
 
-        # Treat pitch/yaw as a bend vector: the transition preserves elbow command
-        # magnitude while rotating it from pitch to yaw as upper-arm roll increases.
+        # Treat pitch/yaw as a bend vector. For elbow the yaw component is zero, so
+        # the vector simply rotates from pitch to yaw. For wrist, abduction/adduction
+        # supplies the initial yaw component and rotates with flexion/extension.
         theta = yaw_ratio * np.pi / 2.0
         pitch_weight = np.cos(theta)
         yaw_weight = np.sin(theta)
-        pitch = self.elbow_pitch_offset + pitch_weight * self.elbow_pitch_sign * self.elbow_pitch_scale * elbow
-        yaw = self.elbow_yaw_offset + yaw_weight * self.elbow_yaw_sign * self.elbow_yaw_scale * elbow
+        pitch_component = pitch_sign * pitch_scale * source
+        yaw_component = 0.0
+        if yaw_source_joint:
+            yaw_component = yaw_source_sign * yaw_source_scale * yaw_source
+        pitch = pitch_offset + pitch_weight * pitch_component - yaw_weight * yaw_component
+        yaw = yaw_offset + yaw_weight * yaw_sign * yaw_scale * source + pitch_weight * yaw_component
 
-        target[self.joint_index[self.elbow_pitch_target_joint]] = self.clamp(pitch)
-        target[self.joint_index[self.elbow_yaw_target_joint]] = self.clamp(yaw)
+        target[self.joint_index[pitch_target_joint]] = self.clamp(pitch)
+        target[self.joint_index[yaw_target_joint]] = self.clamp(yaw)
 
     # --- geometric (long-term) mapping --------------------------------------
     @staticmethod

@@ -70,6 +70,18 @@
   <arg name="elbow_yaw_sign" default="1.0"/>
   <arg name="elbow_pitch_scale" default="1.0"/>
   <arg name="elbow_yaw_scale" default="1.0"/>
+  <!-- Wrist-plane mapping for distal mode: route wrist flexion to joint1_pitch
+       when upper-arm + forearm roll sum is within +/-15deg, otherwise route it to joint1_yaw.
+       Set yaw_zone larger than pitch_zone only when a blend band is desired. -->
+  <arg name="enable_wrist_roll_switching" default="true"/>
+  <arg name="wrist_roll_pitch_zone" default="0.2617993877991494"/>
+  <arg name="wrist_roll_yaw_zone" default="0.2617993877991494"/>
+  <arg name="wrist_pitch_sign" default="1.0"/>
+  <arg name="wrist_yaw_sign" default="1.0"/>
+  <arg name="wrist_pitch_scale" default="1.0"/>
+  <arg name="wrist_yaw_scale" default="1.0"/>
+  <arg name="wrist_yaw_source_sign" default="-1.0"/>
+  <arg name="wrist_yaw_source_scale" default="1.0"/>
   <!-- distal mapping lists are set as private params inside the control_joint_angle
        node below (parallel lists: human source joint -> DRAGON target joint, sign,
        scale). Default: wrist flexion -> joint1_pitch, wrist abduction -> joint1_yaw,
@@ -276,6 +288,16 @@
     <param name="elbow_yaw_sign" value="$(arg elbow_yaw_sign)"/>
     <param name="elbow_pitch_scale" value="$(arg elbow_pitch_scale)"/>
     <param name="elbow_yaw_scale" value="$(arg elbow_yaw_scale)"/>
+    <param name="enable_wrist_roll_switching" value="$(arg enable_wrist_roll_switching)"/>
+    <rosparam param="wrist_roll_joints">["upper_arm_external_internal_rotation_joint", "wrist_supination_joint"]</rosparam>
+    <param name="wrist_roll_pitch_zone" value="$(arg wrist_roll_pitch_zone)"/>
+    <param name="wrist_roll_yaw_zone" value="$(arg wrist_roll_yaw_zone)"/>
+    <param name="wrist_pitch_sign" value="$(arg wrist_pitch_sign)"/>
+    <param name="wrist_yaw_sign" value="$(arg wrist_yaw_sign)"/>
+    <param name="wrist_pitch_scale" value="$(arg wrist_pitch_scale)"/>
+    <param name="wrist_yaw_scale" value="$(arg wrist_yaw_scale)"/>
+    <param name="wrist_yaw_source_sign" value="$(arg wrist_yaw_source_sign)"/>
+    <param name="wrist_yaw_source_scale" value="$(arg wrist_yaw_source_scale)"/>
     <param name="joint_limit" value="$(arg joint_limit)"/>
     <param name="max_step" value="$(arg max_step)"/>
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
