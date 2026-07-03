@@ -280,8 +280,9 @@ class ControlJoints:
 
         # Predictive shape-feasibility gate (teleoperation mode):
         #   candidate shape -> shape_feasibility service -> fc_f_min / fc_t_min.
-        #   Deform only when BOTH radii are at or above their lower thresholds;
-        #   otherwise hold the last feasible shape.
+        #   Deform only when BOTH radii are at or above their hard thresholds.
+        #   In hold mode, a failed candidate enters a hysteresis hold and resumes
+        #   only after BOTH radii recover to their min thresholds.
         self.enable_feasibility_gate = rospy.get_param("~enable_feasibility_gate", True)
         self.feasibility_gate_mode = str(rospy.get_param("~feasibility_gate_mode", "hold")).lower()
         if self.feasibility_gate_mode not in ("hold", "step_search", "soft_scale"):
@@ -295,13 +296,18 @@ class ControlJoints:
         # how often the candidate is re-evaluated (Hz). Between checks the last
         # feasible shape is held.
         self.feasibility_rate = rospy.get_param("~feasibility_rate", 20.0)
-        # Lower thresholds (fallback params; overridden by the threshold topics below).
+        # Threshold fallback params; overridden by [hard_min, min] threshold topics.
         self.force_radius_threshold = rospy.get_param("~force_radius_threshold", 0.1)
         self.torque_radius_threshold = rospy.get_param("~torque_radius_threshold", 0.01)
+        self.force_radius_recover_threshold = rospy.get_param(
+            "~force_radius_recover_threshold", self.force_radius_threshold)
+        self.torque_radius_recover_threshold = rospy.get_param(
+            "~torque_radius_recover_threshold", self.torque_radius_threshold)
         self.feasibility_step_fraction = rospy.get_param("~feasibility_step_fraction", 0.25)
         self.feasibility_min_step_fraction = rospy.get_param("~feasibility_min_step_fraction", 0.03)
         self.feasibility_soft_min_scale = rospy.get_param("~feasibility_soft_min_scale", 0.0)
-        # Threshold topics carry [hard_min, min]; hard_min ([0]) is used as the gate bound.
+        # Threshold topics carry [hard_min, min]. hard_min ([0]) starts the hold;
+        # min ([1]) releases it, which avoids chattering near the danger boundary.
         self.force_threshold_topic = rospy.get_param(
             "~force_volume_radius_threshold_topic", self.device_ns + "/force_volume_radius_threshold")
         self.torque_threshold_topic = rospy.get_param(
@@ -316,6 +322,7 @@ class ControlJoints:
         self.last_link4_body_safe = None
         self.last_gate_log_stamp = rospy.Time(0)
         self.last_gate_feasible = None
+        self.feasibility_hysteresis_holding = False
         self.last_feasibility_eval_stamp = rospy.Time(0)
         # Geometric-mode reference (neutral) relative angles, computed lazily so a
         # captured neutral pose can be used if available.
@@ -373,9 +380,10 @@ class ControlJoints:
                           name, scale, sign, offset)
                                 for name, scale, sign, offset in zip(
                                     self.joint_names, self.scales, self.signs, self.offsets)))
-        rospy.loginfo("feasibility gate: enable=%s, mode=%s, service=%s, thresholds force/torque=%.4f/%.4f",
+        rospy.loginfo("feasibility gate: enable=%s, mode=%s, service=%s, hard force/torque=%.4f/%.4f, recover force/torque=%.4f/%.4f",
                       self.enable_feasibility_gate, self.feasibility_gate_mode, self.feasibility_service_name,
-                      self.force_radius_threshold, self.torque_radius_threshold)
+                      self.force_radius_threshold, self.torque_radius_threshold,
+                      self.force_radius_recover_threshold, self.torque_radius_recover_threshold)
         rospy.loginfo("joint command gating: only_when_hovering=%s, before_device_ready=%s",
                       self.publish_only_when_hovering, self.publish_before_device_ready)
         rospy.loginfo("hover flight_state for joint/link4 commands: %d", self.hover_flight_state)
@@ -507,10 +515,14 @@ class ControlJoints:
     def force_threshold_cb(self, msg):
         if len(msg.data) > 0:
             self.force_radius_threshold = float(msg.data[0])
+        if len(msg.data) > 1:
+            self.force_radius_recover_threshold = max(self.force_radius_threshold, float(msg.data[1]))
 
     def torque_threshold_cb(self, msg):
         if len(msg.data) > 0:
             self.torque_radius_threshold = float(msg.data[0])
+        if len(msg.data) > 1:
+            self.torque_radius_recover_threshold = max(self.torque_radius_threshold, float(msg.data[1]))
 
     def mapped_target(self):
         if not self.latest_device_joints:
@@ -716,6 +728,40 @@ class ControlJoints:
                     res.fc_t_min >= self.torque_radius_threshold)
         return feasible, res.fc_f_min, res.fc_t_min
 
+    def feasibility_recovered(self, fc_f, fc_t):
+        if fc_f is None or fc_t is None:
+            return False
+        return (fc_f >= self.force_radius_recover_threshold and
+                fc_t >= self.torque_radius_recover_threshold)
+
+    def hold_gate_target(self, candidate, feasible, fc_f, fc_t):
+        # Hysteresis for the default hold gate:
+        #   - entering hold: either radius falls below hard_min.
+        #   - leaving hold: both radii recover to min.
+        # Service failures (feasible is None) hold conservatively without changing
+        # the hysteresis state, so a transient service outage does not make the gate
+        # sticky by itself.
+        if feasible is None:
+            self.log_gate(False, fc_f, fc_t)
+            return list(self.last_feasible_target)
+
+        if self.feasibility_hysteresis_holding:
+            if self.feasibility_recovered(fc_f, fc_t):
+                self.feasibility_hysteresis_holding = False
+                self.last_feasible_target = candidate
+                self.log_gate(True, fc_f, fc_t)
+            else:
+                self.log_gate(False, fc_f, fc_t)
+            return list(self.last_feasible_target)
+
+        if feasible:
+            self.last_feasible_target = candidate
+            self.log_gate(True, fc_f, fc_t)
+        else:
+            self.feasibility_hysteresis_holding = True
+            self.log_gate(False, fc_f, fc_t)
+        return list(self.last_feasible_target)
+
     def publish_candidate_fc(self, fc_f, fc_t):
         if fc_f is not None:
             self.candidate_fc_f_pub.publish(Float64(fc_f))
@@ -760,8 +806,10 @@ class ControlJoints:
         f = "n/a" if fc_f is None else "%.4f" % fc_f
         t = "n/a" if fc_t is None else "%.4f" % fc_t
         msg = ("shape feasibility: deform=%s fc_f_min=%s fc_t_min=%s "
-               "thresholds(force/torque)=%.4f/%.4f") % (
-            feasible, f, t, self.force_radius_threshold, self.torque_radius_threshold)
+               "hard(force/torque)=%.4f/%.4f recover(force/torque)=%.4f/%.4f holding=%s") % (
+            feasible, f, t, self.force_radius_threshold, self.torque_radius_threshold,
+            self.force_radius_recover_threshold, self.torque_radius_recover_threshold,
+            self.feasibility_hysteresis_holding)
         if feasible:
             rospy.loginfo(msg)
         else:
@@ -771,6 +819,7 @@ class ControlJoints:
         # Map the arm to a candidate DRAGON shape, then gate by predicted feasibility.
         candidate = self.mapped_target()
         if not self.enable_feasibility_gate:
+            self.feasibility_hysteresis_holding = False
             self.last_feasible_target = candidate
             return candidate
 
@@ -783,7 +832,10 @@ class ControlJoints:
 
         feasible, fc_f, fc_t = self.evaluate_feasibility(candidate)
         self.publish_candidate_fc(fc_f, fc_t)
+        if self.feasibility_gate_mode == "hold":
+            return self.hold_gate_target(candidate, feasible, fc_f, fc_t)
         if feasible:
+            self.feasibility_hysteresis_holding = False
             self.last_feasible_target = candidate
         elif self.feasibility_gate_mode == "step_search":
             self.log_gate(False, fc_f, fc_t)
@@ -800,6 +852,7 @@ class ControlJoints:
 
     def desired_target(self):
         if self.teleop_mode == "startup":
+            self.feasibility_hysteresis_holding = False
             self.last_feasible_target = list(self.startup_pose)
             return list(self.startup_pose)
         return self.teleop_shape_target()

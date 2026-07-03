@@ -322,10 +322,10 @@ rad = (tick - 2048) * 2*pi / 4096 + offset
 ```mermaid
 flowchart TD
     A["腕関節 → 候補 DRAGON 形状"] --> B["shape_feasibility サービスで予測<br/>fc_f_min, fc_t_min（DRAGONモデル）"]
-    B --> C{"fc_f_min >= force_thr<br/>かつ fc_t_min >= torque_thr ?"}
+    B --> C{"fc_f_min >= force_hard<br/>かつ fc_t_min >= torque_hard ?"}
     C -->|yes| D["変形可：候補を採用し記憶<br/>last_feasible_target = 候補"]
     C -->|no / サービス失敗| E{"feasibility_gate_mode"}
-    E -->|hold| H["直前の可行姿勢を保持"]
+    E -->|hold| H["直前の可行姿勢を保持<br/>min以上まで復帰したら再開"]
     E -->|step_search| I["直前可行姿勢から候補方向へ<br/>小刻みに探索"]
     E -->|soft_scale| J["fc余裕に応じて候補方向へ<br/>一部だけ進める"]
     D --> F["max_step で1周期の変化量を制限して送信"]
@@ -334,7 +334,7 @@ flowchart TD
     J --> F
 ```
 
-- **判定基準**：force・torque **両方**の予測半径が下限しきい値以上なら変形可。
+- **判定基準**：force・torque **両方**の予測半径が `hard_min` 以上なら変形可。`hold` モードで一度 `hard_min` 未満になった場合は、両方が `min` 以上へ復帰するまで直前の可行姿勢を保持する（ヒステリシス）。
 - **NG時**：`feasibility_gate_mode` に応じて、保持・小ステップ探索・縮小移動のいずれかを行う。
 - 予測はサービス `shape_feasibility/check_shape` が `dragon/full_vectoring_robot_model` プラグインで計算します。既定の `shape_feasibility_prediction_mode=optimized_gimbal` では、候補形状の `updateRobotModel()` 後にDRAGONフルベクタリングモデルのジンバル処理済み状態から `calcFeasibleControlFxyDists()` / `calcFeasibleControlTDists()` を再評価します。将来、controller と同じ割当器を共有する場合は `controller` モードへ差し替える想定です。
 - 最適化が毎回走るため、評価は `feasibility_rate`（既定 20Hz）にスロットルされます。
@@ -343,7 +343,7 @@ flowchart TD
 
 | `feasibility_gate_mode` | 挙動 | 用途 |
 | --- | --- | --- |
-| `hold`（既定） | 候補が不可行なら `last_feasible_target` を保持 | 最も保守的。従来挙動 |
+| `hold`（既定） | 候補が `hard_min` 未満なら `last_feasible_target` を保持し、`min` 以上まで回復してから候補採用を再開 | 境界付近で採用/拒否が振動しにくい保守的な挙動 |
 | `step_search` | `last_feasible_target` から候補方向へ `feasibility_step_fraction` だけ進めた姿勢を評価し、不可なら半分にして再試行 | 安全ゲートを残して少しずつ変形させる試験 |
 | `soft_scale` | 候補の fc と閾値の比から移動倍率を決め、不可行候補でも一部だけ進める | 力覚提示と組み合わせた「硬くなる」挙動の検討 |
 
@@ -362,7 +362,7 @@ flowchart TD
 | `/dracomancer/force_volume_radius_threshold_cmd` | `std_msgs/Float64MultiArray` | 力のしきい値 `[hard_min, min]` を実行時に設定（subscribe） |
 | `/dracomancer/torque_volume_radius_threshold_cmd` | `std_msgs/Float64MultiArray` | トルクのしきい値 `[hard_min, min]` を実行時に設定（subscribe） |
 
-`control_joint_angle.py` はこれらの `[hard_min, min]` の **`hard_min`（先頭）をゲートの下限しきい値**として使います。トピック未受信時は `force_radius_threshold`/`torque_radius_threshold` パラメータ（`teleoperation.launch` 既定 `0.108990`/`0.015400`）を使います。しきい値更新は `hard_min <= min` の場合のみ反映します。
+`control_joint_angle.py` はこれらの `[hard_min, min]` を予測ゲートに使います。`hard_min`（先頭）は拒否状態に入る下限、`min`（2番目）は `hold` モードで拒否状態から復帰する上限です。トピック未受信時は `force_radius_threshold`/`torque_radius_threshold`（hard側）と `force_radius_recover_threshold`/`torque_radius_recover_threshold`（min側）を使います。しきい値更新は `hard_min <= min` の場合のみ反映します。
 
 ### 送信ゲート（ホバリング以外では位置・姿勢・関節角操作を無効化）
 
@@ -418,6 +418,8 @@ flowchart TD
 | `shape_feasibility_prediction_mode` | `optimized_gimbal` | 予測fcの計算方法。`model` / `optimized_gimbal` / `controller`（予約、現状はoptimized_gimbalへfallback） |
 | `force_radius_threshold` | `0.108990` | 力の下限しきい値（topic 未受信時のフォールバック） |
 | `torque_radius_threshold` | `0.015400` | トルクの下限しきい値（同上） |
+| `force_radius_recover_threshold` | `0.249220` | `hold` モードで拒否状態から復帰する力のしきい値（topic 未受信時のフォールバック） |
+| `torque_radius_recover_threshold` | `0.278159` | `hold` モードで拒否状態から復帰するトルクのしきい値（同上） |
 | `max_step` | `0.04` | 1周期あたりの最大変化量 |
 | `startup_pose` | `[0, pi/2, 0, pi/2, 0, pi/2]` | 立ち上げ時の通常姿勢 |
 
