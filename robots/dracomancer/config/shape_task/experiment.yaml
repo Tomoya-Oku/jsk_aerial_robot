@@ -1,0 +1,73 @@
+# 形態目標到達タスクの実験設定。
+# launch/shape_task.launch から shape_task 各ノードの private ns に load される共通設定。
+# 単位: rad / m / s / N / N·m。経過時間・保持時間は ROS time（Gazebo では sim time）で計測し、
+# 結果ディレクトリ名のみ wall time を用いる。
+
+robot_ns: dragon
+device_ns: /dracomancer
+
+# --- topic 設定 -------------------------------------------------------------
+# ここに書いた名前が最優先。環境側で名前が違う場合はこのファイルだけ直せばよい。
+topics:
+  q_current: /dragon/joint_states               # DRAGON 実関節角 (sensor_msgs/JointState)
+  q_target: /dragon/joints_ctrl                 # 安全ゲート通過後の関節角指令 (JointState)
+  q_exo: /dracomancer/joint_states              # Dracomancer 7自由度関節角 (JointState)
+  shape_error: /dracomancer/shape_control_error # 候補-指令の差 (Float64MultiArray)。q_candidate 再構成用
+  r_f: /dragon/debug/fc_f_min_filtered          # 実測 force volume 半径 [N] (Float64)
+  r_tau: /dragon/debug/fc_t_min_filtered        # 実測 torque volume 半径 [N·m] (Float64)
+  candidate_r_f: /dracomancer/candidate/fc_f_min    # 候補形状の予測 force 半径 (Float64)
+  candidate_r_tau: /dracomancer/candidate/fc_t_min  # 候補形状の予測 torque 半径 (Float64)
+  force_threshold: /dracomancer/force_volume_radius_threshold   # [hard_min, min] (Float64MultiArray)
+  torque_threshold: /dracomancer/torque_volume_radius_threshold # [hard_min, min] (Float64MultiArray)
+  safety_scale: /dracomancer/dragon_shape_safety_scale          # ライブ安全スケール (Float64)
+  flight_state: /dragon/flight_state            # UInt8 (HOVER=5)
+
+dragon_joint_names: [joint1_pitch, joint1_yaw, joint2_pitch, joint2_yaw, joint3_pitch, joint3_yaw]
+exo_joint_names:
+  - shoulder_abduction_adduction_joint
+  - shoulder_flexion_extension_joint
+  - upper_arm_external_internal_rotation_joint
+  - elbow_flexion_extension_joint
+  - wrist_supination_joint
+  - wrist_flexion_extension_joint
+  - wrist_abduction_adduction_joint
+
+# --- 成功条件 ---------------------------------------------------------------
+E_q_threshold: 0.15   # rad, RMS(q_current - q_star)
+E_s_threshold: 0.05   # m, リンク端点位置誤差の RMS (E_s_normalize: true なら全長正規化値)
+t_hold: 1.0           # s, 条件を維持すべき時間
+timeout: 60.0         # s, 制限時間
+# mu >= 0 を成功条件に含めるか。fc topic 未接続の dry-run では false にする。
+require_safety_margin: true
+
+# --- 安全しきい値（threshold topic 未受信時のフォールバック）-----------------
+# 既定値は 4096-grid較正 (docs/fc_threshold_calibration.md) 由来。
+r_f_hard: 0.108990    # [N]
+r_f_safe: 0.249220    # [N]
+r_tau_hard: 0.015400  # [N·m]
+r_tau_safe: 0.278159  # [N·m]
+use_threshold_topics: true
+
+# --- 試行管理 ---------------------------------------------------------------
+trial_order: sequential   # sequential / random
+repetitions: 1            # 各目標の繰り返し回数
+inter_trial_pause: 3.0    # s, 試行間の休止
+start_delay: 2.0          # s, auto_start 時の開始遅延
+seed: 0                   # random order 用シード
+
+# --- 簡易 FK（E_s とシャドウ表示に使用。DRAGON v1/v1.5 URDF 由来）-----------
+# control_joint_angle.py の dragon_fc_to_link4_matrix と同じ鎖構造。
+link_length: 0.474            # m
+inter_joint_x_offset: 0.02575 # m
+E_s_normalize: false          # true: E_s を全長 (4L+6*offset) で正規化
+
+# --- 可視化 -----------------------------------------------------------------
+shadow_frame: dragon/link1  # シャドウを貼るTFフレーム。world にすれば固定表示
+shadow_alpha: 0.5
+link_radius: 0.08   # m, シャドウのリンク太さ
+
+# --- ログ -------------------------------------------------------------------
+results_root: ~/dracomancer_shape_task
+record_rate: 40.0   # Hz, raw CSV サンプリング
+status_rate: 10.0   # Hz, 成功判定・status publish
+stale_timeout: 1.0  # s, これ以上更新のない topic 値は NaN として記録

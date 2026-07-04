@@ -1,0 +1,68 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- 形態目標到達タスク（shape-target reaching task）実験ノード群。
+       既存の DRAGON / Dracomancer 起動 (dragon/bringup.launch,
+       dracomancer/bringup.launch + teleoperation.launch) には手を加えず、
+       これを追加で起動する。詳細は scripts/shape_task/README.md 参照。 -->
+
+  <arg name="robot_ns"  default="dragon" />
+  <arg name="device_ns" default="dracomancer" />
+
+  <!-- dryrun: 擬似 DRAGON (dummy_robot.py) を起動し、Gazebo/実機なしで
+       パイプライン全体を確認する -->
+  <arg name="dryrun" default="false" />
+
+  <!-- keyboard 比較条件で teleoperation.launch を使わない場合に
+       shape_feasibility サーバだけを起動する（DRAGON 起動が前提） -->
+  <arg name="launch_feasibility" default="false" />
+  <arg name="robot_model_plugin_name" default="dragon/full_vectoring_robot_model" />
+  <arg name="shape_feasibility_prediction_mode" default="optimized_gimbal" />
+
+  <arg name="auto_start"  default="false" />
+  <arg name="results_dir" default="" />   <!-- 空なら results_root/日時 を自動生成 -->
+  <arg name="auto_plot"   default="true" />
+  <arg name="experiment_yaml" default="$(find dracomancer)/config/shape_task/experiment.yaml" />
+  <arg name="targets_yaml"    default="$(find dracomancer)/config/shape_task/targets.yaml" />
+
+  <!-- 試行管理（目標選択・成功判定・タイムアウト・イベント配信） -->
+  <node pkg="dracomancer" type="target_manager.py" name="shape_task_manager" output="screen">
+    <rosparam file="$(arg experiment_yaml)" command="load" />
+    <rosparam file="$(arg targets_yaml)" command="load" />
+    <param name="robot_ns"    value="$(arg robot_ns)" />
+    <param name="device_ns"   value="/$(arg device_ns)" />
+    <param name="auto_start"  value="$(arg auto_start)" />
+    <param name="results_dir" value="$(arg results_dir)" />
+  </node>
+
+  <!-- ログ記録（raw CSV → metrics CSV → summary/plots） -->
+  <node pkg="dracomancer" type="task_recorder.py" name="shape_task_recorder" output="screen">
+    <rosparam file="$(arg experiment_yaml)" command="load" />
+    <param name="robot_ns"  value="$(arg robot_ns)" />
+    <param name="device_ns" value="/$(arg device_ns)" />
+    <param name="auto_plot" value="$(arg auto_plot)" />
+  </node>
+
+  <!-- 目標形態シャドウ（RViz MarkerArray: /<device_ns>/shape_task/shadow） -->
+  <node pkg="dracomancer" type="shadow_visualizer.py" name="shape_task_shadow" output="screen">
+    <rosparam file="$(arg experiment_yaml)" command="load" />
+    <param name="robot_ns"  value="$(arg robot_ns)" />
+    <param name="device_ns" value="/$(arg device_ns)" />
+  </node>
+
+  <!-- dryrun 用擬似 DRAGON -->
+  <node pkg="dracomancer" type="dummy_robot.py" name="dummy_robot" output="screen"
+        if="$(arg dryrun)">
+    <param name="robot_ns" value="$(arg robot_ns)" />
+  </node>
+
+  <!-- keyboard 条件用: 予測フィージビリティサーバ（teleoperation.launch を
+       起動しないときのみ。dracomancer 条件では teleoperation.launch 側が起動する） -->
+  <node pkg="dracomancer" type="shape_feasibility_node" name="shape_feasibility"
+        ns="$(arg robot_ns)" output="screen" if="$(arg launch_feasibility)">
+    <param name="robot_model_plugin_name" value="$(arg robot_model_plugin_name)" />
+    <param name="prediction_mode" value="$(arg shape_feasibility_prediction_mode)" />
+  </node>
+
+  <!-- keyboard_baseline.py は生の stdin が必要なため launch からは起動しない。
+       別端末で: rosrun dracomancer keyboard_baseline.py -->
+</launch>

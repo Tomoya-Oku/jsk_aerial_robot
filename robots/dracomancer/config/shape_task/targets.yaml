@@ -1,0 +1,10 @@
+# 形態目標到達タスクの目標形態リスト。
+# q_star の順序は experiment.yaml の dragon_joint_names と同じ:
+#   [joint1_pitch, joint1_yaw, joint2_pitch, joint2_yaw, joint3_pitch, joint3_yaw] (rad)
+targets:
+  - name: L-like
+    q_star: [0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+  - name: Zigzag-like
+    q_star: [0.0, -1.0, 0.0, 0.0, 0.0, 1.0]
+  - name: Spiral-like
+    q_star: [-0.5, 0.8, -0.5, 0.8, -0.5, 0.8]

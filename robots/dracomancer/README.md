@@ -622,6 +622,12 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | `link4_anchor_mode` | `position_only` | link4固定の補償方式。既定はCOG位置だけ補償 |
 | `enable_link4_anchor_body_safety` | `true` | link4固定ON時にbody補償後の高度・水平距離、full時は姿勢も検査 |
 
+## 形態目標到達タスク実験（shape_task）
+
+目標形態シャドウへの到達時間・誤差・安全余裕などを記録する評価実験ノード群。
+起動は `roslaunch dracomancer shape_task.launch`。キーボード比較条件・dry-run・
+ログ形式・評価指標の詳細は [scripts/shape_task/README.md](scripts/shape_task/README.md) を参照。
+
 ## デバッグ
 
 各指令の確認:
