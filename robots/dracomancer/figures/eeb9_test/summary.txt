@@ -1,0 +1,19 @@
+bag_start_abs: 62.906
+failsafe_rt: n/a
+force_landing_rt: n/a
+flight_state_17_rt: n/a
+z_below_0.3_after_hover_rt: 96.992
+thresholds: force_hard=0.10899 torque_hard=0.01540
+candidate_force: {'min': 0.7371759685980059, 'max': 2.405149007359365, 'below': 0, 'count': 1458, 'first_below': None}
+candidate_torque: {'min': 0.04240543964096892, 'max': 0.782981676196215, 'below': 0, 'count': 1460, 'first_below': None}
+actual_force: {'min': 0.03444217917782897, 'max': 6.0380138576573925, 'below': 109, 'count': 3653, 'first_below': (42.248, 0.09849624184289282)}
+actual_torque: {'min': 3.597411283632288e-05, 'max': 1.7918333581282866, 'below': 415, 'count': 3644, 'first_below': (42.225, 0.0007557445204578114)}
+pose_before_failsafe: None
+joints_ctrl_before_failsafe: None
+candidate_before_failsafe: None
+safety_scale_before_failsafe: None
+joint_mapping_pdf: robots/dracomancer/figures/eeb9_test/joint_mapping.pdf
+safety_overview_png: robots/dracomancer/figures/eeb9_test/safety_overview.png
+safety_overview_svg: robots/dracomancer/figures/eeb9_test/safety_overview.svg
+fc_prediction_error_png: robots/dracomancer/figures/eeb9_test/fc_prediction_error.png
+fc_prediction_error_svg: robots/dracomancer/figures/eeb9_test/fc_prediction_error.svg
