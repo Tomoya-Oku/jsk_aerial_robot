@@ -24,7 +24,8 @@ class ServoLabels:
         self.servo_topic = rospy.get_param("~servo_topic", self.device_ns + "/servo/states")
         self.marker_topic = rospy.get_param("~marker_topic", self.device_ns + "/servo_angle_markers")
         self.frame_id = rospy.get_param("~frame_id", self.device_ns.lstrip("/") + "/base_link")
-        self.rate_hz = float(rospy.get_param("~rate", 5.0))
+        self.status_rate_hz = float(rospy.get_param("~status_rate", 1.0))
+        self.max_update_rate = float(rospy.get_param("~max_update_rate", 30.0))
         self.stale_timeout = float(rospy.get_param("~stale_timeout", 1.0))
 
         self.center_tick = float(rospy.get_param("~center_tick", 2048.0))
@@ -48,12 +49,14 @@ class ServoLabels:
 
         self.latest_ticks = {}
         self.last_stamp = None
+        self.last_publish_stamp = rospy.Time(0)
 
         self.marker_pub = rospy.Publisher(self.marker_topic, MarkerArray, queue_size=1)
         rospy.Subscriber(self.servo_topic, ServoStates, self.servo_cb, queue_size=1)
 
         rospy.loginfo("servo_labels: servo_topic=%s marker_topic=%s frame=%s",
                       self.servo_topic, self.marker_topic, self.frame_id)
+        rospy.Timer(rospy.Duration(1.0 / max(self.status_rate_hz, 0.5)), self.publish_status)
 
     def servo_cb(self, msg):
         ticks = {}
@@ -63,6 +66,7 @@ class ServoLabels:
                 ticks[sid] = float(servo.angle)
         self.latest_ticks = ticks
         self.last_stamp = rospy.Time.now()
+        self.publish_if_due()
 
     def tick_to_rad(self, tick):
         return (float(tick) - self.center_tick) * 2.0 * math.pi / self.ticks_per_rev
@@ -101,19 +105,35 @@ class ServoLabels:
         marker.pose.position = Point(float(self.position[0]), float(self.position[1]), float(self.position[2]))
         marker.scale.z = self.font_size
         marker.color = ColorRGBA(0.95, 0.95, 0.95, 1.0)
-        marker.lifetime = rospy.Duration(2.0 / max(self.rate_hz, 0.5))
+        marker.lifetime = rospy.Duration(0.0)
         marker.text = self.marker_text()
         return marker
 
-    def main(self):
-        rate = rospy.Rate(self.rate_hz)
-        while not rospy.is_shutdown():
-            self.marker_pub.publish(MarkerArray(markers=[self.make_marker()]))
-            rate.sleep()
+    def publish_marker(self):
+        self.marker_pub.publish(MarkerArray(markers=[self.make_marker()]))
+        self.last_publish_stamp = rospy.Time.now()
+
+    def publish_if_due(self):
+        now = rospy.Time.now()
+        if self.max_update_rate > 0.0:
+            min_period = 1.0 / self.max_update_rate
+            if (now - self.last_publish_stamp).to_sec() < min_period:
+                return
+        self.publish_marker()
+
+    def publish_status(self, _event):
+        # Keep the waiting/stale status visible even when servo input is absent.
+        if self.last_stamp is None:
+            self.publish_marker()
+            return
+        age = (rospy.Time.now() - self.last_stamp).to_sec()
+        if age > self.stale_timeout:
+            self.publish_marker()
 
 
 if __name__ == "__main__":
     try:
-        ServoLabels().main()
+        ServoLabels()
+        rospy.spin()
     except rospy.ROSInterruptException:
         pass

@@ -4,6 +4,7 @@
   <arg name="show_servo_labels" default="true" />
   <arg name="servo_topic" default="/$(arg robot_ns)/servo/states" />
   <arg name="servo_label_topic" default="/$(arg robot_ns)/servo_angle_markers" />
+  <arg name="servo_label_max_update_rate" default="30.0" />
 
   <!-- Run this on the GUI PC. The GUI PC is expected to provide the fixed ROS
        master, and the Dracomancer/Khadas PC should point ROS_MASTER_URI here. -->
@@ -16,5 +17,6 @@
     <param name="servo_topic" value="$(arg servo_topic)" />
     <param name="marker_topic" value="$(arg servo_label_topic)" />
     <param name="frame_id" value="$(arg robot_ns)/base_link" />
+    <param name="max_update_rate" value="$(arg servo_label_max_update_rate)" />
   </node>
 </launch>

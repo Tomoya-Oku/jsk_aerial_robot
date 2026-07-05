@@ -528,7 +528,7 @@ roslaunch dracomancer bringup.launch \
 roslaunch dracomancer rviz.launch
 ```
 
-RViz には `/dracomancer/servo/states` のサーボtickを `center_tick`（既定2048）基準で換算した各サーボ角度が表示されます。換算式は `(tick - center_tick) * 2π / ticks_per_rev`（`ticks_per_rev` 既定4096）で、表示は deg / rad です。不要な場合は `show_servo_labels:=false` を指定します。
+RViz には `/dracomancer/servo/states` のサーボtickを `center_tick`（既定2048）基準で換算した各サーボ角度が表示されます。換算式は `(tick - center_tick) * 2π / ticks_per_rev`（`ticks_per_rev` 既定4096）で、表示は deg / rad です。`servo_labels.py` はサーボ状態を受信するたびに即時Markerを更新し、既定では最大30Hzに制限します。不要な場合は `show_servo_labels:=false` を指定します。
 
 ROS master は親機PCに固定します。子機PCでは `ROS_MASTER_URI` を親機PCに向け、親機PCでは `ROS_MASTER_URI` を自身に向けた状態で `rviz.launch` のみを起動してください。両PCで `ROS_IP` または `ROS_HOSTNAME` は、それぞれ相手PCから到達可能なIP/ホスト名に設定します。
 
