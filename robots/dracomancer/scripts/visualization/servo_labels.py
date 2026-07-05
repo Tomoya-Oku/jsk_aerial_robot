@@ -5,9 +5,19 @@
 
 The displayed angles are computed directly from servo ticks, using the same
 center-tick convention as convert_servo_to_joint_states.py.
+
+Timing note: this node runs on the GUI PC while /dracomancer/servo/states is
+published from the Khadas PC.  Two pitfalls are handled explicitly here:
+- rospy never re-establishes a subscriber TCP link once it drops (e.g. a
+  Wi-Fi hiccup between the two PCs), so a watchdog re-subscribes when the
+  stream goes silent.
+- /use_sim_time may be true on the shared master (DRAGON Gazebo publishes
+  /clock), so all rate/staleness logic uses the wall clock instead of ROS
+  time, which would freeze or scale with the simulation.
 """
 
 import math
+import time
 
 import rospy
 from geometry_msgs.msg import Point
@@ -27,6 +37,8 @@ class ServoLabels:
         self.status_rate_hz = float(rospy.get_param("~status_rate", 1.0))
         self.max_update_rate = float(rospy.get_param("~max_update_rate", 30.0))
         self.stale_timeout = float(rospy.get_param("~stale_timeout", 1.0))
+        # No data for this long -> assume the TCP link died and re-subscribe.
+        self.reconnect_timeout = float(rospy.get_param("~reconnect_timeout", 3.0))
 
         self.center_tick = float(rospy.get_param("~center_tick", 2048.0))
         self.ticks_per_rev = float(rospy.get_param("~ticks_per_rev", 4096.0))
@@ -48,15 +60,27 @@ class ServoLabels:
         self.id_to_label.update({int(k): str(v) for k, v in rospy.get_param("~id_to_label", {}).items()})
 
         self.latest_ticks = {}
-        self.last_stamp = None
-        self.last_publish_stamp = rospy.Time(0)
+        # Wall-clock (monotonic) timestamps; rospy time may be sim time here.
+        self.last_msg_time = None
+        self.last_publish_time = 0.0
+        self.last_subscribe_time = 0.0
+        self.reconnect_announced = False
 
         self.marker_pub = rospy.Publisher(self.marker_topic, MarkerArray, queue_size=1)
-        rospy.Subscriber(self.servo_topic, ServoStates, self.servo_cb, queue_size=1)
+        self.servo_sub = None
+        self.subscribe()
 
         rospy.loginfo("servo_labels: servo_topic=%s marker_topic=%s frame=%s",
                       self.servo_topic, self.marker_topic, self.frame_id)
-        rospy.Timer(rospy.Duration(1.0 / max(self.status_rate_hz, 0.5)), self.publish_status)
+
+    def subscribe(self):
+        # Recreate the subscriber to force a fresh connection to the current
+        # publisher.  rospy only connects on master publisherUpdate, so a
+        # silently dropped link is never repaired without this.
+        if self.servo_sub is not None:
+            self.servo_sub.unregister()
+        self.servo_sub = rospy.Subscriber(self.servo_topic, ServoStates, self.servo_cb, queue_size=1)
+        self.last_subscribe_time = time.monotonic()
 
     def servo_cb(self, msg):
         ticks = {}
@@ -65,18 +89,24 @@ class ServoLabels:
             if sid in self.ordered_ids:
                 ticks[sid] = float(servo.angle)
         self.latest_ticks = ticks
-        self.last_stamp = rospy.Time.now()
+        self.last_msg_time = time.monotonic()
+        self.reconnect_announced = False
         self.publish_if_due()
+
+    def msg_age(self):
+        if self.last_msg_time is None:
+            return None
+        return time.monotonic() - self.last_msg_time
 
     def tick_to_rad(self, tick):
         return (float(tick) - self.center_tick) * 2.0 * math.pi / self.ticks_per_rev
 
     def marker_text(self):
-        if self.last_stamp is None:
+        age = self.msg_age()
+        if age is None:
             return "servo angles\nwaiting for %s" % self.servo_topic
 
         lines = ["servo angles (center tick %.0f)" % self.center_tick]
-        age = (rospy.Time.now() - self.last_stamp).to_sec()
         if age > self.stale_timeout:
             lines.append("stale: %.1fs" % age)
 
@@ -111,29 +141,44 @@ class ServoLabels:
 
     def publish_marker(self):
         self.marker_pub.publish(MarkerArray(markers=[self.make_marker()]))
-        self.last_publish_stamp = rospy.Time.now()
+        self.last_publish_time = time.monotonic()
 
     def publish_if_due(self):
-        now = rospy.Time.now()
         if self.max_update_rate > 0.0:
             min_period = 1.0 / self.max_update_rate
-            if (now - self.last_publish_stamp).to_sec() < min_period:
+            if (time.monotonic() - self.last_publish_time) < min_period:
                 return
         self.publish_marker()
 
-    def publish_status(self, _event):
+    def watchdog(self):
         # Keep the waiting/stale status visible even when servo input is absent.
-        if self.last_stamp is None:
+        age = self.msg_age()
+        if age is None or age > self.stale_timeout:
             self.publish_marker()
+
+        # Re-subscribe when the stream is silent for too long.  This also
+        # covers half-open TCP links that still look connected locally.
+        if age is not None and age <= self.reconnect_timeout:
             return
-        age = (rospy.Time.now() - self.last_stamp).to_sec()
-        if age > self.stale_timeout:
-            self.publish_marker()
+        if (time.monotonic() - self.last_subscribe_time) <= self.reconnect_timeout:
+            return
+        if age is not None and not self.reconnect_announced:
+            rospy.logwarn("servo_labels: no data on %s for %.1fs, re-subscribing",
+                          self.servo_topic, age)
+            self.reconnect_announced = True
+        self.subscribe()
+
+    def spin(self):
+        # Drive the watchdog with the wall clock: rospy.Timer follows /clock
+        # under use_sim_time and would freeze if the simulation pauses.
+        interval = 1.0 / max(self.status_rate_hz, 0.5)
+        while not rospy.is_shutdown():
+            self.watchdog()
+            time.sleep(interval)
 
 
 if __name__ == "__main__":
     try:
-        ServoLabels()
-        rospy.spin()
+        ServoLabels().spin()
     except rospy.ROSInterruptException:
         pass
