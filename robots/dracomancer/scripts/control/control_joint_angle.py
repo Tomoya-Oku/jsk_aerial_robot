@@ -211,6 +211,13 @@ class ControlJoints:
         self.wrist_pitch_offset = float(rospy.get_param("~wrist_pitch_offset", 0.0))
         self.wrist_yaw_offset = float(rospy.get_param("~wrist_yaw_offset", 0.0))
 
+        # Latest roll-switch diagnostics (see switch_diag_topic above), held at the
+        # "all pitch" default until apply_roll_plane_switching runs at least once.
+        self.switch_diag = {
+            "wrist": {"r": 0.0, "rho": 0.0, "c_pitch": 1.0, "c_yaw": 0.0},
+            "elbow": {"r": 0.0, "rho": 0.0, "c_pitch": 1.0, "c_yaw": 0.0},
+        }
+
         # --- distal link4 anchor -------------------------------------------------
         # Experimental helper: keep the arm-tip link (default link4) roughly fixed in
         # the world while joints bend. The default mode anchors only the link4
@@ -314,6 +321,19 @@ class ControlJoints:
             "~candidate_force_radius_topic", self.device_ns + "/candidate/fc_f_min")
         self.candidate_torque_radius_topic = rospy.get_param(
             "~candidate_torque_radius_topic", self.device_ns + "/candidate/fc_t_min")
+        # Candidate DRAGON joint target before the feasibility gate (i.e. the
+        # direct output of mapped_target()). Republished so analysis scripts do
+        # not have to reconstruct it from joints_ctrl + shape_control_error.
+        self.candidate_target_topic = rospy.get_param(
+            "~candidate_target_topic", self.device_ns + "/candidate/joint_target")
+        # Diagnostics for the roll-based pitch/yaw allocation applied in distal
+        # mode (joint1=wrist, joint2=elbow): fixed order
+        # [r1, rho1, c1_pitch, c1_yaw, r2, rho2, c2_pitch, c2_yaw], where r_i is
+        # the roll sum feeding the switch, rho_i in [0,1] is the smoothstep
+        # allocation ratio (0=all pitch, 1=all yaw), and c_i_pitch/c_i_yaw are
+        # the cos/sin(pi/2 * rho_i) weights actually applied to the target.
+        self.switch_diag_topic = rospy.get_param(
+            "~switch_diag_topic", self.device_ns + "/joint_map/switch_ratio")
 
         # Predictive shape-feasibility gate (teleoperation mode):
         #   candidate shape -> shape_feasibility service -> fc_f_min / fc_t_min.
@@ -370,6 +390,8 @@ class ControlJoints:
         self.shape_error_pub = rospy.Publisher(self.shape_error_topic, Float64MultiArray, queue_size=1)
         self.candidate_fc_f_pub = rospy.Publisher(self.candidate_force_radius_topic, Float64, queue_size=1)
         self.candidate_fc_t_pub = rospy.Publisher(self.candidate_torque_radius_topic, Float64, queue_size=1)
+        self.candidate_target_pub = rospy.Publisher(self.candidate_target_topic, JointState, queue_size=1)
+        self.switch_diag_pub = rospy.Publisher(self.switch_diag_topic, Float64MultiArray, queue_size=1)
         self.nav_pub = rospy.Publisher(self.nav_topic, FlightNav, queue_size=1)
         self.baselink_rpy_pub = rospy.Publisher(self.baselink_rpy_topic, Vector3Stamped, queue_size=1)
         self.baselink_motion_pub = rospy.Publisher(self.baselink_motion_topic, Odometry, queue_size=1)
@@ -719,6 +741,10 @@ class ControlJoints:
         target[self.joint_index[pitch_target_joint]] = self.clamp(pitch)
         target[self.joint_index[yaw_target_joint]] = self.clamp(yaw)
 
+        self.switch_diag[label] = {
+            "r": roll_sum, "rho": yaw_ratio, "c_pitch": pitch_weight, "c_yaw": yaw_weight,
+        }
+
     # --- geometric (long-term) mapping --------------------------------------
     @staticmethod
     def rot_axis_angle(axis, angle):
@@ -880,6 +906,13 @@ class ControlJoints:
         if fc_t is not None:
             self.candidate_fc_t_pub.publish(Float64(fc_t))
 
+    def publish_candidate_target(self, candidate):
+        msg = JointState()
+        msg.header.stamp = rospy.Time.now()
+        msg.name = self.joint_names
+        msg.position = list(candidate)
+        self.candidate_target_pub.publish(msg)
+
     def interpolate_target(self, src, dst, fraction):
         return self.clamp_target([
             float(a) + float(fraction) * (float(b) - float(a))
@@ -930,6 +963,7 @@ class ControlJoints:
     def teleop_shape_target(self):
         # Map the arm to a candidate DRAGON shape, then gate by predicted feasibility.
         candidate = self.mapped_target()
+        self.publish_candidate_target(candidate)
         if not self.enable_feasibility_gate:
             self.feasibility_hysteresis_holding = False
             self.last_feasible_target = candidate
@@ -1078,12 +1112,21 @@ class ControlJoints:
         msg.data = [float(d - t) for d, t in zip(desired, target)]
         self.shape_error_pub.publish(msg)
 
+    def publish_switch_diag(self):
+        wrist = self.switch_diag["wrist"]
+        elbow = self.switch_diag["elbow"]
+        msg = Float64MultiArray()
+        msg.data = [wrist["r"], wrist["rho"], wrist["c_pitch"], wrist["c_yaw"],
+                    elbow["r"], elbow["rho"], elbow["c_pitch"], elbow["c_yaw"]]
+        self.switch_diag_pub.publish(msg)
+
     def make_joint_msg(self):
         target = self.desired_target()
         # desired (raw mapping) vs target (feasible-gated) error, for haptic feedback.
         desired = self.mapped_target() if self.teleop_mode == "teleoperation" else target
         self.current_target = self.link4_body_safety_gate(self.rate_limit(target))
         self.publish_shape_error(desired, self.current_target)
+        self.publish_switch_diag()
 
         msg = JointState()
         msg.header.stamp = rospy.Time.now()

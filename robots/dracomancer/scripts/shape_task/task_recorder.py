@@ -121,6 +121,8 @@ class TaskRecorder:
                          Float64, self.make_float_cb("cand_r_f"), queue_size=1)
         rospy.Subscriber(topic("candidate_r_tau", self.device_ns + "/candidate/fc_t_min"),
                          Float64, self.make_float_cb("cand_r_tau"), queue_size=1)
+        rospy.Subscriber(topic("switch_diag", self.device_ns + "/joint_map/switch_ratio"),
+                         Float64MultiArray, self.make_array_cb("switch_diag"), queue_size=1)
         rospy.Subscriber(topic("safety_scale", self.device_ns + "/dragon_shape_safety_scale"),
                          Float64, self.make_float_cb("safety_scale"), queue_size=1)
         rospy.Subscriber(topic("flight_state", "/%s/flight_state" % self.robot_ns),
@@ -195,6 +197,9 @@ class TaskRecorder:
         # Extra diagnostics beyond the required minimum.
         cols += ["gate_state", "cand_r_f", "cand_r_tau", "safety_scale",
                  "flight_state", "wall_time"]
+        # Roll-based pitch/yaw allocation (joint1=wrist, joint2=elbow); see
+        # switch_diag_topic in control_joint_angle.py for the exact definition.
+        cols += ["r1", "rho1", "c1_pitch", "c1_yaw", "r2", "rho2", "c2_pitch", "c2_yaw"]
         return cols
 
     def start_trial(self, event):
@@ -310,6 +315,8 @@ class TaskRecorder:
         e_s = dragon_fk.shape_error(q_cur, q_star, self.link_length,
                                     self.inter_joint_x_offset, self.es_normalize)
 
+        switch_diag = self.fresh_vec("switch_diag", 8)
+
         row = [now, self.trial.get("target_name", "")]
         row += q_star + q_cur + q_tgt + q_cand + q_exo
         row += [r_f if r_f is not None else NAN,
@@ -321,6 +328,7 @@ class TaskRecorder:
                 self.fresh("safety_scale") if self.fresh("safety_scale") is not None else NAN,
                 self.fresh("flight_state") if self.fresh("flight_state") is not None else NAN,
                 time.time()]
+        row += switch_diag
         try:
             self.csv_writer.writerow(row)
         except (OSError, ValueError) as e:

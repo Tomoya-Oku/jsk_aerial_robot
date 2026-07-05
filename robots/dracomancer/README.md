@@ -41,7 +41,7 @@ flowchart TB
 | `convert_servo_to_joint_states.py` | サーボtickをラジアンの関節状態へ変換 | `/dracomancer/servo/states` | `/dracomancer/joint_states` |
 | `control_position.py` | 操縦桿とIMUから DRAGON の速度指令を生成 | joystick, IMU, flight_state | `/dragon/uav/nav` |
 | `control_orientation.py` | 操縦桿から姿勢指令を生成 | joystick, flight_state | `/dragon/final_target_baselink_rpy` |
-| `control_joint_angle.py` | 腕関節から DRAGON の形状指令を生成（候補姿勢のフィージビリティで変形可否を判定） | joint_states, shape_feasibility, threshold, flight_state | `/dragon/joints_ctrl`, `/dracomancer/shape_control_error` |
+| `control_joint_angle.py` | 腕関節から DRAGON の形状指令を生成（候補姿勢のフィージビリティで変形可否を判定） | joint_states, shape_feasibility, threshold, flight_state | `/dragon/joints_ctrl`, `/dracomancer/shape_control_error`, `/dracomancer/candidate/joint_target`, `/dracomancer/joint_map/switch_ratio` |
 | `shape_feasibility_node`（C++） | 候補リンク角の force/torque volume 半径を DRAGON モデルで予測するサービス | candidate joints | `~check_shape`（fc_f_min, fc_t_min） |
 | `volume_radius_monitor.py` | しきい値 pub/sub・ライブ安全スケール算出（通常は teleoperation.launch で起動。fc 内接半径は再 pub しない） | fc inradius, threshold cmd | `*_volume_radius_threshold`, `/dracomancer/dragon_shape_safety_scale` |
 | `servo_labels.py` | サーボtickを中心値基準のdeg/radへ変換してRVizテキスト表示 | `/dracomancer/servo/states` | `/dracomancer/servo_angle_markers` |
@@ -78,6 +78,8 @@ flowchart TB
         B7 --> B8["control_haptic_feedback.py"]
         B4 --> B8
         B8 --> B9["/dracomancer/haptic_torque"]
+        B5 --> B10["/dracomancer/candidate/joint_target"]
+        B5 --> B11["/dracomancer/joint_map/switch_ratio"]
     end
 ```
 
@@ -96,6 +98,8 @@ flowchart TB
 | `/dracomancer/dragon_shape_safety_scale` | `std_msgs/Float64` | ライブ安全スケール（`volume_radius_monitor.py` が pub、web UI が購読。情報提供用） |
 | `/dracomancer/shape_control_error` | `std_msgs/Float64MultiArray` | 力覚提示用の形状抑制量 `q_des - q_tar` |
 | `/dracomancer/haptic_torque` | `sensor_msgs/JointState` | 安全スケーリングで抑制された入力差から計算した Dracomancer 7関節の提示トルク |
+| `/dracomancer/candidate/joint_target` | `sensor_msgs/JointState` | フィージビリティ・ゲート前の候補 DRAGON 関節角（`mapped_target()` の出力そのもの。teleoperationモードのみ） |
+| `/dracomancer/joint_map/switch_ratio` | `std_msgs/Float64MultiArray` | 手首/肘のロール切替配分量 `[r1, rho1, c1_pitch, c1_yaw, r2, rho2, c2_pitch, c2_yaw]`（joint1=手首, joint2=肘。`r_i` はロール総和、`rho_i` は smoothstep 配分比 [0,1]、`c_i_pitch/c_i_yaw` は実際に使われる cos/sin 重み） |
 
 ## 操作モード
 
@@ -284,6 +288,7 @@ target_joint[k] = clamp(sign[k] * scale[k] * source_angle[k] + offset[k],  -join
 - `distal_offsets` 既定は `[0, 0, 0, π/2, 0]`：**device は肩屈曲を負で測る**（90° で約 -π/2）ため、joint3_pitch は `sign=+1`＋`offset=π/2` で **操縦者の肩 90° → joint3_pitch 0°**（rosbag 解析で確定。`sign=-1` だと全域 +π/2 に飽和した）。肩内外転の向きは未検証なので sim で要確認。
 - **手首のロール総和切替**（`enable_wrist_roll_switching` 既定 ON）: `wrist_roll_joints`（既定: `upper_arm_external_internal_rotation_joint` + `wrist_supination_joint`）の総和から `wrist_roll_parallel_offset`（手のひら水平基準、既定0）を引いた絶対値が `wrist_roll_pitch_zone`（既定45°）以下なら、手のひらが地面に平行に近い側として手首屈曲を `joint1_pitch`、手首内外転を `joint1_yaw` に入れる。ロール総和が大きく手のひらが地面に垂直に近い側では、手首屈曲を `joint1_yaw` 側へ、手首内外転を `joint1_pitch` 側へ回転させる。必要な場合だけ `wrist_roll_yaw_zone` を pitch zone より大きくすると、その間をpitch/yawのベクトル長を保ちながら滑らかに遷移できる。
 - **肘の上腕ロール切替**（`enable_elbow_roll_switching` 既定 ON）: `upper_arm_external_internal_rotation_joint` の絶対値が `elbow_roll_pitch_zone`（既定15°）以下なら肘屈曲を `joint2_pitch` のみに入れる。それ以外では `joint2_yaw` のみに入れる。必要な場合だけ `elbow_roll_yaw_zone` を pitch zone より大きくすると、その間をpitch/yawのベクトル長を保ちながら滑らかに遷移できる。これにより、操作者から見て前腕が地面に垂直に近いときはpitch、肘が地面と平行な面で開閉するときはyawを使う。
+- 手首・肘それぞれの配分比 `rho_i`（0=pitch側, 1=yaw側）とその入力・重みは `/dracomancer/joint_map/switch_ratio` に毎周期publishされ、比較・解析用に記録できる（`scripts/shape_task/task_recorder.py` は `r1,rho1,c1_pitch,c1_yaw,r2,rho2,c2_pitch,c2_yaw` 列としてCSVに記録）。
 - **link4 アンカー（`enable_link4_anchor` 既定 ON）**: 関節を曲げても DRAGON の **link4（腕先端）位置をワールドにおおよそ固定**するため、ホバー開始時に link4 位置を基準化し、`joints_ctrl` と同じ目標関節角からCOG位置（`uav/nav` POS_MODE）を逆算する。既定の `link4_anchor_mode:=position_only` ではbaselink姿勢補償を送らない。`link4_anchor_mode:=full` ではCOG位置+baselink姿勢でlink4姿勢も補償できるが、姿勢failsafeに近づきやすいため明示指定時のみ使う。ON時も `enable_link4_anchor_body_safety` がCOG高度・水平リーシュ・full時の姿勢を検査し、危険なbody補償やTF断時は関節/補償指令を保持する。詳細は [docs/link4_anchor.md](docs/link4_anchor.md)。**移動制御（`enable_position_control`）とは併用不可**（`uav/nav` が競合）。
 - 未対応の関節は `mapping_reference` の straight/circular に関係なく動かない。
 - 対応関係は平行リスト `distal_source_joints` / `distal_target_joints` / `distal_signs` / `distal_scales`（同じ長さ）で自由に変更可。
