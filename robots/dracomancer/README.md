@@ -302,7 +302,7 @@ roslaunch dracomancer teleoperation.launch \
 | 3 | `elbow_flexion_extension_joint` |
 | 4 | `wrist_supination_joint` |
 | 5 | `wrist_flexion_extension_joint` |
-| 6 | `wrist_abduction_adduction_joint`（DRAGON マッピングでは未使用） |
+| 6 | `wrist_abduction_adduction_joint`（`distal` では `joint1_yaw` 入力。手首ロール切替ON時は手首屈曲と同じ2Dベクトルとして回転） |
 
 サーボtickから関節角への変換:
 
@@ -384,7 +384,7 @@ flowchart TD
 | `mapping_reference` | `circular` | 写像の offset 基準（全モード共通）。`straight`=0rad基準 / `circular`=円形姿勢基準。旧名 `joint_pairing_reference`、旧値 `zero`/`startup` も可 |
 | `joint_pairing_scale` | `1.0` | `joint_pairing` の一括写像ゲイン |
 | `distal_source_joints` | `[wrist_flexion_extension_joint, wrist_abduction_adduction_joint, elbow_flexion_extension_joint, shoulder_flexion_extension_joint, shoulder_abduction_adduction_joint]` | `distal` の入力（人間の腕）関節リスト |
-| `distal_target_joints` | `[joint1_pitch, joint1_yaw, joint2_yaw, joint3_pitch, joint3_yaw]` | `distal` の出力 DRAGON 関節リスト（source と同順） |
+| `distal_target_joints` | `[joint1_pitch, joint1_yaw, joint2_yaw, joint3_pitch, joint3_yaw]` | `distal` の出力 DRAGON 関節リスト（source と同順）。肘はこの基本写像後、`enable_elbow_roll_switching` により `joint2_pitch` / `joint2_yaw` へ再配分 |
 | `distal_signs` | `[1.0, -1.0, 1.0, 1.0, -1.0]` | `distal` の各符号（逆向きに動く関節を反転） |
 | `distal_scales` | `[1.0, 1.0, 1.0, 1.0, 1.0]` | `distal` の各ゲイン（`1.0` で 1:1 角度一致） |
 | `distal_offsets` | `[0, 0, 0, π/2, 0]` | `distal` の各加算オフセット[rad]（`sign*scale*source + offset`。肩屈曲=π/2 で 90°→0°） |
@@ -414,7 +414,7 @@ flowchart TD
 | `baselink_roll_scales` | `[1.0, 1.0]` | baselink roll 差分の各ゲイン |
 | `baselink_roll_limit` | `π/2` | baselink roll へ加算する差分の絶対値上限 [rad] |
 | `hover_flight_state` | `5` | DRAGON の HOVER_STATE。`/dragon/uav/nav` はHOVER以外では無視されるため、link4アンカーもこの状態でのみ有効 |
-| `capture_neutral_on_first_msg` | `false` | 最初の Dracomancer 関節角を中立姿勢として記憶（`elbow_only` では不使用） |
+| `capture_neutral_on_first_msg` | `false` | 最初の Dracomancer 関節角を中立姿勢として記憶（`distal` では絶対角一致のため不使用） |
 | `enable_feasibility_gate` | `true` | 予測ゲートの有効化。true でForce/Torque Volume radiusに基づく危険姿勢回避を行う。false で候補をそのまま採用 |
 | `feasibility_gate_mode` | `hold` | 不可行候補への対処。`hold` / `step_search` / `soft_scale` |
 | `feasibility_step_fraction` | `0.25` | `step_search` の初期探索ステップ |
@@ -608,7 +608,7 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | `imu_mount_roll/pitch/yaw` | `0 / -1.57079632679 / 0` | IMU取付け補正 |
 | `recapture_neutral_on_hover` | `true` | ホバ開始時に中立向きを取り直す |
 | `enable_shape_safety` | `true` | 形状安全スケーリング |
-| `publish_joints_only_when_hovering` | `false` | trueならホバリング以降のみ形状指令を送る |
+| `publish_joints_only_when_hovering` | `true` | trueならホバリング以降のみ形状指令を送る |
 | `publish_joints_before_device_ready` | `false` | falseなら関節状態受信前は送らない |
 | `axis_x/y/z` | `0 / 1 / 2` | ジョイスティック軸番号 |
 | `xy_vel` | `0.3` | XY速度スケール |

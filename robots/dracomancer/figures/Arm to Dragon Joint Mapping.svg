@@ -99,17 +99,17 @@
 
   <rect class="map" x="160" y="722" width="1280" height="42"/>
   <text class="mono" x="190" y="749">joint2_pitch</text>
-  <text class="mono" x="470" y="749">held as redundancy</text>
-  <text class="mono" x="1045" y="749">--</text>
-  <text class="mono" x="1185" y="749">--</text>
-  <text class="mono" x="1320" y="749">held</text>
+  <text class="mono" x="470" y="749">elbow_flexion_extension_joint</text>
+  <text class="mono" x="1045" y="749">+1</text>
+  <text class="mono" x="1185" y="749">0</text>
+  <text class="mono" x="1320" y="749">roll pitch</text>
 
   <rect class="map" x="160" y="764" width="1280" height="42"/>
   <text class="mono" x="190" y="791">joint2_yaw</text>
   <text class="mono" x="470" y="791">elbow_flexion_extension_joint</text>
   <text class="mono" x="1045" y="791">+1</text>
   <text class="mono" x="1185" y="791">0</text>
-  <text class="mono" x="1320" y="791">distal</text>
+  <text class="mono" x="1320" y="791">roll yaw</text>
 
   <rect class="map" x="160" y="806" width="1280" height="42"/>
   <text class="mono" x="190" y="833">joint3_pitch</text>
@@ -125,5 +125,5 @@
   <text class="mono" x="1185" y="875">0</text>
   <text class="mono" x="1320" y="875">distal</text>
 
-  <text class="caption" x="80" y="555">Mapping equation: target = clamp(sign * scale * source + offset, -joint_limit, joint_limit); joint2_pitch is held</text>
+  <text class="caption" x="80" y="555">Mapping equation: target = clamp(sign * scale * source + offset, -joint_limit, joint_limit); elbow roll selects joint2_pitch/yaw</text>
 </svg>

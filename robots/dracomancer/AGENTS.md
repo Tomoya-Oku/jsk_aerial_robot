@@ -126,10 +126,10 @@ ROS ノードの起動には spinal/aerial_robot 一式が必要。
 
 ## マッピング方針
 
-- Wrist flexion/extension: Upper-arm + forearm roll angle switches Joint1-Pitch / Joint1-Yaw
+- Wrist flexion/extension: Upper-arm + forearm roll angle switches Joint1-Pitch / Joint1-Yaw (default switch boundary: 15 deg)
 - Wrist radial/ulnar deviation: Joint1-Yaw (rotated with wrist flexion when wrist roll switching is enabled)
-- Forearm pronation/supination + Shoulder internal/external rotation: Baselink-Roll
-- Elbow flexion/extension: Joint2-Yaw
+- Forearm pronation/supination + Shoulder internal/external rotation: Baselink-Roll delta in `link4_anchor_mode=full`
+- Elbow flexion/extension: Upper-arm roll angle switches Joint2-Pitch / Joint2-Yaw (default switch boundary: 15 deg)
 - Shoulder flexion/extension: Joint3-Pitch
 - Shoulder abduction/adduction: Joint3-Yaw
-- 使用していないJoint2-Pitchは安定姿勢への冗長性として扱う
+- Joint2-Pitch is used by elbow roll switching; do not treat it as unused redundancy in the current mapping.
