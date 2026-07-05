@@ -6,8 +6,11 @@
 Mirrors the fc->link4 chain used by control_joint_angle.py
 (dragon_fc_to_link4_matrix): each link is link_length long; a pitch joint
 (about +Y) sits at the link end, followed by a 2*inter_joint_x_offset spacer
-and the yaw joint (about +Z). All positions are expressed in the link1-root
-frame, so the shape comparison is invariant to the flying body pose.
+and the yaw joint (about +Z). All positions are expressed in the link4-root
+frame: link4 is the shoulder-corresponding link that control_joint_angle.py's
+link4-anchor holds fixed in the world during real operation, so this matches
+what an operator (and the world-fixed shadow marker) actually sees, and the
+shape comparison is invariant to the flying body pose.
 
 Units: rad / m. Joint order: [j1_pitch, j1_yaw, j2_pitch, j2_yaw, j3_pitch, j3_yaw].
 """
@@ -50,8 +53,8 @@ def total_length(link_length=DEFAULT_LINK_LENGTH,
 
 def fk_points(q, link_length=DEFAULT_LINK_LENGTH,
               inter_joint_x_offset=DEFAULT_INTER_JOINT_X_OFFSET):
-    """Return a (5, 3) array of node positions in the link1-root frame:
-    [link1 origin, joint1, joint2, joint3, link4 tip]."""
+    """Return a (5, 3) array of node positions in the link4-root frame:
+    [link4 origin, joint3, joint2, joint1, link1 tip]."""
     q = np.asarray(q, dtype=float)
     T = np.eye(4)
     pts = [T[:3, 3].copy()]
@@ -62,8 +65,16 @@ def fk_points(q, link_length=DEFAULT_LINK_LENGTH,
         T = T.dot(_trans_x(2.0 * inter_joint_x_offset))
         T = T.dot(_rot_z(q[2 * k + 1]))
     T = T.dot(_trans_x(link_length))
-    pts.append(T[:3, 3].copy())  # link4 tip
-    return np.array(pts)
+    pts.append(T[:3, 3].copy())  # link4 tip: this chain's actual end pose
+
+    # Re-express every node in the link4 frame by inverting the full
+    # link1->link4 pose (not just its position, so the reversed chain stays
+    # rigid). link4 is held fixed in the world by control_joint_angle.py's
+    # link4-anchor, so after this the far end of the shape is link1 --
+    # matching what actually swings during real operation.
+    pts_h = np.hstack([np.array(pts), np.ones((len(pts), 1))])
+    pts_in_link4 = (np.linalg.inv(T) @ pts_h.T).T[:, :3]
+    return pts_in_link4[::-1]
 
 
 def joint_error(q, q_star):
@@ -80,9 +91,10 @@ def shape_error(q, q_star, link_length=DEFAULT_LINK_LENGTH,
                 normalize=False):
     """RMS of the link node position errors E_s [m] between two shapes.
 
-    The link1 origin is common to both shapes, so only the 4 joint/tip nodes
-    that actually depend on q are compared. normalize=True divides by the
-    robot's total stretched length (dimensionless output).
+    The link4 origin is common to both shapes (fixed at the origin by
+    construction), so only the 4 joint/tip nodes that actually depend on q
+    are compared. normalize=True divides by the robot's total stretched
+    length (dimensionless output).
     """
     q = np.asarray(q, dtype=float)
     q_star = np.asarray(q_star, dtype=float)

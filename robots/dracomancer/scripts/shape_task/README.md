@@ -47,9 +47,10 @@ rosservice call /shape_task_manager/start
 
 RViz では `MarkerArray` ディスプレイを追加し、トピック
 `/dracomancer/shape_task/shadow` を指定する（Fixed Frame は `world` のままでよい。
-シャドウは既定で `dragon/link1` フレームに貼られ、E_s の定義と同じ座標系で重なる）。
+シャドウは既定で `dragon/link4`（肩に対応する、操作中はワールドにおおよそ固定される基準リンク）
+フレームに貼られ、E_s の定義と同じ座標系で重なる）。
 表示先は DRAGON 側 RViz（`dragon/config/rviz_config`）を想定する。Dracomancer 側 RViz は
-Fixed Frame が `dracomancer/base_link` のため、`dragon/link1` と TF がつながらず表示できない。
+Fixed Frame が `dracomancer/base_link` のため、`dragon/link4` と TF がつながらず表示できない。
 `shape_task.launch` 起動直後は最初の目標を灰色のプレビューとして表示し、試行開始後に状態色へ切り替わる。
 TF 切り分けだけしたい場合は `roslaunch dracomancer shape_task.launch shadow_frame:=world`
 で world 固定表示にできる。
@@ -113,7 +114,7 @@ rosservice call /shape_task_manager/reset   # スケジュールを最初の目�
 以下すべてを `t_hold` 秒維持で成功。`timeout` 秒で失敗（experiment.yaml で変更可能）。
 
 - `E_q < E_q_threshold` : RMS(q_current − q_star)（rad、既定 0.15）
-- `E_s < E_s_threshold` : リンク端点（joint1/2/3・link4先端）位置誤差の RMS（m、既定 0.05。`E_s_normalize: true` で全長正規化）
+- `E_s < E_s_threshold` : リンク端点（joint1/2/3・link1先端）位置誤差の RMS（m、既定 0.05。link4基準の座標系で評価。`E_s_normalize: true` で全長正規化）
 - `mu >= 0` : `mu = min((r_f − r_f_hard)/(r_f_safe − r_f_hard), (r_τ − r_τ_hard)/(r_τ_safe − r_τ_hard))`
 
 経過時間・保持時間・タイムアウトはすべて **ROS time**（Gazebo では sim time）。

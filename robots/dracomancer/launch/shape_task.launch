@@ -21,7 +21,7 @@
   <arg name="auto_start"  default="false" />
   <arg name="results_dir" default="" />   <!-- 空なら results_root/日時 を自動生成 -->
   <arg name="auto_plot"   default="true" />
-  <arg name="shadow_frame" default="$(arg robot_ns)/link1" />
+  <arg name="shadow_frame" default="$(arg robot_ns)/link4" />
   <arg name="experiment_yaml" default="$(find dracomancer)/config/shape_task/experiment.yaml" />
   <arg name="targets_yaml"    default="$(find dracomancer)/config/shape_task/targets.yaml" />
 

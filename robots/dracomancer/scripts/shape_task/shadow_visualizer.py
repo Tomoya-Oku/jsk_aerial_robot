@@ -5,9 +5,11 @@
 
 Renders the trial's target shape q_star as a semi-transparent link chain
 (MarkerArray) in RViz so the operator can overlay the current DRAGON shape on
-it. The shadow is attached to <robot>/link1 by default: both the shadow and
-the E_s metric live in the link1-root frame, so what the operator sees matches
-what is scored. Colors follow the task status:
+it. The shadow is attached to <robot>/link4 by default: both the shadow and
+the E_s metric live in the link4-root frame (link4 is the shoulder-
+corresponding link held fixed in the world by control_joint_angle.py's
+link4-anchor), so what the operator sees matches what is scored and what
+actually stays still during real operation. Colors follow the task status:
 
   gray   : idle / no trial          cyan  : running
   yellow : within tolerance (holding) green : success   red : timeout/abort
@@ -39,7 +41,7 @@ class ShadowVisualizer:
         self.device_ns = rospy.get_param("~device_ns", "/dracomancer").rstrip("/")
         base = self.device_ns + "/shape_task"
         self.robot_ns = rospy.get_param("~robot_ns", "dragon")
-        self.frame = rospy.get_param("~shadow_frame", self.robot_ns + "/link1")
+        self.frame = rospy.get_param("~shadow_frame", self.robot_ns + "/link4")
         self.alpha = float(rospy.get_param("~shadow_alpha", 0.5))
         self.link_radius = float(rospy.get_param("~link_radius", 0.08))
         self.link_length = float(rospy.get_param("~link_length", dragon_fk.DEFAULT_LINK_LENGTH))

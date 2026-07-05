@@ -62,7 +62,7 @@ inter_joint_x_offset: 0.02575 # m
 E_s_normalize: false          # true: E_s を全長 (4L+6*offset) で正規化
 
 # --- 可視化 -----------------------------------------------------------------
-shadow_frame: dragon/link1  # シャドウを貼るTFフレーム。world にすれば固定表示
+shadow_frame: dragon/link4  # シャドウを貼るTFフレーム（肩に対応する基準リンク）。world にすれば固定表示
 shadow_alpha: 0.5
 link_radius: 0.08   # m, シャドウのリンク太さ
 
