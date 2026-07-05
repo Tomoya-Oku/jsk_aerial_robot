@@ -87,6 +87,15 @@ Visualization Manager:
       Update Interval: 0
       Value: false
 
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /dracomancer/servo_angle_markers
+      Name: ServoAngleLabels
+      Namespaces:
+        servo_angle_labels: true
+      Queue Size: 10
+      Value: true
+
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

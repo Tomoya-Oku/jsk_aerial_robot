@@ -1,9 +1,20 @@
 <launch>
   <arg name="robot_ns" default="dracomancer" />
   <arg name="rviz_config" default="$(find dracomancer)/config/rviz_config" />
+  <arg name="show_servo_labels" default="true" />
+  <arg name="servo_topic" default="/$(arg robot_ns)/servo/states" />
+  <arg name="servo_label_topic" default="/$(arg robot_ns)/servo_angle_markers" />
 
   <!-- Run this on the GUI PC. The GUI PC is expected to provide the fixed ROS
        master, and the Dracomancer/Khadas PC should point ROS_MASTER_URI here. -->
   <node name="rviz" pkg="rviz" type="rviz" ns="$(arg robot_ns)"
         args="-d $(arg rviz_config)" output="screen" />
+
+  <node pkg="dracomancer" type="servo_labels.py" name="$(arg robot_ns)_servo_labels"
+        output="screen" if="$(arg show_servo_labels)">
+    <param name="device_ns" value="/$(arg robot_ns)" />
+    <param name="servo_topic" value="$(arg servo_topic)" />
+    <param name="marker_topic" value="$(arg servo_label_topic)" />
+    <param name="frame_id" value="$(arg robot_ns)/base_link" />
+  </node>
 </launch>

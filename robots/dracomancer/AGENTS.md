@@ -26,6 +26,7 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 | `src/shape_feasibility_node.cpp` | 候補リンク角の force/torque volume 半径を DRAGON モデルで予測するサービス（C++） |
 | `scripts/safety/volume_radius_monitor.py` | しきい値 pub/sub・ライブ安全スケール算出（通常は teleoperation.launch で起動、bringup では任意） |
 | `scripts/safety/fc_min_lowpass.py` | 実測 fc_f_min/fc_t_min のローパス（ns=dragon、危険判定の平滑化） |
+| `scripts/visualization/servo_labels.py` | `/dracomancer/servo/states` のサーボtickから基準差分角度をRVizテキスト表示 |
 | `scripts/experiments/` | fc しきい値較正の実験ツール（収集/外乱/解析、[docs/fc_threshold_calibration.md](docs/fc_threshold_calibration.md)） |
 | `scripts/shape_task/` | 形態目標到達タスク実験（試行管理/シャドウ表示/記録/評価/キーボード比較、[scripts/shape_task/README.md](scripts/shape_task/README.md)。設定は `config/shape_task/`、起動は `launch/shape_task.launch`、図生成は `figures/plot_task.py`） |
 | `launch/bringup.launch` | デバイス本体（URDF/TF/サーボ橋渡し/FC/安全半径モニタ） |

@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   # rospy
   std_msgs
   sensor_msgs
+  visualization_msgs
   aerial_robot_control
   aerial_robot_estimation
   aerial_robot_model
@@ -42,7 +43,7 @@ generate_messages(
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES dracomancer
-  CATKIN_DEPENDS roscpp std_msgs sensor_msgs aerial_robot_control aerial_robot_model aerial_robot_msgs pluginlib diagnostic_msgs geometry_msgs dragon message_runtime
+  CATKIN_DEPENDS roscpp std_msgs sensor_msgs visualization_msgs aerial_robot_control aerial_robot_model aerial_robot_msgs pluginlib diagnostic_msgs geometry_msgs dragon message_runtime
 )
 
 ###########

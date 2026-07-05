@@ -44,6 +44,7 @@ flowchart TB
 | `control_joint_angle.py` | 腕関節から DRAGON の形状指令を生成（候補姿勢のフィージビリティで変形可否を判定） | joint_states, shape_feasibility, threshold, flight_state | `/dragon/joints_ctrl`, `/dracomancer/shape_control_error` |
 | `shape_feasibility_node`（C++） | 候補リンク角の force/torque volume 半径を DRAGON モデルで予測するサービス | candidate joints | `~check_shape`（fc_f_min, fc_t_min） |
 | `volume_radius_monitor.py` | しきい値 pub/sub・ライブ安全スケール算出（通常は teleoperation.launch で起動。fc 内接半径は再 pub しない） | fc inradius, threshold cmd | `*_volume_radius_threshold`, `/dracomancer/dragon_shape_safety_scale` |
+| `servo_labels.py` | サーボtickを中心値基準のdeg/radへ変換してRVizテキスト表示 | `/dracomancer/servo/states` | `/dracomancer/servo_angle_markers` |
 | `control_haptic_feedback.py` | 抑制された形状入力から提示トルク相当量を計算し、既定でサーボのトルク ON/OFF を出力し、互換サーボ向けには電流指令も任意出力 | joint_states, shape_control_error, mode | `/dracomancer/haptic_torque`, `/servo/torque_enable`, `/servo/target_current` |
 | `publish_fake_joint_states.py` | 実機なしで Dracomancer 関節状態を生成 | `/dracomancer/joint_cmd` | `/dracomancer/joint_states` |
 
@@ -87,6 +88,7 @@ flowchart TB
 | `/joystick/raw` | `std_msgs/Int16MultiArray` | 操縦桿の生値 |
 | `/dracomancer/joystick/calibrated` | `std_msgs/Float32MultiArray` | 較正済み軸値 |
 | `/dracomancer/servo/states` | `spinal/ServoStates` | 腕サーボの状態 |
+| `/dracomancer/servo_angle_markers` | `visualization_msgs/MarkerArray` | RViz用のサーボtick基準角度ラベル |
 | `/dracomancer/imu` | `spinal/Imu` | 操作者姿勢のIMU quaternion |
 | `/dracomancer/joint_states` | `sensor_msgs/JointState` | Dracomancer の腕関節角 |
 | `/dragon/uav/nav` | `aerial_robot_msgs/FlightNav` | DRAGON の速度指令 |
@@ -525,6 +527,8 @@ roslaunch dracomancer bringup.launch \
 ```bash
 roslaunch dracomancer rviz.launch
 ```
+
+RViz には `/dracomancer/servo/states` のサーボtickを `center_tick`（既定2048）基準で換算した各サーボ角度が表示されます。換算式は `(tick - center_tick) * 2π / ticks_per_rev`（`ticks_per_rev` 既定4096）で、表示は deg / rad です。不要な場合は `show_servo_labels:=false` を指定します。
 
 ROS master は親機PCに固定します。子機PCでは `ROS_MASTER_URI` を親機PCに向け、親機PCでは `ROS_MASTER_URI` を自身に向けた状態で `rviz.launch` のみを起動してください。両PCで `ROS_IP` または `ROS_HOSTNAME` は、それぞれ相手PCから到達可能なIP/ホスト名に設定します。
 
