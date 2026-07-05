@@ -48,7 +48,11 @@ rosservice call /shape_task_manager/start
 RViz では `MarkerArray` ディスプレイを追加し、トピック
 `/dracomancer/shape_task/shadow` を指定する（Fixed Frame は `world` のままでよい。
 シャドウは既定で `dragon/link1` フレームに貼られ、E_s の定義と同じ座標系で重なる）。
+表示先は DRAGON 側 RViz（`dragon/config/rviz_config`）を想定する。Dracomancer 側 RViz は
+Fixed Frame が `dracomancer/base_link` のため、`dragon/link1` と TF がつながらず表示できない。
 `shape_task.launch` 起動直後は最初の目標を灰色のプレビューとして表示し、試行開始後に状態色へ切り替わる。
+TF 切り分けだけしたい場合は `roslaunch dracomancer shape_task.launch shadow_frame:=world`
+で world 固定表示にできる。
 
 ### B. keyboard 比較条件
 

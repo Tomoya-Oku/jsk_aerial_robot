@@ -58,6 +58,14 @@ Visualization Manager:
       Plane Cell Count: 10
       Reference Frame: <Fixed Frame>
       Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /dracomancer/shape_task/shadow
+      Name: Shape Task Shadow
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
     - Class: rviz/TF
       Enabled: true
       Filter (blacklist): ""
