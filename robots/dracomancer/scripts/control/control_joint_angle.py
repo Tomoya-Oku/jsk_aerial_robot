@@ -175,7 +175,9 @@ class ControlJoints:
         self.elbow_yaw_offset = float(rospy.get_param("~elbow_yaw_offset", 0.0))
 
         # Same roll-plane routing for wrist flexion: upper-arm + forearm roll
-        # selects whether the wrist bend is expressed as DRAGON joint1 pitch or yaw.
+        # estimates the palm orientation. Near the palm-horizontal reference the
+        # wrist bend is expressed as DRAGON joint1_pitch; near vertical it is
+        # expressed as joint1_yaw.
         self.enable_wrist_roll_switching = rospy.get_param("~enable_wrist_roll_switching", True)
         self.wrist_source_joint = rospy.get_param(
             "~wrist_source_joint", "wrist_flexion_extension_joint")
@@ -191,10 +193,12 @@ class ControlJoints:
             "~wrist_pitch_target_joint", "joint1_pitch")
         self.wrist_yaw_target_joint = rospy.get_param(
             "~wrist_yaw_target_joint", "joint1_yaw")
+        self.wrist_roll_parallel_offset = float(rospy.get_param(
+            "~wrist_roll_parallel_offset", 0.0))
         self.wrist_roll_pitch_zone = abs(float(rospy.get_param(
-            "~wrist_roll_pitch_zone", np.deg2rad(15.0))))
+            "~wrist_roll_pitch_zone", np.deg2rad(45.0))))
         self.wrist_roll_yaw_zone = abs(float(rospy.get_param(
-            "~wrist_roll_yaw_zone", np.deg2rad(15.0))))
+            "~wrist_roll_yaw_zone", np.deg2rad(45.0))))
         if self.wrist_roll_yaw_zone < self.wrist_roll_pitch_zone:
             rospy.logwarn("wrist_roll_yaw_zone is smaller than pitch_zone; using pitch_zone")
             self.wrist_roll_yaw_zone = self.wrist_roll_pitch_zone
@@ -406,13 +410,14 @@ class ControlJoints:
                 self.elbow_roll_pitch_zone,
                 self.elbow_roll_yaw_zone)
             rospy.loginfo(
-                "distal wrist roll switching: enable=%s, wrist=%s, yaw_source=%s, roll=%s, pitch=%s, yaw=%s, zones=%.3f/%.3f rad",
+                "distal wrist roll switching: enable=%s, wrist=%s, yaw_source=%s, roll=%s, pitch=%s, yaw=%s, offset=%.3f rad, zones=%.3f/%.3f rad",
                 self.enable_wrist_roll_switching,
                 self.wrist_source_joint,
                 self.wrist_yaw_source_joint,
                 "+".join(self.wrist_roll_joints),
                 self.wrist_pitch_target_joint,
                 self.wrist_yaw_target_joint,
+                self.wrist_roll_parallel_offset,
                 self.wrist_roll_pitch_zone,
                 self.wrist_roll_yaw_zone)
         rospy.loginfo("joint mapping: %s",
@@ -649,14 +654,16 @@ class ControlJoints:
             "wrist",
             self.wrist_yaw_source_joint,
             self.wrist_yaw_source_sign,
-            self.wrist_yaw_source_scale)
+            self.wrist_yaw_source_scale,
+            self.wrist_roll_parallel_offset)
 
     def apply_roll_plane_switching(self, target, enabled, source_joint, roll_joint,
                                    pitch_target_joint, yaw_target_joint,
                                    pitch_zone, yaw_zone, pitch_sign, yaw_sign,
                                    pitch_scale, yaw_scale, pitch_offset, yaw_offset,
                                    label, yaw_source_joint=None,
-                                   yaw_source_sign=1.0, yaw_source_scale=1.0):
+                                   yaw_source_sign=1.0, yaw_source_scale=1.0,
+                                   roll_offset=0.0):
         if not enabled:
             return
         if (pitch_target_joint not in self.joint_index or
@@ -686,7 +693,7 @@ class ControlJoints:
                 [value is not None for value in roll_values])
             return
 
-        roll_sum = sum(self.wrap(value) for value in roll_values)
+        roll_sum = self.wrap(sum(self.wrap(value) for value in roll_values) - roll_offset)
         abs_roll = abs(self.wrap(roll_sum))
         if abs_roll <= pitch_zone:
             yaw_ratio = 0.0

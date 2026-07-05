@@ -279,7 +279,7 @@ target_joint[k] = clamp(sign[k] * scale[k] * source_angle[k] + offset[k],  -join
 - 絶対角の直接対応なので中立姿勢の記録（`capture_neutral_on_first_msg`）は不要・不使用。
 - `distal_signs` 既定は `[1.0, -1.0, 1.0, 1.0, -1.0]`（手首内外転・肩内外転が -1、他は +1。各関節ごとに、DRAGON が逆向きに動く場合に反転）。`distal_scales` 既定 `1.0` で 1:1 角度一致。
 - `distal_offsets` 既定は `[0, 0, 0, π/2, 0]`：**device は肩屈曲を負で測る**（90° で約 -π/2）ため、joint3_pitch は `sign=+1`＋`offset=π/2` で **操縦者の肩 90° → joint3_pitch 0°**（rosbag 解析で確定。`sign=-1` だと全域 +π/2 に飽和した）。肩内外転の向きは未検証なので sim で要確認。
-- **手首のロール総和切替**（`enable_wrist_roll_switching` 既定 ON）: `wrist_roll_joints`（既定: `upper_arm_external_internal_rotation_joint` + `wrist_supination_joint`）の総和絶対値が `wrist_roll_pitch_zone`（既定15°）以下なら手首屈曲を `joint1_pitch`、手首内外転を `joint1_yaw` に入れる。ロール総和が大きいと、手首屈曲を `joint1_yaw` 側へ、手首内外転を `joint1_pitch` 側へ回転させる。必要な場合だけ `wrist_roll_yaw_zone` を pitch zone より大きくすると、その間をpitch/yawのベクトル長を保ちながら滑らかに遷移できる。
+- **手首のロール総和切替**（`enable_wrist_roll_switching` 既定 ON）: `wrist_roll_joints`（既定: `upper_arm_external_internal_rotation_joint` + `wrist_supination_joint`）の総和から `wrist_roll_parallel_offset`（手のひら水平基準、既定0）を引いた絶対値が `wrist_roll_pitch_zone`（既定45°）以下なら、手のひらが地面に平行に近い側として手首屈曲を `joint1_pitch`、手首内外転を `joint1_yaw` に入れる。ロール総和が大きく手のひらが地面に垂直に近い側では、手首屈曲を `joint1_yaw` 側へ、手首内外転を `joint1_pitch` 側へ回転させる。必要な場合だけ `wrist_roll_yaw_zone` を pitch zone より大きくすると、その間をpitch/yawのベクトル長を保ちながら滑らかに遷移できる。
 - **肘の上腕ロール切替**（`enable_elbow_roll_switching` 既定 ON）: `upper_arm_external_internal_rotation_joint` の絶対値が `elbow_roll_pitch_zone`（既定15°）以下なら肘屈曲を `joint2_pitch` のみに入れる。それ以外では `joint2_yaw` のみに入れる。必要な場合だけ `elbow_roll_yaw_zone` を pitch zone より大きくすると、その間をpitch/yawのベクトル長を保ちながら滑らかに遷移できる。これにより、操作者から見て前腕が地面に垂直に近いときはpitch、肘が地面と平行な面で開閉するときはyawを使う。
 - **link4 アンカー（`enable_link4_anchor` 既定 ON）**: 関節を曲げても DRAGON の **link4（腕先端）位置をワールドにおおよそ固定**するため、ホバー開始時に link4 位置を基準化し、`joints_ctrl` と同じ目標関節角からCOG位置（`uav/nav` POS_MODE）を逆算する。既定の `link4_anchor_mode:=position_only` ではbaselink姿勢補償を送らない。`link4_anchor_mode:=full` ではCOG位置+baselink姿勢でlink4姿勢も補償できるが、姿勢failsafeに近づきやすいため明示指定時のみ使う。ON時も `enable_link4_anchor_body_safety` がCOG高度・水平リーシュ・full時の姿勢を検査し、危険なbody補償やTF断時は関節/補償指令を保持する。詳細は [docs/link4_anchor.md](docs/link4_anchor.md)。**移動制御（`enable_position_control`）とは併用不可**（`uav/nav` が競合）。
 - 未対応の関節は `mapping_reference` の straight/circular に関係なく動かない。
@@ -390,7 +390,8 @@ flowchart TD
 | `distal_offsets` | `[0, 0, 0, π/2, 0]` | `distal` の各加算オフセット[rad]（`sign*scale*source + offset`。肩屈曲=π/2 で 90°→0°） |
 | `enable_wrist_roll_switching` | `true` | ロール総和に応じて手首屈曲を `joint1_pitch` / `joint1_yaw` へ配分 |
 | `wrist_roll_joints` | `[upper_arm_external_internal_rotation_joint, wrist_supination_joint]` | 手首のpitch/yaw切替判定に使うロール関節。各値を足して判定 |
-| `wrist_roll_pitch_zone` / `wrist_roll_yaw_zone` | `π/12` / `π/12` | ロール総和絶対値が pitch zone 以下なら通常配分、それ以外はpitch/yawを入れ替え。yaw zoneを大きくすると中間を滑らかに遷移 |
+| `wrist_roll_parallel_offset` | `0.0` | 手のひらが地面に平行なときのロール総和基準 [rad] |
+| `wrist_roll_pitch_zone` / `wrist_roll_yaw_zone` | `π/4` / `π/4` | ロール総和から水平基準を引いた絶対値が pitch zone 以下ならpitch配分、それ以外はyaw配分。yaw zoneを大きくすると中間を滑らかに遷移 |
 | `wrist_pitch_sign` / `wrist_yaw_sign` | `1.0` / `1.0` | 手首屈曲を `joint1_pitch` / `joint1_yaw` へ入れる符号 |
 | `wrist_pitch_scale` / `wrist_yaw_scale` | `1.0` / `1.0` | 手首屈曲を `joint1_pitch` / `joint1_yaw` へ入れるゲイン |
 | `wrist_yaw_source_sign` / `wrist_yaw_source_scale` | `-1.0` / `1.0` | 手首内外転を手首ロール切替の yaw 初期成分へ入れる符号・ゲイン |
@@ -615,7 +616,8 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | `z_vel` | `0.2` | Z速度スケール |
 | `max_step` | `0.04` | 関節指令のレート制限 |
 | `enable_wrist_roll_switching` | `true` | ロール総和に応じた手首屈曲の `joint1_pitch` / `joint1_yaw` 切替 |
-| `wrist_roll_pitch_zone` / `wrist_roll_yaw_zone` | `0.2617993877991494` / `0.2617993877991494` | 通常配分 / pitch-yaw入れ替えへ切り替わるロール総和角 [rad] |
+| `wrist_roll_parallel_offset` | `0.0` | 手のひらが地面に平行なときのロール総和基準 [rad] |
+| `wrist_roll_pitch_zone` / `wrist_roll_yaw_zone` | `0.7853981633974483` / `0.7853981633974483` | pitch / yaw へ切り替わる水平基準からのロール総和角 [rad] |
 | `enable_elbow_roll_switching` | `true` | 上腕ロール角に応じた肘屈曲の `joint2_pitch` / `joint2_yaw` 切替 |
 | `elbow_roll_pitch_zone` / `elbow_roll_yaw_zone` | `0.2617993877991494` / `0.2617993877991494` | pitchのみ / yawのみへ切り替わる上腕ロール角 [rad] |
 | `enable_link4_anchor` | `true` | link4固定補償を有効化する |
