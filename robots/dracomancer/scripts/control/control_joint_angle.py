@@ -321,6 +321,14 @@ class ControlJoints:
             "~candidate_force_radius_topic", self.device_ns + "/candidate/fc_f_min")
         self.candidate_torque_radius_topic = rospy.get_param(
             "~candidate_torque_radius_topic", self.device_ns + "/candidate/fc_t_min")
+        # Predicted fc for the final target after gate/rate-limit/link4 safety.
+        # This aligns the diagnostic with the command actually sent to DRAGON.
+        self.target_force_radius_topic = rospy.get_param(
+            "~target_force_radius_topic", self.device_ns + "/target/fc_f_min")
+        self.target_torque_radius_topic = rospy.get_param(
+            "~target_torque_radius_topic", self.device_ns + "/target/fc_t_min")
+        self.enable_target_fc_prediction = rospy.get_param("~enable_target_fc_prediction", True)
+        self.target_fc_prediction_rate = rospy.get_param("~target_fc_prediction_rate", 10.0)
         # Candidate DRAGON joint target before the feasibility gate (i.e. the
         # direct output of mapped_target()). Republished so analysis scripts do
         # not have to reconstruct it from joints_ctrl + shape_control_error.
@@ -381,6 +389,7 @@ class ControlJoints:
         self.last_gate_feasible = None
         self.feasibility_hysteresis_holding = False
         self.last_feasibility_eval_stamp = rospy.Time(0)
+        self.last_target_fc_eval_stamp = rospy.Time(0)
         # Geometric-mode reference (neutral) relative angles, computed lazily so a
         # captured neutral pose can be used if available.
         self.geom_ref = None
@@ -390,6 +399,8 @@ class ControlJoints:
         self.shape_error_pub = rospy.Publisher(self.shape_error_topic, Float64MultiArray, queue_size=1)
         self.candidate_fc_f_pub = rospy.Publisher(self.candidate_force_radius_topic, Float64, queue_size=1)
         self.candidate_fc_t_pub = rospy.Publisher(self.candidate_torque_radius_topic, Float64, queue_size=1)
+        self.target_fc_f_pub = rospy.Publisher(self.target_force_radius_topic, Float64, queue_size=1)
+        self.target_fc_t_pub = rospy.Publisher(self.target_torque_radius_topic, Float64, queue_size=1)
         self.candidate_target_pub = rospy.Publisher(self.candidate_target_topic, JointState, queue_size=1)
         self.switch_diag_pub = rospy.Publisher(self.switch_diag_topic, Float64MultiArray, queue_size=1)
         self.nav_pub = rospy.Publisher(self.nav_topic, FlightNav, queue_size=1)
@@ -906,6 +917,23 @@ class ControlJoints:
         if fc_t is not None:
             self.candidate_fc_t_pub.publish(Float64(fc_t))
 
+    def maybe_publish_target_fc(self, target):
+        if (not self.enable_target_fc_prediction or
+                not self.enable_feasibility_gate or
+                self.teleop_mode != "teleoperation"):
+            return
+        now = rospy.Time.now()
+        if self.target_fc_prediction_rate > 0.0 and \
+                (now - self.last_target_fc_eval_stamp).to_sec() < 1.0 / self.target_fc_prediction_rate:
+            return
+        self.last_target_fc_eval_stamp = now
+
+        _feasible, fc_f, fc_t = self.evaluate_feasibility(target)
+        if fc_f is not None:
+            self.target_fc_f_pub.publish(Float64(fc_f))
+        if fc_t is not None:
+            self.target_fc_t_pub.publish(Float64(fc_t))
+
     def publish_candidate_target(self, candidate):
         msg = JointState()
         msg.header.stamp = rospy.Time.now()
@@ -1125,6 +1153,7 @@ class ControlJoints:
         # desired (raw mapping) vs target (feasible-gated) error, for haptic feedback.
         desired = self.mapped_target() if self.teleop_mode == "teleoperation" else target
         self.current_target = self.link4_body_safety_gate(self.rate_limit(target))
+        self.maybe_publish_target_fc(self.current_target)
         self.publish_shape_error(desired, self.current_target)
         self.publish_switch_diag()
 

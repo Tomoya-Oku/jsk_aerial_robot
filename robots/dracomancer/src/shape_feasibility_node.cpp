@@ -5,11 +5,15 @@
  * fc_t_min) of a *candidate* articulated-aerial-robot shape, before the shape
  * command is actually sent. It loads the controlled robot's model (e.g.
  * DRAGON) through pluginlib and evaluates getFeasibleControlF/TMin() for the
- * requested link joint angles. Gimbal joints are filled by the model with its
- * nominal (hovering) angles, so the result is an approximate prediction.
+ * requested link joint angles. In legacy modes, gimbal joints are filled by the
+ * model with its nominal (hovering) angles, so the result is an approximate
+ * prediction.
  * For DRAGON full-vectoring models, optimized_gimbal mode explicitly evaluates
  * the full-vectoring Fxy/T metrics from the model's gimbal-processed joint
  * state after updateRobotModel().
+ * Controller mode additionally uses the latest controller gimbal command and
+ * baselink attitude feedback to approximate the conditions behind
+ * /dragon/debug/fc_*_min.
  *
  * Run this node in the controlled robot's namespace (e.g. ns="dragon") so the
  * robot model reads <robot_ns>/robot_description and rotor rosparams.
@@ -18,9 +22,15 @@
 #include <ros/ros.h>
 #include <pluginlib/class_loader.h>
 #include <sensor_msgs/JointState.h>
+#include <nav_msgs/Odometry.h>
+#include <geometry_msgs/Vector3Stamped.h>
 #include <aerial_robot_model/model/aerial_robot_model.h>
 #include <dragon/model/full_vectoring_robot_model.h>
 #include <dracomancer/ShapeFeasibility.h>
+#include <Eigen/Geometry>
+#include <map>
+#include <mutex>
+#include <utility>
 
 class ShapeFeasibilityServer
 {
@@ -61,7 +71,38 @@ public:
                  prediction_mode_.c_str());
         prediction_mode_ = "optimized_gimbal";
       }
-    ROS_INFO("shape_feasibility: prediction_mode=%s", prediction_mode_.c_str());
+
+    gimbal_feedback_topic_ =
+      nhp_.param<std::string>("gimbal_feedback_topic", "gimbals_ctrl");
+    baselink_odom_topic_ =
+      nhp_.param<std::string>("baselink_odom_topic", "uav/baselink/odom");
+    baselink_rpy_topic_ =
+      nhp_.param<std::string>("baselink_rpy_topic", "final_target_baselink_rpy");
+    use_gimbal_feedback_ = nhp_.param<bool>("use_gimbal_feedback", true);
+    use_baselink_odom_feedback_ = nhp_.param<bool>("use_baselink_odom_feedback", false);
+    use_baselink_rpy_feedback_ = nhp_.param<bool>("use_baselink_rpy_feedback", true);
+    feedback_timeout_ = nhp_.param<double>("feedback_timeout", 0.25);
+    if (use_gimbal_feedback_)
+      {
+        gimbal_sub_ = nh_.subscribe(gimbal_feedback_topic_, 1,
+                                    &ShapeFeasibilityServer::gimbalCb, this);
+      }
+    if (use_baselink_odom_feedback_)
+      {
+        baselink_odom_sub_ = nh_.subscribe(baselink_odom_topic_, 1,
+                                           &ShapeFeasibilityServer::baselinkOdomCb, this);
+      }
+    if (use_baselink_rpy_feedback_)
+      {
+        baselink_rpy_sub_ = nh_.subscribe(baselink_rpy_topic_, 1,
+                                          &ShapeFeasibilityServer::baselinkRpyCb, this);
+      }
+    ROS_INFO("shape_feasibility: prediction_mode=%s, gimbal_feedback=%s (%s), "
+             "baselink_rpy_feedback=%s (%s), baselink_odom_feedback=%s (%s)",
+             prediction_mode_.c_str(),
+             use_gimbal_feedback_ ? "true" : "false", gimbal_feedback_topic_.c_str(),
+             use_baselink_rpy_feedback_ ? "true" : "false", baselink_rpy_topic_.c_str(),
+             use_baselink_odom_feedback_ ? "true" : "false", baselink_odom_topic_.c_str());
 
     server_ = nhp_.advertiseService("check_shape", &ShapeFeasibilityServer::checkShape, this);
   }
@@ -87,7 +128,11 @@ private:
         // Unspecified joints (e.g. gimbals) default to 0 and are overwritten by
         // the model's nominal-gimbal processing inside updateRobotModel().
         robot_model_->updateRobotModel(js);
-        if (prediction_mode_ == "optimized_gimbal" || prediction_mode_ == "controller")
+        if (prediction_mode_ == "controller")
+          {
+            evaluateControllerFeedbackFc(res.fc_f_min, res.fc_t_min);
+          }
+        else if (prediction_mode_ == "optimized_gimbal")
           {
             evaluateOptimizedGimbalFc(res.fc_f_min, res.fc_t_min);
           }
@@ -118,13 +163,6 @@ private:
         fc_f_min = robot_model_->getFeasibleControlFMin();
         fc_t_min = robot_model_->getFeasibleControlTMin();
         return;
-      }
-
-    if (prediction_mode_ == "controller")
-      {
-        ROS_WARN_THROTTLE(5.0,
-                          "shape_feasibility: controller prediction mode is reserved for the shared controller "
-                          "allocator; using optimized_gimbal for now");
       }
 
     const int rotor_num = dragon_model->getRotorNum();
@@ -163,11 +201,157 @@ private:
     fc_t_min = t_min_list.minCoeff();
   }
 
+  void evaluateControllerFeedbackFc(double& fc_f_min, double& fc_t_min)
+  {
+    Dragon::FullVectoringRobotModel* dragon_model =
+      dynamic_cast<Dragon::FullVectoringRobotModel*>(robot_model_.get());
+    if (!dragon_model)
+      {
+        ROS_WARN_THROTTLE(5.0,
+                          "shape_feasibility: controller mode requires Dragon::FullVectoringRobotModel; "
+                          "falling back to model fc");
+        fc_f_min = robot_model_->getFeasibleControlFMin();
+        fc_t_min = robot_model_->getFeasibleControlTMin();
+        return;
+      }
+
+    const int rotor_num = dragon_model->getRotorNum();
+    std::vector<double> locked_roll_angles;
+    if (!latestGimbalRolls(rotor_num, locked_roll_angles))
+      {
+        ROS_WARN_THROTTLE(2.0,
+                          "shape_feasibility: controller mode has no fresh gimbal feedback; "
+                          "falling back to optimized_gimbal");
+        evaluateOptimizedGimbalFc(fc_f_min, fc_t_min);
+        return;
+      }
+
+    const std::vector<Eigen::Matrix3d> link_rot =
+      dragon_model->getLinksRotationFromCog<Eigen::Matrix3d>();
+    const std::vector<Eigen::Vector3d> rotor_pos =
+      dragon_model->getRotorsOriginFromCog<Eigen::Vector3d>();
+    Eigen::Matrix3d cog_rot = dragon_model->getCogDesireOrientation<Eigen::Matrix3d>();
+    const auto feedback_rot = latestBaselinkRotation();
+    if (feedback_rot.first)
+      {
+        cog_rot = feedback_rot.second;
+      }
+
+    // Mirror the controller-side fc check that evaluates all gimbal rolls as
+    // locked at the current target roll angles. This is closer to
+    // /dragon/debug/fc_*_min than the shape-only nominal-gimbal prediction.
+    const std::vector<int> roll_locked_gimbal(rotor_num, 1);
+    const auto f_min_list =
+      dragon_model->calcFeasibleControlFxyDists(roll_locked_gimbal, locked_roll_angles,
+                                                rotor_num, link_rot);
+    const auto t_min_list =
+      dragon_model->calcFeasibleControlTDists(roll_locked_gimbal, locked_roll_angles,
+                                              rotor_num, rotor_pos, link_rot, cog_rot);
+    fc_f_min = f_min_list.minCoeff();
+    fc_t_min = t_min_list.minCoeff();
+  }
+
+  bool latestGimbalRolls(int rotor_num, std::vector<double>& rolls)
+  {
+    std::lock_guard<std::mutex> lock(feedback_mutex_);
+    if (!have_gimbal_feedback_ ||
+        (ros::Time::now() - latest_gimbal_stamp_).toSec() > feedback_timeout_)
+      {
+        return false;
+      }
+
+    rolls.clear();
+    for (int i = 0; i < rotor_num; ++i)
+      {
+        const std::string name = "gimbal" + std::to_string(i + 1) + "_roll";
+        const auto it = latest_gimbal_positions_.find(name);
+        if (it == latest_gimbal_positions_.end())
+          {
+            return false;
+          }
+        rolls.push_back(it->second);
+      }
+    return true;
+  }
+
+  std::pair<bool, Eigen::Matrix3d> latestBaselinkRotation()
+  {
+    std::lock_guard<std::mutex> lock(feedback_mutex_);
+    if (have_baselink_rpy_feedback_ &&
+        (ros::Time::now() - latest_baselink_rpy_stamp_).toSec() <= feedback_timeout_)
+      {
+        return std::make_pair(true, rpyToMatrix(latest_baselink_rpy_[0],
+                                                latest_baselink_rpy_[1],
+                                                latest_baselink_rpy_[2]));
+      }
+    if (have_baselink_odom_feedback_ &&
+        (ros::Time::now() - latest_baselink_odom_stamp_).toSec() <= feedback_timeout_)
+      {
+        return std::make_pair(true, latest_baselink_rot_);
+      }
+    return std::make_pair(false, Eigen::Matrix3d::Identity());
+  }
+
+  static Eigen::Matrix3d rpyToMatrix(double roll, double pitch, double yaw)
+  {
+    return (Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()) *
+            Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) *
+            Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX())).toRotationMatrix();
+  }
+
+  void gimbalCb(const sensor_msgs::JointStateConstPtr& msg)
+  {
+    std::lock_guard<std::mutex> lock(feedback_mutex_);
+    latest_gimbal_positions_.clear();
+    for (size_t i = 0; i < msg->name.size() && i < msg->position.size(); ++i)
+      {
+        latest_gimbal_positions_[msg->name[i]] = msg->position[i];
+      }
+    latest_gimbal_stamp_ = msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp;
+    have_gimbal_feedback_ = true;
+  }
+
+  void baselinkRpyCb(const geometry_msgs::Vector3StampedConstPtr& msg)
+  {
+    std::lock_guard<std::mutex> lock(feedback_mutex_);
+    latest_baselink_rpy_[0] = msg->vector.x;
+    latest_baselink_rpy_[1] = msg->vector.y;
+    latest_baselink_rpy_[2] = msg->vector.z;
+    latest_baselink_rpy_stamp_ = msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp;
+    have_baselink_rpy_feedback_ = true;
+  }
+
+  void baselinkOdomCb(const nav_msgs::OdometryConstPtr& msg)
+  {
+    const auto& q = msg->pose.pose.orientation;
+    Eigen::Quaterniond quat(q.w, q.x, q.y, q.z);
+    if (quat.norm() < 1e-9)
+      {
+        return;
+      }
+    std::lock_guard<std::mutex> lock(feedback_mutex_);
+    latest_baselink_rot_ = quat.normalized().toRotationMatrix();
+    latest_baselink_odom_stamp_ = msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp;
+    have_baselink_odom_feedback_ = true;
+  }
+
   ros::NodeHandle nh_, nhp_;
   pluginlib::ClassLoader<aerial_robot_model::RobotModel> robot_model_loader_;
   boost::shared_ptr<aerial_robot_model::RobotModel> robot_model_;
   ros::ServiceServer server_;
+  ros::Subscriber gimbal_sub_, baselink_odom_sub_, baselink_rpy_sub_;
   std::string prediction_mode_;
+  std::string gimbal_feedback_topic_, baselink_odom_topic_, baselink_rpy_topic_;
+  bool use_gimbal_feedback_, use_baselink_odom_feedback_, use_baselink_rpy_feedback_;
+  double feedback_timeout_;
+  std::mutex feedback_mutex_;
+  bool have_gimbal_feedback_ = false;
+  bool have_baselink_odom_feedback_ = false;
+  bool have_baselink_rpy_feedback_ = false;
+  ros::Time latest_gimbal_stamp_, latest_baselink_odom_stamp_, latest_baselink_rpy_stamp_;
+  std::map<std::string, double> latest_gimbal_positions_;
+  Eigen::Matrix3d latest_baselink_rot_ = Eigen::Matrix3d::Identity();
+  double latest_baselink_rpy_[3] = {0.0, 0.0, 0.0};
 };
 
 int main(int argc, char** argv)

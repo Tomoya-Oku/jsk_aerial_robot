@@ -37,9 +37,19 @@
   <arg name="robot_model_plugin_name" default="dragon/full_vectoring_robot_model"/>
   <!-- shape_feasibility prediction mode:
          model            : legacy getFeasibleControlF/TMin() after updateRobotModel().
-         optimized_gimbal : DRAGON full-vectoring model's gimbal-processed state (default).
-         controller       : reserved for a future shared controller allocator; currently falls back to optimized_gimbal. -->
-  <arg name="shape_feasibility_prediction_mode" default="optimized_gimbal"/>
+         optimized_gimbal : DRAGON full-vectoring model's gimbal-processed state.
+         controller       : default; use latest controller gimbal command and optional body
+                            attitude feedback to approximate /debug/fc_*_min. -->
+  <arg name="shape_feasibility_prediction_mode" default="controller"/>
+  <arg name="shape_feasibility_gimbal_feedback_topic" default="gimbals_ctrl"/>
+  <arg name="shape_feasibility_baselink_rpy_topic" default="final_target_baselink_rpy"/>
+  <arg name="shape_feasibility_baselink_odom_topic" default="uav/baselink/odom"/>
+  <arg name="shape_feasibility_use_gimbal_feedback" default="true"/>
+  <arg name="shape_feasibility_use_baselink_rpy_feedback" default="true"/>
+  <arg name="shape_feasibility_use_baselink_odom_feedback" default="true"/>
+  <arg name="shape_feasibility_feedback_timeout" default="0.25"/>
+  <arg name="enable_target_fc_prediction" default="true"/>
+  <arg name="target_fc_prediction_rate" default="10.0"/>
   <!-- Gate fallback used only until the threshold topic arrives.
        hard thresholds enter hold; recover thresholds (min) release hold.
        Defaults match volume_radius_monitor (data-driven, see
@@ -358,6 +368,8 @@
     <param name="torque_radius_threshold" value="$(arg torque_radius_threshold)"/>
     <param name="force_radius_recover_threshold" value="$(arg force_radius_recover_threshold)"/>
     <param name="torque_radius_recover_threshold" value="$(arg torque_radius_recover_threshold)"/>
+    <param name="enable_target_fc_prediction" value="$(arg enable_target_fc_prediction)"/>
+    <param name="target_fc_prediction_rate" value="$(arg target_fc_prediction_rate)"/>
   </node>
 
   <!-- Live shape-safety monitor and threshold publisher. This is intentionally
@@ -407,5 +419,12 @@
         if="$(arg enable_feasibility_gate)">
     <param name="robot_model_plugin_name" value="$(arg robot_model_plugin_name)"/>
     <param name="prediction_mode" value="$(arg shape_feasibility_prediction_mode)"/>
+    <param name="gimbal_feedback_topic" value="$(arg shape_feasibility_gimbal_feedback_topic)"/>
+    <param name="baselink_rpy_topic" value="$(arg shape_feasibility_baselink_rpy_topic)"/>
+    <param name="baselink_odom_topic" value="$(arg shape_feasibility_baselink_odom_topic)"/>
+    <param name="use_gimbal_feedback" value="$(arg shape_feasibility_use_gimbal_feedback)"/>
+    <param name="use_baselink_rpy_feedback" value="$(arg shape_feasibility_use_baselink_rpy_feedback)"/>
+    <param name="use_baselink_odom_feedback" value="$(arg shape_feasibility_use_baselink_odom_feedback)"/>
+    <param name="feedback_timeout" value="$(arg shape_feasibility_feedback_timeout)"/>
   </node>
 </launch>
