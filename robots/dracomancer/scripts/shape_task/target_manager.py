@@ -82,6 +82,7 @@ class TargetManager:
         self.start_delay = float(rospy.get_param("~start_delay", 2.0))
         self.seed = int(rospy.get_param("~seed", 0))
         self.auto_start = bool(rospy.get_param("~auto_start", False))
+        self.publish_preview_target = bool(rospy.get_param("~publish_preview_target", True))
 
         # FK for E_s.
         self.link_length = float(rospy.get_param("~link_length", dragon_fk.DEFAULT_LINK_LENGTH))
@@ -147,6 +148,8 @@ class TargetManager:
             self.begin_session()
             self.state = "countdown"
             self.countdown_end_t = rospy.get_time() + self.start_delay
+        elif self.publish_preview_target:
+            self.publish_scheduled_target()
 
         period = 1.0 / max(self.status_rate, 1.0)
         rospy.Timer(rospy.Duration(period), self.tick)
@@ -278,6 +281,8 @@ class TargetManager:
             return TriggerResponse(True, "trial skipped")
         if self.sched_idx < len(self.schedule) - 1 and self.state in ("idle", "countdown"):
             self.sched_idx += 1
+            if self.publish_preview_target:
+                self.publish_scheduled_target()
             return TriggerResponse(True, "next target: %s" %
                                    self.schedule[self.sched_idx]["name"])
         return TriggerResponse(False, "no next target")
@@ -355,12 +360,7 @@ class TargetManager:
         self.hold_start_t = None
         self.state = "running"
 
-        msg = JointState()
-        msg.header.stamp = rospy.Time.now()
-        msg.header.frame_id = self.current_target["name"]
-        msg.name = list(self.joint_names)
-        msg.position = list(self.current_target["q_star"])
-        self.target_pub.publish(msg)
+        self.publish_target(self.current_target)
 
         self.publish_event({
             "event": "trial_start",
@@ -406,11 +406,27 @@ class TargetManager:
                           len(self.schedule), self.results_dir)
         elif reason in ("aborted", "reset"):
             self.state = "idle"
+            if self.publish_preview_target:
+                self.publish_scheduled_target()
         else:
             self.state = "countdown"
             self.countdown_end_t = now + self.inter_trial_pause
+            if self.publish_preview_target:
+                self.publish_scheduled_target()
 
     # ------------------------------------------------------------- publishing
+    def publish_target(self, target):
+        msg = JointState()
+        msg.header.stamp = rospy.Time.now()
+        msg.header.frame_id = target["name"]
+        msg.name = list(self.joint_names)
+        msg.position = list(target["q_star"])
+        self.target_pub.publish(msg)
+
+    def publish_scheduled_target(self):
+        if self.sched_idx < len(self.schedule):
+            self.publish_target(self.schedule[self.sched_idx])
+
     def publish_event(self, payload):
         payload["stamp"] = rospy.get_time()
         self.event_pub.publish(String(json.dumps(payload)))

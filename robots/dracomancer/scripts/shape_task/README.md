@@ -48,6 +48,7 @@ rosservice call /shape_task_manager/start
 RViz では `MarkerArray` ディスプレイを追加し、トピック
 `/dracomancer/shape_task/shadow` を指定する（Fixed Frame は `world` のままでよい。
 シャドウは既定で `dragon/link1` フレームに貼られ、E_s の定義と同じ座標系で重なる）。
+`shape_task.launch` 起動直後は最初の目標を灰色のプレビューとして表示し、試行開始後に状態色へ切り替わる。
 
 ### B. keyboard 比較条件
 
@@ -87,6 +88,8 @@ rosrun dracomancer keyboard_baseline.py _enable_feasibility_gate:=false
 Dracomancer 側のダミー入力で試す場合は `dracomancer bringup.launch rm:=false sim:=true`
 （GUI スライダ → `/dracomancer/joint_states`）+ `teleoperation.launch
 enable_feasibility_gate:=false enable_link4_anchor:=false` を併用する。
+`teleoperation.launch` 単体で servo から `/dracomancer/joint_states` を作る場合だけ
+`enable_servo_to_joint_states:=true` を付ける。
 
 ### 試行管理サービス
 

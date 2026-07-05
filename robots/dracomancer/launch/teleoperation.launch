@@ -13,7 +13,11 @@
   <arg name="js_calibrated_topic" default="/$(arg device_ns)/joystick/calibrated"/>
   <arg name="device_joint_topic" default="/$(arg device_ns)/joint_states"/>
   <arg name="servo_topic" default="/dracomancer/servo/states"/>
-  <arg name="enable_servo_to_joint_states" default="true"/>
+  <!-- bringup.launch is the owner of /<device_ns>/joint_states in the normal
+       workflow. Keep this off by default so rm:=false fake joint_states are not
+       overwritten by a second servo converter with no servo input. Enable only
+       when running teleoperation.launch without dracomancer bringup.launch. -->
+  <arg name="enable_servo_to_joint_states" default="false"/>
   <arg name="servo_to_joint_states_rate" default="40.0"/>
   <!-- Predictive shape-feasibility gate (teleoperation mode).
        shape_feasibility_node runs in the controlled robot's namespace so its
