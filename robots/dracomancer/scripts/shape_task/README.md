@@ -54,6 +54,10 @@ Fixed Frame が `dracomancer/base_link` のため、`dragon/link1` と TF がつ
 TF 切り分けだけしたい場合は `roslaunch dracomancer shape_task.launch shadow_frame:=world`
 で world 固定表示にできる。
 
+`dragon bringup.launch` で `SpawnModel: Failure - model name dragon already exist.` が出る場合は、
+前回の Gazebo/roslaunch が残っている。いったん既存の Gazebo を終了するか、別端末で
+`rosservice call /gazebo/delete_model '{model_name: dragon}'` を実行してから Dragon を起動し直す。
+
 ### B. keyboard 比較条件
 
 Dracomancer 入力の代わりにキーボードで 6 関節を操作する。
