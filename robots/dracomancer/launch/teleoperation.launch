@@ -48,6 +48,26 @@
   <arg name="torque_radius_threshold" default="0.015400"/>
   <arg name="force_radius_recover_threshold" default="0.249220"/>
   <arg name="torque_radius_recover_threshold" default="0.278159"/>
+  <!-- Live Force/Torque volume radius monitor.
+       Keep this with teleoperation so shape_safety logs and threshold topics
+       are visible in the same terminal as the shape controller. -->
+  <arg name="enable_volume_radius_monitor" default="true"/>
+  <arg name="enable_shape_safety" default="true"/>
+  <arg name="missing_inradius_scale" default="1.0"/>
+  <arg name="min_safety_scale" default="0.0"/>
+  <arg name="force_inradius_min" default="0.249220"/>
+  <arg name="torque_inradius_min" default="0.278159"/>
+  <arg name="force_inradius_hard_min" default="0.108990"/>
+  <arg name="torque_inradius_hard_min" default="0.015400"/>
+  <arg name="inradius_timeout" default="0.5"/>
+  <arg name="safety_log_period" default="1.0"/>
+  <!-- Low-pass the measured fc_f_min / fc_t_min before live shape_safety logs. -->
+  <arg name="enable_fc_min_lowpass" default="true"/>
+  <arg name="fc_min_lowpass_cutoff_hz" default="2.0"/>
+  <arg name="monitor_force_inradius_topic"
+       default="$(eval '/' + arg('robot_ns') + '/debug/fc_f_min' + ('_filtered' if arg('enable_fc_min_lowpass') else ''))" />
+  <arg name="monitor_torque_inradius_topic"
+       default="$(eval '/' + arg('robot_ns') + '/debug/fc_t_min' + ('_filtered' if arg('enable_fc_min_lowpass') else ''))" />
   <arg name="max_step" default="0.04"/>
   <arg name="joint_limit" default="1.57079632679"/>
   <!-- Arm->DRAGON mapping strategy (teleoperation mode):
@@ -338,6 +358,42 @@
     <param name="torque_radius_threshold" value="$(arg torque_radius_threshold)"/>
     <param name="force_radius_recover_threshold" value="$(arg force_radius_recover_threshold)"/>
     <param name="torque_radius_recover_threshold" value="$(arg torque_radius_recover_threshold)"/>
+  </node>
+
+  <!-- Live shape-safety monitor and threshold publisher. This is intentionally
+       launched with teleoperation so safety logs and the shape controller are
+       observed together during operation. -->
+  <node pkg="dracomancer"
+        type="volume_radius_monitor.py"
+        name="$(arg device_ns)_volume_radius_monitor"
+        output="screen"
+        if="$(arg enable_volume_radius_monitor)">
+    <param name="robot_name" value="$(arg robot_ns)"/>
+    <param name="device_ns" value="/$(arg device_ns)"/>
+    <param name="rate" value="40.0"/>
+    <param name="force_inradius_topic" value="$(arg monitor_force_inradius_topic)"/>
+    <param name="torque_inradius_topic" value="$(arg monitor_torque_inradius_topic)"/>
+    <param name="force_inradius_min" value="$(arg force_inradius_min)"/>
+    <param name="torque_inradius_min" value="$(arg torque_inradius_min)"/>
+    <param name="force_inradius_hard_min" value="$(arg force_inradius_hard_min)"/>
+    <param name="torque_inradius_hard_min" value="$(arg torque_inradius_hard_min)"/>
+    <param name="inradius_timeout" value="$(arg inradius_timeout)"/>
+    <param name="enable_shape_safety" value="$(arg enable_shape_safety)"/>
+    <param name="missing_inradius_scale" value="$(arg missing_inradius_scale)"/>
+    <param name="min_safety_scale" value="$(arg min_safety_scale)"/>
+    <param name="safety_log_period" value="$(arg safety_log_period)"/>
+  </node>
+
+  <!-- Smooth measured inradius for live shape_safety logging. Runs in the
+       controlled robot namespace so input/output stay under /<robot>/debug/. -->
+  <node pkg="dracomancer"
+        type="fc_min_lowpass.py"
+        name="teleop_fc_min_lowpass"
+        ns="$(arg robot_ns)"
+        output="screen"
+        if="$(arg enable_fc_min_lowpass)">
+    <param name="robot_name" value="$(arg robot_ns)"/>
+    <param name="cutoff_hz" value="$(arg fc_min_lowpass_cutoff_hz)"/>
   </node>
 
   <!-- Predictive shape-feasibility server. Runs in the controlled robot's

@@ -23,6 +23,7 @@ flowchart TB
         CP["位置指令 control_position.py"]
         AC["姿勢指令 control_orientation.py"]
         CJ["関節角指令 control_joint_angle.py"]
+        SM["shape_safety監視<br/>volume_radius_monitor.py"]
     end
     subgraph HP["haptics.launch（力覚提示）"]
         HF["control_haptic_feedback.py"]
@@ -42,7 +43,7 @@ flowchart TB
 | `control_orientation.py` | 操縦桿から姿勢指令を生成 | joystick, flight_state | `/dragon/final_target_baselink_rpy` |
 | `control_joint_angle.py` | 腕関節から DRAGON の形状指令を生成（候補姿勢のフィージビリティで変形可否を判定） | joint_states, shape_feasibility, threshold, flight_state | `/dragon/joints_ctrl`, `/dracomancer/shape_control_error` |
 | `shape_feasibility_node`（C++） | 候補リンク角の force/torque volume 半径を DRAGON モデルで予測するサービス | candidate joints | `~check_shape`（fc_f_min, fc_t_min） |
-| `volume_radius_monitor.py` | しきい値 pub/sub・ライブ安全スケール算出（bringup.launch で常時起動。fc 内接半径は再 pub しない） | fc inradius, threshold cmd | `*_volume_radius_threshold`, `/dracomancer/dragon_shape_safety_scale` |
+| `volume_radius_monitor.py` | しきい値 pub/sub・ライブ安全スケール算出（通常は teleoperation.launch で起動。fc 内接半径は再 pub しない） | fc inradius, threshold cmd | `*_volume_radius_threshold`, `/dracomancer/dragon_shape_safety_scale` |
 | `control_haptic_feedback.py` | 抑制された形状入力から提示トルク相当量を計算し、既定でサーボのトルク ON/OFF を出力し、互換サーボ向けには電流指令も任意出力 | joint_states, shape_control_error, mode | `/dracomancer/haptic_torque`, `/servo/torque_enable`, `/servo/target_current` |
 | `publish_fake_joint_states.py` | 実機なしで Dracomancer 関節状態を生成 | `/dracomancer/joint_cmd` | `/dracomancer/joint_states` |
 
@@ -350,9 +351,9 @@ flowchart TD
 
 `step_search` は `feasibility_min_step_fraction` 未満になるまで探索します。`soft_scale` の倍率は `min(fc_f/force_thr, fc_t/torque_thr, 1)` を基本とし、`feasibility_soft_min_scale` で下限を設定できます。
 
-### 2. ライブ監視（`volume_radius_monitor.py`、bringup.launch）
+### 2. ライブ監視（`volume_radius_monitor.py`、teleoperation.launch）
 
-実機の**現在状態**の fc 内接半径からライブの安全スケールを算出して publish します（web UI 表示・記録用、ゲートとは独立）。bringup 側にあるため、テレオペレーションがホバリング以外で無効化されていても動き続けます。fc 内接半径そのものは **DRAGON の `/dragon/debug/fc_*_min` を直接購読**してください（Dracomancer では再 publish しません）。
+実機の**現在状態**の fc 内接半径からライブの安全スケールを算出して publish します（web UI 表示・記録用、ゲートとは独立）。通常は teleoperation 側で起動するため、`shape_safety` ログは `control_joint_angle.py` と同じ `teleoperation.launch` の端末に出ます。fc 内接半径そのものは **DRAGON の `/dragon/debug/fc_*_min` を直接購読**してください（Dracomancer では再 publish しません）。
 
 ### しきい値トピック（`volume_radius_monitor.py` が所有・pub/sub、ゲートも購読）
 
@@ -437,7 +438,7 @@ flowchart TD
 | --- | --- | --- |
 | `robot_model_plugin_name` | `dragon/full_vectoring_robot_model` | 予測に使う DRAGON モデルプラグイン |
 
-`volume_radius_monitor.py`（bringup.launch、ライブ監視）:
+`volume_radius_monitor.py`（teleoperation.launch、ライブ監視）:
 
 | パラメータ | 既定 | 説明 |
 | --- | --- | --- |
@@ -549,6 +550,7 @@ rosrun dracomancer set_teleop_mode.py teleoperation   # 'teleop' でも可
 
 ```bash
 roslaunch dracomancer teleoperation.launch \
+  enable_feasibility_gate:=false \
   enable_shape_safety:=false \
   publish_joints_only_when_hovering:=true \
   publish_joints_before_device_ready:=false \
@@ -597,7 +599,7 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | `enable_joystick_serial` | `false` | rosserial の joystick serial node を起動する |
 | `js_raw_topic` | `/joystick/raw` | 操縦桿生値 |
 | `js_calibrated_topic` | `/dracomancer/joystick/calibrated` | 較正済み操縦桿 |
-| `enable_servo_to_joint_states` | `true` | サーボ状態をDracomancer関節状態へ変換する |
+| `enable_servo_to_joint_states` | `false` | サーボ状態をDracomancer関節状態へ変換する。通常はbringup.launch側が担当するため既定OFF |
 | `enable_position_control` | `false` | `/dragon/uav/nav`（操縦桿による移動）を送る。既定 OFF（落下防止のため。下記「既知の課題」参照） |
 | `enable_attitude_control` | `false` | `/dragon/final_target_baselink_rpy` を送る |
 | `enable_joint_angle_control` | `true` | `/dragon/joints_ctrl` を送る |
@@ -608,7 +610,7 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | `imu_topic` | `/dracomancer/imu` | 操作者IMU |
 | `imu_mount_roll/pitch/yaw` | `0 / -1.57079632679 / 0` | IMU取付け補正 |
 | `recapture_neutral_on_hover` | `true` | ホバ開始時に中立向きを取り直す |
-| `enable_shape_safety` | `true` | 形状安全スケーリング |
+| `enable_shape_safety` | `true` | ライブshape_safetyスケールとログの有効化。予測ゲートを止める場合は `enable_feasibility_gate:=false` も指定する |
 | `publish_joints_only_when_hovering` | `true` | trueならホバリング以降のみ形状指令を送る |
 | `publish_joints_before_device_ready` | `false` | falseなら関節状態受信前は送らない |
 | `axis_x/y/z` | `0 / 1 / 2` | ジョイスティック軸番号 |
@@ -654,7 +656,7 @@ roslaunch dracomancer teleoperation.launch \
   enable_joint_angle_control:=false
 ```
 
-形状指令を切ると落ちない場合は、`/dragon/joints_ctrl`、`max_step`、`enable_shape_safety`、`missing_inradius_scale`、関節マッピングを確認してください。
+形状指令を切ると落ちない場合は、`/dragon/joints_ctrl`、`max_step`、`enable_feasibility_gate`、`enable_shape_safety`、`missing_inradius_scale`、関節マッピングを確認してください。
 
 ## 実装上の未完了項目
 

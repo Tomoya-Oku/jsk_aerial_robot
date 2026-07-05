@@ -5,12 +5,11 @@
 
 Republishes DRAGON's feasible control inradius (fc_f_min / fc_t_min) as
 Dracomancer volume-radius topics, publishes the safety thresholds, accepts
-runtime threshold updates, and computes the shape-safety scale used to limit
-joint commands.
+runtime threshold updates, and computes the operator-visible shape-safety scale.
 
-This runs as part of the device bringup (bringup.launch) so that the safety
-monitoring keeps publishing even while teleoperation (position / orientation /
-joint-angle control) is disabled, e.g. when DRAGON is not hovering.
+This normally runs from teleoperation.launch so the shape_safety logs,
+threshold topics, and shape controller are observed together. bringup.launch
+can still start it explicitly for device-only monitoring.
 """
 
 import rospy

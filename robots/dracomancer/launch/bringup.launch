@@ -46,7 +46,10 @@
   <!-- Controlled articulated aerial robot (DRAGON etc.). Its feasible control
        inradius (fc_f_min / fc_t_min) drives the shape-safety scale. -->
   <arg name="controlled_robot_ns"      default="dragon" />
-  <arg name="enable_volume_radius_monitor" default="True" />
+  <!-- Normal teleoperation starts the monitor from teleoperation.launch so
+       shape_safety logs appear with control_joint_angle. Keep this off by
+       default to avoid duplicate threshold publishers. -->
+  <arg name="enable_volume_radius_monitor" default="False" />
   <arg name="enable_shape_safety"      default="true" />
   <arg name="missing_inradius_scale"   default="1.0" />
   <arg name="min_safety_scale"         default="0.0" />
@@ -61,7 +64,7 @@
   <!-- Low-pass the (noisy) measured fc_f_min / fc_t_min before the danger
        judgment. The filter runs in the controlled robot's namespace and
        republishes /<robot>/debug/fc_*_min_filtered. -->
-  <arg name="enable_fc_min_lowpass"    default="True" />
+  <arg name="enable_fc_min_lowpass"    default="False" />
   <arg name="fc_min_lowpass_cutoff_hz" default="2.0" />
   <!-- Monitor input topics: filtered when the low-pass is on, raw otherwise. -->
   <arg name="monitor_force_inradius_topic"
@@ -125,10 +128,10 @@
     </node>
   </group>
 
-  ###########  Force/Torque volume radius monitor  ###########
-  <!-- Always-on safety-radius pub/sub: republishes the controlled robot's
-       feasible control inradius, publishes/accepts thresholds, and computes the
-       shape-safety scale consumed by control_joint_angle. -->
+  ###########  Force/Torque volume radius monitor (legacy optional)  ###########
+  <!-- Safety-radius pub/sub for device-only monitoring. Normal teleoperation
+       starts this from teleoperation.launch so logs and threshold topics live
+       with control_joint_angle. -->
   <node pkg="dracomancer" type="volume_radius_monitor.py" name="volume_radius_monitor"
         output="screen" if="$(arg enable_volume_radius_monitor)">
     <param name="robot_name"             value="$(arg controlled_robot_ns)" />
