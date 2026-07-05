@@ -1,0 +1,20 @@
+bag_start_abs: 25.959
+failsafe_rt: 211.742
+force_landing_rt: 211.742
+flight_state_17_rt: 211.756
+z_below_0.3_after_hover_rt: 213.944
+thresholds: force_hard=0.10899 torque_hard=0.01540
+candidate_force: {'min': 2.013163821757264, 'max': 4.0, 'below': 0, 'count': 2858, 'first_below': None}
+candidate_torque: {'min': 0.09555428727405602, 'max': 0.9732786180328559, 'below': 0, 'count': 2858, 'first_below': None}
+actual_force: {'min': 0.016786680348497184, 'max': 7.737539297081021, 'below': 45, 'count': 7159, 'first_below': (28.288999999999998, 0.045182722289894624)}
+actual_torque: {'min': 0.0, 'max': 2.147963482806876, 'below': 690, 'count': 7141, 'first_below': (28.288999999999998, 0.013808579277737765)}
+pose_before_failsafe: (211.737, {'x': -0.07118333763366708, 'y': -0.2239220285873606, 'z': 1.0007332391064774, 'roll': -0.9906305532133547, 'pitch': 0.02841657101964362, 'yaw': 1.6491982643609815})
+joints_ctrl_before_failsafe: (211.726, {'joint1_pitch': -0.06442719309119693, 'joint1_yaw': -0.010737865515199488, 'joint2_pitch': -8.829347910637123e-18, 'joint2_yaw': -0.14419419406125028, 'joint3_pitch': 0.2745825610315298, 'joint3_yaw': 0.007669903939428206})
+candidate_before_failsafe: (211.736, {'joint1_pitch': -0.06442719309119693, 'joint1_yaw': -0.010737865515199488, 'joint2_pitch': -8.829347910637123e-18, 'joint2_yaw': -0.14419419406125028, 'joint3_pitch': 0.2730485802436442, 'joint3_yaw': 0.007669903939428206})
+safety_scale_before_failsafe: (211.731, 0.0)
+failsafe_message: failsafe: the roll pitch angles are too large, roll: -1.002745 (1.000000), pitch: 0.027956 (1.000000)
+joint_mapping_pdf: /home/oku/ros/jsk_aerial_robot_ws/src/jsk_aerial_robot/robots/dracomancer/figures/falling_test/joint_mapping.pdf
+safety_overview_png: /home/oku/ros/jsk_aerial_robot_ws/src/jsk_aerial_robot/robots/dracomancer/figures/falling_test/safety_overview.png
+safety_overview_svg: /home/oku/ros/jsk_aerial_robot_ws/src/jsk_aerial_robot/robots/dracomancer/figures/falling_test/safety_overview.svg
+fc_prediction_error_png: /home/oku/ros/jsk_aerial_robot_ws/src/jsk_aerial_robot/robots/dracomancer/figures/falling_test/fc_prediction_error.png
+fc_prediction_error_svg: /home/oku/ros/jsk_aerial_robot_ws/src/jsk_aerial_robot/robots/dracomancer/figures/falling_test/fc_prediction_error.svg
