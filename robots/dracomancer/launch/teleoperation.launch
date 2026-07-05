@@ -124,8 +124,7 @@
        elbow flexion -> joint2_pitch/yaw selected by upper-arm roll, shoulder
        flexion -> joint3_pitch, shoulder abduction -> joint3_yaw;
        target=clamp(sign*scale*source+offset), signs=[1,-1,1,1,-1],
-       offsets=[0,0,0,pi/2,0] (device shoulder ~-pi/2 at 90deg -> joint3_pitch 0),
-       scales=1.0. -->
+       offsets=[0,0,0,0,0], scales=1.0. -->
   <arg name="capture_neutral_on_first_msg" default="false"/>
   <!-- distal link4 anchor: helper to keep the arm-tip link (link4) ~fixed in
        world while joints bend. Default mode anchors only link4 position by
@@ -309,14 +308,13 @@
     <param name="mapping_reference" value="$(arg mapping_reference)"/>
     <param name="joint_pairing_scale" value="$(arg joint_pairing_scale)"/>
     <!-- distal mapping (absolute match of arm joints; see comment above).
-         target = clamp(sign*scale*source + offset). The device reads shoulder
-         flexion as negative (~-pi/2 at 90deg), so joint3_pitch uses sign=+1,
-         offset=pi/2 -> a 90deg operator shoulder maps to joint3_pitch = 0. -->
+         target = clamp(sign*scale*source + offset). joint3_pitch no longer uses
+         the previous +pi/2 shoulder-flexion offset. -->
     <rosparam param="distal_source_joints">["wrist_flexion_extension_joint", "wrist_abduction_adduction_joint", "elbow_flexion_extension_joint", "shoulder_flexion_extension_joint", "shoulder_abduction_adduction_joint"]</rosparam>
     <rosparam param="distal_target_joints">["joint1_pitch", "joint1_yaw", "joint2_yaw", "joint3_pitch", "joint3_yaw"]</rosparam>
     <rosparam param="distal_signs">[1.0, -1.0, 1.0, 1.0, -1.0]</rosparam>
     <rosparam param="distal_scales">[1.0, 1.0, 1.0, 1.0, 1.0]</rosparam>
-    <rosparam param="distal_offsets">[0.0, 0.0, 0.0, 1.5707963267948966, 0.0]</rosparam>
+    <rosparam param="distal_offsets">[0.0, 0.0, 0.0, 0.0, 0.0]</rosparam>
     <param name="enable_elbow_roll_switching" value="$(arg enable_elbow_roll_switching)"/>
     <param name="elbow_roll_pitch_zone" value="$(arg elbow_roll_pitch_zone)"/>
     <param name="elbow_roll_yaw_zone" value="$(arg elbow_roll_yaw_zone)"/>
