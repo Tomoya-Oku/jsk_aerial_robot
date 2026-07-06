@@ -35,6 +35,8 @@ exo_joint_names:
 # --- 成功条件 ---------------------------------------------------------------
 E_q_threshold: 0.15   # rad, RMS(q_current - q_star)
 E_s_threshold: 0.05   # m, リンク端点位置誤差の RMS (E_s_normalize: true なら全長正規化値)
+# true: E_s も成功条件に含める。false: E_s は記録だけに残し、関節角 E_q で判定する。
+use_shape_error: false
 t_hold: 1.0           # s, 条件を維持すべき時間
 timeout: 60.0         # s, 制限時間
 # mu >= 0 を成功条件に含めるか。fc topic 未接続の dry-run では false にする。
@@ -51,6 +53,9 @@ use_threshold_topics: true
 # --- 試行管理 ---------------------------------------------------------------
 trial_order: sequential   # sequential / random
 repetitions: 1            # 各目標の繰り返し回数
+# true: fixed_target_index の目標だけを使い、試行中/試行間で目標姿勢を変えない。
+fixed_target: true
+fixed_target_index: 0
 inter_trial_pause: 3.0    # s, 試行間の休止
 start_delay: 2.0          # s, auto_start 時の開始遅延
 seed: 0                   # random order 用シード
@@ -62,7 +67,7 @@ inter_joint_x_offset: 0.02575 # m
 E_s_normalize: false          # true: E_s を全長 (4L+6*offset) で正規化
 
 # --- 可視化 -----------------------------------------------------------------
-shadow_frame: dragon/link4  # シャドウを貼るTFフレーム（肩に対応する基準リンク）。world にすれば固定表示
+shadow_frame: world  # シャドウを貼るTFフレーム。world 既定で目標姿勢を空間固定表示
 shadow_alpha: 0.5
 link_radius: 0.08   # m, シャドウのリンク太さ
 

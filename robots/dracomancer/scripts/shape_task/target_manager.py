@@ -5,7 +5,7 @@
 
 Runs the trial state machine for the Dracomancer -> DRAGON shape-target
 reaching experiment: selects a target shape per trial, evaluates the success
-condition (E_q / E_s / safety margin mu held for t_hold seconds), enforces the
+condition (E_q, optional E_s, safety margin mu held for t_hold seconds), enforces the
 timeout, and broadcasts trial boundaries so that task_recorder.py and
 shadow_visualizer.py stay condition-agnostic (Dracomancer vs keyboard input
 differ only in who publishes /dragon/joints_ctrl).
@@ -64,6 +64,7 @@ class TargetManager:
         # Success condition.
         self.eq_threshold = float(rospy.get_param("~E_q_threshold", 0.15))
         self.es_threshold = float(rospy.get_param("~E_s_threshold", 0.05))
+        self.use_shape_error = bool(rospy.get_param("~use_shape_error", False))
         self.t_hold = float(rospy.get_param("~t_hold", 1.0))
         self.timeout = float(rospy.get_param("~timeout", 60.0))
         self.require_safety_margin = bool(rospy.get_param("~require_safety_margin", True))
@@ -78,6 +79,8 @@ class TargetManager:
         # Trial flow.
         self.trial_order = str(rospy.get_param("~trial_order", "sequential")).lower()
         self.repetitions = int(rospy.get_param("~repetitions", 1))
+        self.fixed_target = bool(rospy.get_param("~fixed_target", True))
+        self.fixed_target_index = int(rospy.get_param("~fixed_target_index", 0))
         self.inter_trial_pause = float(rospy.get_param("~inter_trial_pause", 3.0))
         self.start_delay = float(rospy.get_param("~start_delay", 2.0))
         self.seed = int(rospy.get_param("~seed", 0))
@@ -139,8 +142,10 @@ class TargetManager:
 
         rospy.loginfo("shape task manager: %d trials (%d targets x %d reps, order=%s)",
                       len(self.schedule), len(self.targets), self.repetitions, self.trial_order)
-        rospy.loginfo("success: E_q<%.3f rad, E_s<%.3f %s, mu>=0(%s), hold %.1fs, timeout %.1fs",
-                      self.eq_threshold, self.es_threshold,
+        rospy.loginfo("success: E_q<%.3f rad, E_s=%s (<%.3f %s), mu>=0(%s), hold %.1fs, timeout %.1fs",
+                      self.eq_threshold,
+                      "enabled" if self.use_shape_error else "record-only",
+                      self.es_threshold,
                       "(normalized)" if self.es_normalize else "m",
                       self.require_safety_margin, self.t_hold, self.timeout)
 
@@ -167,6 +172,9 @@ class TargetManager:
             targets.append({"name": name, "q_star": q_star})
         if not targets:
             rospy.logerr("no valid targets; nothing to do")
+        if self.fixed_target and targets:
+            idx = max(0, min(self.fixed_target_index, len(targets) - 1))
+            return [targets[idx]]
         schedule = []
         rng = random.Random(self.seed)
         for _ in range(max(1, self.repetitions)):
@@ -201,6 +209,7 @@ class TargetManager:
             "params": {
                 "E_q_threshold": self.eq_threshold,
                 "E_s_threshold": self.es_threshold,
+                "use_shape_error": self.use_shape_error,
                 "E_s_normalize": self.es_normalize,
                 "t_hold": self.t_hold,
                 "timeout": self.timeout,
@@ -326,8 +335,10 @@ class TargetManager:
 
         in_tolerance = False
         if self.state == "running":
-            in_tolerance = (not np.isnan(e_q) and e_q < self.eq_threshold and
-                            not np.isnan(e_s) and e_s < self.es_threshold)
+            in_tolerance = not np.isnan(e_q) and e_q < self.eq_threshold
+            if self.use_shape_error:
+                in_tolerance = (in_tolerance and
+                                not np.isnan(e_s) and e_s < self.es_threshold)
             if self.require_safety_margin:
                 if np.isnan(mu):
                     rospy.logwarn_throttle(
@@ -448,6 +459,7 @@ class TargetManager:
             "t_hold": self.t_hold,
             "E_q_threshold": self.eq_threshold,
             "E_s_threshold": self.es_threshold,
+            "use_shape_error": self.use_shape_error,
             "last_success": (self.last_result or {}).get("success"),
         }
         # NaN is not valid JSON; encode as null.

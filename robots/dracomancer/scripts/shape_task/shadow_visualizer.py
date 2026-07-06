@@ -44,6 +44,7 @@ class ShadowVisualizer:
         self.frame = rospy.get_param("~shadow_frame", self.robot_ns + "/link4")
         self.alpha = float(rospy.get_param("~shadow_alpha", 0.5))
         self.link_radius = float(rospy.get_param("~link_radius", 0.08))
+        self.use_shape_error = bool(rospy.get_param("~use_shape_error", False))
         self.link_length = float(rospy.get_param("~link_length", dragon_fk.DEFAULT_LINK_LENGTH))
         self.inter_joint_x_offset = float(rospy.get_param(
             "~inter_joint_x_offset", dragon_fk.DEFAULT_INTER_JOINT_X_OFFSET))
@@ -134,7 +135,7 @@ class ShadowVisualizer:
         if isinstance(e_q, (int, float)):
             label += "\nE_q=%.3f rad" % e_q
         e_s = self.status.get("E_s")
-        if isinstance(e_s, (int, float)):
+        if self.use_shape_error and isinstance(e_s, (int, float)):
             label += "  E_s=%.3f" % e_s
         text.text = label
 

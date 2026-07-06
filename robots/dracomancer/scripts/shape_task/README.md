@@ -1,10 +1,9 @@
 # 形態目標到達タスク (shape_task)
 
-Dracomancer（上肢外骨格デバイス）で DRAGON の形態を操作し、シミュレータ上に表示された
-目標形態シャドウへ現在形態を一致させる実験のためのノード群・解析スクリプト。
+Dracomancer（上肢外骨格デバイス）で DRAGON の形態を操作し、固定された目標関節姿勢
+`q_star` へ現在関節角を一致させる実験のためのノード群・解析スクリプト。
 
-既存の制御ノード（`control_joint_angle.py` など）・launch・メッセージ定義は一切変更していない。
-実験ノードは既存トピックを購読・イベント配信するだけの追加構成である。
+制御本体（`control_joint_angle.py` など）には依存せず、shape_task ノードは既存トピックを購読・イベント配信する追加構成である。
 
 ## ファイル構成
 
@@ -47,13 +46,13 @@ rosservice call /shape_task_manager/start
 
 RViz では `MarkerArray` ディスプレイを追加し、トピック
 `/dracomancer/shape_task/shadow` を指定する（Fixed Frame は `world` のままでよい。
-シャドウは既定で `dragon/link4`（肩に対応する、操作中はワールドにおおよそ固定される基準リンク）
-フレームに貼られ、E_s の定義と同じ座標系で重なる）。
+シャドウは既定で `world` フレームに貼られ、目標姿勢がロボット側TFに追従して動かない。
+これは位置の重なりではなく、関節角目標の固定参照として使うための表示である。
 表示先は DRAGON 側 RViz（`dragon/config/rviz_config`）を想定する。Dracomancer 側 RViz は
-Fixed Frame が `dracomancer/base_link` のため、`dragon/link4` と TF がつながらず表示できない。
+Fixed Frame が `dracomancer/base_link` のため、DRAGON/world 側 TF とつながらず表示できない。
 `shape_task.launch` 起動直後は最初の目標を灰色のプレビューとして表示し、試行開始後に状態色へ切り替わる。
-TF 切り分けだけしたい場合は `roslaunch dracomancer shape_task.launch shadow_frame:=world`
-で world 固定表示にできる。
+従来の重ね合わせ表示が必要な場合は `roslaunch dracomancer shape_task.launch shadow_frame:=dragon/link4`
+で link4 追従表示に戻せる。
 
 `dragon bringup.launch` で `SpawnModel: Failure - model name dragon already exist.` が出る場合は、
 前回の Gazebo/roslaunch が残っている。いったん既存の Gazebo を終了するか、別端末で
@@ -111,11 +110,15 @@ rosservice call /shape_task_manager/reset   # スケジュールを最初の目�
 
 ## 成功条件と時間の扱い
 
-以下すべてを `t_hold` 秒維持で成功。`timeout` 秒で失敗（experiment.yaml で変更可能）。
+既定では以下のうち `E_q` と `mu` を `t_hold` 秒維持で成功。`timeout` 秒で失敗
+（experiment.yaml で変更可能）。
 
 - `E_q < E_q_threshold` : RMS(q_current − q_star)（rad、既定 0.15）
-- `E_s < E_s_threshold` : リンク端点（joint1/2/3・link1先端）位置誤差の RMS（m、既定 0.05。link4基準の座標系で評価。`E_s_normalize: true` で全長正規化）
+- `E_s < E_s_threshold` : リンク端点（joint1/2/3・link1先端）位置誤差の RMS（m、既定 0.05）。既定では `use_shape_error: false` のため記録・解析のみで、成功条件には含めない。位置/重なりも評価したい場合だけ `use_shape_error: true` にする。
 - `mu >= 0` : `mu = min((r_f − r_f_hard)/(r_f_safe − r_f_hard), (r_τ − r_τ_hard)/(r_τ_safe − r_τ_hard))`
+
+`fixed_target: true` が既定で、`fixed_target_index` の目標だけを使う。目標姿勢を切り替えたい場合は
+`fixed_target: false` に戻すか、`fixed_target_index` を変更する。
 
 経過時間・保持時間・タイムアウトはすべて **ROS time**（Gazebo では sim time）。
 結果ディレクトリ名と `wall_time` 列のみ wall time。

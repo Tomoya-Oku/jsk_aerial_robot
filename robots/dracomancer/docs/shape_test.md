@@ -112,6 +112,12 @@
 
 ## 改善案
 
+2026-07-06 以降のshape_task既定は、目標姿勢を固定し、位置の重なりではなく関節角一致を主基準にする。
+
+- `fixed_target: true`: `fixed_target_index` の `q_star` だけを使い、試行中/試行間で目標姿勢を切り替えない。
+- `use_shape_error: false`: 成功判定は `E_q < E_q_threshold` と安全余裕で行い、`E_s` は記録・解析用に残す。
+- `shadow_frame: world`: RVizシャドウをロボット側TFへ追従させず、固定参照として表示する。
+
 1. 実測安全余裕を形状gateに戻す。
    - `/dracomancer/dragon_shape_safety_scale` が低い、または `/dragon/debug/fc_*_min_filtered` がhard/recover未満の間は形状更新とlink4 anchor nav更新を一時保持する。
 
