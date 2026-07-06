@@ -1,4 +1,4 @@
-# Dracomancerパッケージ
+﻿# Dracomancerパッケージ
 
 このファイルは `robots/dracomancer/` を編集する際に Codex/ClaudeなどのAIエージェント が参照する前提知識です。
 ユーザーのグローバル指示（日本語での結論先出し・小さな変更・確認の徹底など）に従うこと。
