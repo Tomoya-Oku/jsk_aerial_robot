@@ -231,6 +231,8 @@ class ControlJoints:
         self.cog_frame = rospy.get_param("~cog_frame", self.robot_name + "/cog")
         self.baselink_frame = rospy.get_param("~baselink_frame", self.robot_name + "/fc")
         self.nav_topic = rospy.get_param("~nav_topic", "/" + self.robot_name + "/uav/nav")
+        self.robot_joint_state_topic = rospy.get_param(
+            "~robot_joint_state_topic", "/" + self.robot_name + "/joint_states")
         self.baselink_rpy_topic = rospy.get_param(
             "~baselink_rpy_topic", "/" + self.robot_name + "/final_target_baselink_rpy")
         self.baselink_motion_topic = rospy.get_param(
@@ -250,9 +252,9 @@ class ControlJoints:
         self.enable_link4_anchor_body_step_scaling = rospy.get_param(
             "~enable_link4_anchor_body_step_scaling", True)
         self.link4_anchor_max_body_pos_rate = float(rospy.get_param(
-            "~link4_anchor_max_body_pos_rate", 0.4))
+            "~link4_anchor_max_body_pos_rate", 0.15))
         self.link4_anchor_max_body_rpy_rate = float(rospy.get_param(
-            "~link4_anchor_max_body_rpy_rate", 0.8))
+            "~link4_anchor_max_body_rpy_rate", 0.25))
         self.enable_link4_anchor_body_safety = rospy.get_param(
             "~enable_link4_anchor_body_safety", True)
         # Keep these below DRAGON's attitude failsafe (about 1.0 rad in the simulator
@@ -268,7 +270,25 @@ class ControlJoints:
         self.link4_anchor_max_cog_z = float(rospy.get_param(
             "~link4_anchor_max_cog_z", 2.5))
         self.link4_anchor_max_cog_xy_offset = float(rospy.get_param(
-            "~link4_anchor_max_cog_xy_offset", 1.0))
+            "~link4_anchor_max_cog_xy_offset", 0.5))
+        self.link4_anchor_max_abs_yaw_delta = abs(float(rospy.get_param(
+            "~link4_anchor_max_abs_yaw_delta", np.deg2rad(60.0))))
+        self.enable_link4_anchor_tracking_safety = rospy.get_param(
+            "~enable_link4_anchor_tracking_safety", True)
+        self.link4_anchor_max_cog_tracking_error = abs(float(rospy.get_param(
+            "~link4_anchor_max_cog_tracking_error", 0.2)))
+        self.link4_anchor_max_yaw_tracking_error = abs(float(rospy.get_param(
+            "~link4_anchor_max_yaw_tracking_error", np.deg2rad(20.0))))
+        self.link4_anchor_max_tracking_roll = abs(float(rospy.get_param(
+            "~link4_anchor_max_tracking_roll", np.deg2rad(15.0))))
+        self.link4_anchor_max_tracking_pitch = abs(float(rospy.get_param(
+            "~link4_anchor_max_tracking_pitch", np.deg2rad(15.0))))
+        self.enable_link4_anchor_joint_tracking_safety = rospy.get_param(
+            "~enable_link4_anchor_joint_tracking_safety", True)
+        self.link4_anchor_max_joint_tracking_error = abs(float(rospy.get_param(
+            "~link4_anchor_max_joint_tracking_error", 0.3)))
+        self.link4_anchor_joint_tracking_timeout = float(rospy.get_param(
+            "~link4_anchor_joint_tracking_timeout", 0.5))
         # Minimal DRAGON v1/v1.5 kinematics used for target-shape feed-forward.
         # fc is fixed to link2; link4 is reached through joint2 and joint3.
         self.dragon_link_length = float(rospy.get_param("~dragon_link_length", 0.474))
@@ -279,6 +299,7 @@ class ControlJoints:
         self.cog_fc_mat = None
         self.world_cog_mat = None
         self.anchor_cog_pos = None
+        self.anchor_yaw = None
 
         # --- geometric (long-term) mapping ---------------------------------------
         # Arm kinematic chain (parent->child joint origins / axes) taken from
@@ -303,7 +324,7 @@ class ControlJoints:
         self.geom_yaw_scale = rospy.get_param("~geom_yaw_scale", 1.0)
         self.geom_pitch_scale = rospy.get_param("~geom_pitch_scale", 1.0)
         self.joint_limit = rospy.get_param("~joint_limit", np.pi / 2.0)
-        self.max_step = rospy.get_param("~max_step", 0.04)
+        self.max_step = rospy.get_param("~max_step", 0.015)
         self.capture_neutral = rospy.get_param("~capture_neutral_on_first_msg", False)
         self.publish_only_when_hovering = rospy.get_param("~publish_only_when_hovering", True)
         self.publish_before_device_ready = rospy.get_param("~publish_before_device_ready", False)
@@ -377,6 +398,8 @@ class ControlJoints:
         self.gate_log_period = rospy.get_param("~gate_log_period", 1.0)
 
         self.latest_device_joints = {}
+        self.latest_robot_joints = {}
+        self.latest_robot_joint_stamp = rospy.Time(0)
         self.neutral_device_joints = {}
         self.current_target = list(self.safe_pose)
         self.last_feasible_target = list(self.safe_pose)
@@ -415,6 +438,7 @@ class ControlJoints:
 
         # Subscriber
         self.device_joint_sub = rospy.Subscriber(self.device_joint_topic, JointState, self.device_joint_cb, queue_size=1)
+        self.robot_joint_sub = rospy.Subscriber(self.robot_joint_state_topic, JointState, self.robot_joint_cb, queue_size=1)
         self.robot_flight_state_sub = rospy.Subscriber('/' + self.robot_name + '/flight_state', UInt8, self.robot_flight_state_cb, queue_size=1)
         self.mode_sub = rospy.Subscriber(self.mode_topic, String, self.mode_cb, queue_size=1)
         self.force_threshold_sub = rospy.Subscriber(self.force_threshold_topic, Float64MultiArray, self.force_threshold_cb, queue_size=1)
@@ -423,6 +447,7 @@ class ControlJoints:
 
         rospy.loginfo("teleop_mode: %s, mode_topic: %s", self.teleop_mode, self.mode_topic)
         rospy.loginfo("device_joint_topic: %s", self.device_joint_topic)
+        rospy.loginfo("robot_joint_state_topic: %s", self.robot_joint_state_topic)
         rospy.loginfo("command_topic: %s", self.command_topic)
         rospy.loginfo("mapping_mode: %s, mapping_reference: %s",
                       self.mapping_mode, self.mapping_reference)
@@ -481,6 +506,16 @@ class ControlJoints:
                       self.link4_anchor_min_cog_z,
                       self.link4_anchor_max_cog_z,
                       self.link4_anchor_max_cog_xy_offset)
+        rospy.loginfo("link4 anchor tracking safety: enable=%s, cog/yaw/roll/pitch=%.3f/%.3f/%.3f/%.3f, yaw leash=%.3f, joint tracking enable=%s max/timeout=%.3f/%.3f",
+                      self.enable_link4_anchor_tracking_safety,
+                      self.link4_anchor_max_cog_tracking_error,
+                      self.link4_anchor_max_yaw_tracking_error,
+                      self.link4_anchor_max_tracking_roll,
+                      self.link4_anchor_max_tracking_pitch,
+                      self.link4_anchor_max_abs_yaw_delta,
+                      self.enable_link4_anchor_joint_tracking_safety,
+                      self.link4_anchor_max_joint_tracking_error,
+                      self.link4_anchor_joint_tracking_timeout)
 
     def connect_feasibility_service(self):
         try:
@@ -587,6 +622,13 @@ class ControlJoints:
                     name: self.latest_device_joints[name] for name in needed
                 }
                 rospy.loginfo("Captured dracomancer neutral joints for DRAGON mapping")
+
+    def robot_joint_cb(self, msg):
+        self.latest_robot_joints = {
+            name: float(pos) for name, pos in zip(msg.name, msg.position)
+        }
+        stamp = msg.header.stamp if msg.header.stamp != rospy.Time(0) else rospy.Time.now()
+        self.latest_robot_joint_stamp = stamp
 
     def robot_flight_state_cb(self, msg):
         hovering = int(msg.data) == self.hover_flight_state
@@ -1137,6 +1179,79 @@ class ControlJoints:
             "; ".join(reasons))
         return False
 
+    def link4_tracking_target_safe(self, body_target):
+        if (not self.enable_link4_anchor_tracking_safety or
+                not self.enable_link4_anchor or self.mapping_mode != "distal"):
+            return True
+        if body_target is None or self.world_cog_mat is None:
+            return True
+
+        pos, rpy = body_target
+        cur_pos = np.array(self.world_cog_mat[0:3, 3], dtype=float)
+        cur_roll, cur_pitch, cur_yaw = tft.euler_from_matrix(self.world_cog_mat)
+        reasons = []
+
+        if self.link4_anchor_max_cog_tracking_error > 0.0:
+            pos_error = float(np.linalg.norm(pos - cur_pos))
+            if pos_error > self.link4_anchor_max_cog_tracking_error:
+                reasons.append("cog_tracking %.3f > %.3f" %
+                               (pos_error, self.link4_anchor_max_cog_tracking_error))
+        if self.link4_anchor_yaw_pose and self.link4_anchor_max_yaw_tracking_error > 0.0:
+            yaw_error = abs(self.wrap(float(rpy[2]) - cur_yaw))
+            if yaw_error > self.link4_anchor_max_yaw_tracking_error:
+                reasons.append("yaw_tracking %.3f > %.3f" %
+                               (yaw_error, self.link4_anchor_max_yaw_tracking_error))
+        if self.link4_anchor_max_tracking_roll > 0.0 and abs(cur_roll) > self.link4_anchor_max_tracking_roll:
+            reasons.append("roll_tracking %.3f > %.3f" %
+                           (cur_roll, self.link4_anchor_max_tracking_roll))
+        if self.link4_anchor_max_tracking_pitch > 0.0 and abs(cur_pitch) > self.link4_anchor_max_tracking_pitch:
+            reasons.append("pitch_tracking %.3f > %.3f" %
+                           (cur_pitch, self.link4_anchor_max_tracking_pitch))
+
+        if not reasons:
+            return True
+        rospy.logwarn_throttle(
+            1.0,
+            "link4 anchor tracking safety holds target: %s",
+            "; ".join(reasons))
+        return False
+
+    def link4_joint_tracking_safe(self, target):
+        if (not self.enable_link4_anchor_joint_tracking_safety or
+                not self.enable_link4_anchor or self.mapping_mode != "distal"):
+            return True
+        if self.link4_anchor_max_joint_tracking_error <= 0.0:
+            return True
+        if not self.latest_robot_joints:
+            return True
+        if self.link4_anchor_joint_tracking_timeout > 0.0:
+            age = (rospy.Time.now() - self.latest_robot_joint_stamp).to_sec()
+            if age > self.link4_anchor_joint_tracking_timeout:
+                rospy.logwarn_throttle(
+                    2.0,
+                    "link4 anchor joint tracking safety skipped: robot joint state stale %.3fs",
+                    age)
+                return True
+
+        max_error = 0.0
+        worst_joint = None
+        for name, desired in zip(self.joint_names, target):
+            actual = self.latest_robot_joints.get(name)
+            if actual is None:
+                continue
+            error = abs(self.wrap(float(desired) - actual))
+            if error > max_error:
+                max_error = error
+                worst_joint = name
+
+        if max_error <= self.link4_anchor_max_joint_tracking_error:
+            return True
+        rospy.logwarn_throttle(
+            1.0,
+            "link4 anchor joint tracking safety holds target: %s error %.3f > %.3f",
+            worst_joint, max_error, self.link4_anchor_max_joint_tracking_error)
+        return False
+
     def link4_body_safety_gate(self, target):
         if not self.enable_link4_anchor or self.mapping_mode != "distal":
             return target
@@ -1145,7 +1260,9 @@ class ControlJoints:
         if self.anchor_mat is None or self.cog_fc_mat is None:
             return list(self.current_target)
         body_target = self.link4_anchor_body_target(target)
-        if self.link4_body_target_safe(body_target):
+        if (self.link4_body_target_safe(body_target) and
+                self.link4_tracking_target_safe(body_target) and
+                self.link4_joint_tracking_safe(target)):
             return target
         # Do not advance the joint target if holding link4 would require an unsafe
         # body command. Keeping current_target also prevents update_link4_anchor()
@@ -1210,6 +1327,7 @@ class ControlJoints:
         self.cog_fc_mat = None
         self.world_cog_mat = None
         self.anchor_cog_pos = None
+        self.anchor_yaw = None
 
     def prepare_link4_anchor_tf(self):
         if not self.enable_link4_anchor or self.mapping_mode != "distal":
@@ -1235,6 +1353,7 @@ class ControlJoints:
             self.world_cog_mat = self.lookup_matrix(self.world_frame, self.cog_frame)
             if self.anchor_cog_pos is None:
                 self.anchor_cog_pos = np.array(self.world_cog_mat[0:3, 3], dtype=float)
+                self.anchor_yaw = tft.euler_from_matrix(self.world_cog_mat)[2]
             if captured:
                 self.maybe_capture_baselink_roll_neutral(force=True)
                 rospy.loginfo("link4 anchor captured (%s in %s)", self.anchor_frame, self.world_frame)
@@ -1244,6 +1363,7 @@ class ControlJoints:
             if captured:
                 self.anchor_mat = None
                 self.anchor_cog_pos = None
+                self.anchor_yaw = None
                 self.want_capture_anchor = True
             self.cog_fc_mat = None
             self.world_cog_mat = None
@@ -1287,6 +1407,16 @@ class ControlJoints:
                 # the current roll/pitch (which stay under normal attitude control).
                 m_world_cog_des = self.anchor_mat.dot(tft.inverse_matrix(m_cog_link4))
                 yaw_cmd = tft.euler_from_matrix(m_world_cog_des)[2]
+                if self.anchor_yaw is not None and self.link4_anchor_max_abs_yaw_delta > 0.0:
+                    yaw_delta = self.wrap(yaw_cmd - self.anchor_yaw)
+                    if abs(yaw_delta) > self.link4_anchor_max_abs_yaw_delta:
+                        yaw_delta = max(-self.link4_anchor_max_abs_yaw_delta,
+                                        min(self.link4_anchor_max_abs_yaw_delta, yaw_delta))
+                        yaw_cmd = self.wrap(self.anchor_yaw + yaw_delta)
+                        rospy.logwarn_throttle(
+                            1.0,
+                            "link4 anchor COG yaw leash clamps target: delta=%.3f limit=%.3f",
+                            yaw_delta, self.link4_anchor_max_abs_yaw_delta)
                 roll_cur, pitch_cur, _ = tft.euler_from_matrix(self.world_cog_mat)
                 rot_pred = tft.euler_matrix(roll_cur, pitch_cur, yaw_cmd)[0:3, 0:3]
                 pos = self.anchor_mat[0:3, 3] - rot_pred.dot(m_cog_link4[0:3, 3])
@@ -1327,7 +1457,9 @@ class ControlJoints:
         body_target = self.link4_anchor_body_target(target_joints)
         if body_target is None:
             return
-        if not self.link4_body_target_safe(body_target):
+        if (not self.link4_body_target_safe(body_target) or
+                not self.link4_tracking_target_safe(body_target) or
+                not self.link4_joint_tracking_safe(target_joints)):
             return
         pos, rpy_target = body_target
 

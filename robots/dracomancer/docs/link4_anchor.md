@@ -120,11 +120,18 @@ COG位置目標の変化量を予測し、`link4_anchor_max_body_pos_rate` を�
 full モードでは baselink姿勢目標の変化量、position_yaw モードでは COG yaw 目標の変化量も
 `link4_anchor_max_body_rpy_rate` で抑える。これにより、
 形状変化の速さをbody補償が追従できる範囲へ合わせる。
+position_yaw ではさらに `link4_anchor_max_abs_yaw_delta` により、COG yaw 目標をホバー開始時の
+COG yaw からの差分で制限する。これはposition_yawを維持しつつ、link4固定のためのyaw指令が
+大回りして姿勢制御を巻き込むことを避けるためである。
 さらに `enable_link4_anchor_body_safety` が有効な場合、縮小後の候補が必要とする
 COG高度とホバー開始時COGからの水平距離を検査する。full モードでは baselink roll/pitch も絶対値で検査する。
 `link4_anchor_min_cog_z` を下回る、`link4_anchor_max_cog_z` を超える、`link4_anchor_max_cog_xy_offset`
 を超える、または full モードで `link4_anchor_max_abs_roll` / `link4_anchor_max_abs_pitch` を超える場合、その候補姿勢は採用せず
 直前の関節姿勢を保持し、拒否されたbody補償はpublishしない。
+`enable_link4_anchor_tracking_safety` が有効な場合は、現在のCOG位置・yaw・roll/pitchがlink4アンカー目標へ
+追従できていない周期でも候補姿勢を保持する。`enable_link4_anchor_joint_tracking_safety` が有効な場合は、
+DRAGONの実関節が `joints_ctrl` に追従していない周期でも候補姿勢を保持する。どちらも、body補償だけが先行して
+姿勢failsafeへ近づくことを避けるためのガードである。
 同一制御周期内の step scaling / safety gate / nav publish は、周期先頭で更新した同じ TF を使う。
 キャプチャ直後の初回補償は、現在TFの `cog→fc` と目標FKを使うため、通常は現在姿勢に近い指令から始まる。
 
@@ -176,11 +183,17 @@ SVG版の全体図は [../figures/link4_anchor_algorithm.svg](../figures/link4_a
 | `~nav_topic` / `~baselink_rpy_topic` | `/<robot>/uav/nav` / `/<robot>/final_target_baselink_rpy` | 出力先 |
 | `~baselink_motion_topic` / `~publish_baselink_motion` | `/<robot>/target_rotation_motion` / `false` | full モード用のbaselink即時姿勢指令。姿勢failsafeへ近づきやすいため既定OFF |
 | `~enable_link4_anchor_body_step_scaling` | `true` | body目標の必要変化量に基づいて関節ステップを自動縮小 |
-| `~link4_anchor_max_body_pos_rate` / `~link4_anchor_max_body_rpy_rate` | `0.4` / `0.8` | body step scalingで許容するCOG位置・baselink姿勢の最大変化速度。姿勢側はfullモードのみ使用 |
+| `~link4_anchor_max_body_pos_rate` / `~link4_anchor_max_body_rpy_rate` | `0.15` / `0.25` | body step scalingで許容するCOG位置・姿勢目標の最大変化速度。姿勢側はfullのbaselink姿勢、またはposition_yawのCOG yaw |
 | `~enable_link4_anchor_body_safety` | `true` | body補償後のCOG高度を検査し、安全域外なら直前姿勢を保持。fullモードではbaselink姿勢も検査 |
 | `~link4_anchor_max_abs_roll` / `~link4_anchor_max_abs_pitch` | `0.6` / `0.6` | fullモードのbody補償で許容するbaselink roll/pitch絶対値 [rad] |
 | `~link4_anchor_min_cog_z` / `~link4_anchor_max_cog_z` | `0.6` / `2.5` | body補償で許容するCOG高度範囲 [m]。max `0.0` は上限無効 |
-| `~link4_anchor_max_cog_xy_offset` | `1.0` | ホバー開始時COGから許容する水平距離 [m]。`0.0` 以下で無効 |
+| `~link4_anchor_max_cog_xy_offset` | `0.5` | ホバー開始時COGから許容する水平距離 [m]。`0.0` 以下で無効 |
+| `~link4_anchor_max_abs_yaw_delta` | `1.047` | position_yawのCOG yaw目標をホバー開始時COG yawからの差分で制限する上限 [rad]。`0.0` 以下で無効 |
+| `~enable_link4_anchor_tracking_safety` | `true` | COG/yaw/roll/pitch追従誤差が大きい時に候補姿勢を保持 |
+| `~link4_anchor_max_cog_tracking_error` / `~link4_anchor_max_yaw_tracking_error` | `0.2` / `0.349` | COG位置目標・COG yaw目標に対する許容追従誤差 |
+| `~link4_anchor_max_tracking_roll` / `~link4_anchor_max_tracking_pitch` | `0.262` / `0.262` | link4アンカー中に許容する実roll/pitch絶対値 [rad] |
+| `~enable_link4_anchor_joint_tracking_safety` | `true` | DRAGON実関節が`joints_ctrl`へ追従していない時に候補姿勢を保持 |
+| `~link4_anchor_max_joint_tracking_error` / `~link4_anchor_joint_tracking_timeout` | `0.3` / `0.5` | DRAGON関節の許容追従誤差 [rad] と関節状態の最大経過時間 [s] |
 | `~enable_baselink_roll_mapping` | `true` | fullモード時に上腕ロール+前腕ロールの差分和をbaselink rollへ加算 |
 | `~baselink_roll_source_joints` / `~baselink_roll_signs` / `~baselink_roll_scales` | `[upper_arm_external_internal_rotation_joint, wrist_supination_joint]` / `[-1,-1]` / `[1,1]` | baselink roll 差分の入力・符号・ゲイン |
 | `~baselink_roll_limit` | `pi/2` | baselink roll へ加算する差分の絶対値上限 [rad] |

@@ -289,7 +289,7 @@ target_joint[k] = clamp(sign[k] * scale[k] * source_angle[k] + offset[k],  -join
 - **手首のロール総和配分**（`enable_wrist_roll_switching` 既定 ON）: `wrist_roll_joints`（既定: `upper_arm_external_internal_rotation_joint` + `wrist_supination_joint`）の各ロール角から `wrist_roll_offsets`（既定 `[0, 0]`）を先に引き、各差分を ±90° で飽和する。その和を `alpha = theta + phi` として扱い、手首屈曲と手首内外転の2Dベクトルを `cos(alpha):sin(alpha)` で `joint1_pitch` / `joint1_yaw` へ回転配分する。`alpha > 90°` で `joint1_pitch` 側の符号が反転する挙動は維持する。
 - **肘の上腕ロール配分**（`enable_elbow_roll_switching` 既定 ON）: `upper_arm_external_internal_rotation_joint` から `elbow_roll_offset`（既定0）を先に引き、その差分を ±90° で飽和する。絶対値 `theta` を 0..π/2 の範囲にしたうえで、肘屈曲を `joint2_pitch:joint2_yaw = theta:(pi/2 - theta)` の線形比で配分する。上腕ロールの符号は `joint2_yaw` 側に反映される。
 - 手首・肘それぞれの配分比 `rho_i` とその入力・重みは `/dracomancer/joint_map/switch_ratio` に毎周期publishされ、比較・解析用に記録できる（`scripts/shape_task/task_recorder.py` は `r1,rho1,c1_pitch,c1_yaw,r2,rho2,c2_pitch,c2_yaw` 列としてCSVに記録）。
-- **link4 アンカー（`enable_link4_anchor` 既定 ON）**: 関節を曲げても DRAGON の **link4（腕先端）位置をワールドにおおよそ固定**するため、ホバー開始時に link4 位置を基準化し、`joints_ctrl` と同じ目標関節角からCOG位置（`uav/nav` POS_MODE）を逆算する。既定の `link4_anchor_mode:=position_yaw` ではCOG位置に加えてCOG yaw目標（`uav/nav` の `target_yaw`）でlink4 yawも固定する（baselink姿勢補償は送らない）。`link4_anchor_mode:=position_only` ではCOG位置だけを補償する。`link4_anchor_mode:=full` ではCOG位置+baselink姿勢でlink4姿勢も補償できるが、姿勢failsafeに近づきやすいため明示指定時のみ使う。ON時も `enable_link4_anchor_body_safety` がCOG高度・水平リーシュ・full時の姿勢を検査し、危険なbody補償やTF断時は関節/補償指令を保持する。詳細は [docs/link4_anchor.md](docs/link4_anchor.md)。**移動制御（`enable_position_control`）とは併用不可**（`uav/nav` が競合）。
+- **link4 アンカー（`enable_link4_anchor` 既定 ON）**: 関節を曲げても DRAGON の **link4（腕先端）位置をワールドにおおよそ固定**するため、ホバー開始時に link4 位置を基準化し、`joints_ctrl` と同じ目標関節角からCOG位置（`uav/nav` POS_MODE）を逆算する。既定の `link4_anchor_mode:=position_yaw` ではCOG位置に加えてCOG yaw目標（`uav/nav` の `target_yaw`）でlink4 yawも固定する（baselink姿勢補償は送らない）。`link4_anchor_mode:=position_only` ではCOG位置だけを補償する。`link4_anchor_mode:=full` ではCOG位置+baselink姿勢でlink4姿勢も補償できるが、姿勢failsafeに近づきやすいため明示指定時のみ使う。ON時も `enable_link4_anchor_body_safety` がCOG高度・水平リーシュ・full時の姿勢を検査し、`enable_link4_anchor_tracking_safety` がCOG/yaw/roll/pitch追従遅れを検査し、`enable_link4_anchor_joint_tracking_safety` がDRAGON関節追従遅れを検査する。危険なbody補償、追従遅れ、TF断時は関節/補償指令を保持する。詳細は [docs/link4_anchor.md](docs/link4_anchor.md)。**移動制御（`enable_position_control`）とは併用不可**（`uav/nav` が競合）。
 - 未対応の関節は `mapping_reference` の straight/circular に関係なく動かない。
 - 対応関係は平行リスト `distal_source_joints` / `distal_target_joints` / `distal_signs` / `distal_scales`（同じ長さ）で自由に変更可。
 
@@ -424,12 +424,20 @@ flowchart TD
 | `link4_anchor_offset_x` | `0.0` | 固定点の link4 x軸方向オフセット [m]。`0.474`（リンク長）で尾端を固定 |
 | `publish_link4_anchor_baselink_motion` | `false` | `full` 時に `/dragon/target_rotation_motion` へbaselink姿勢を即時指令する。姿勢failsafeに近づきやすいため既定OFF |
 | `enable_link4_anchor_body_step_scaling` | `true` | link4アンカーのCOG位置、またはfull時のbaselink姿勢の必要変化量が大きすぎる場合、関節ステップを自動縮小 |
-| `link4_anchor_max_body_pos_rate` | `0.4` | body step scalingで許容するCOG位置目標の最大変化速度 [m/s] |
-| `link4_anchor_max_body_rpy_rate` | `0.8` | body step scalingで許容する姿勢目標の最大変化速度 [rad/s]（`full`: baselink RPY / `position_yaw`: COG yaw） |
+| `link4_anchor_max_body_pos_rate` | `0.15` | body step scalingで許容するCOG位置目標の最大変化速度 [m/s] |
+| `link4_anchor_max_body_rpy_rate` | `0.25` | body step scalingで許容する姿勢目標の最大変化速度 [rad/s]（`full`: baselink RPY / `position_yaw`: COG yaw） |
 | `enable_link4_anchor_body_safety` | `true` | link4アンカー補償後のCOG高度・水平リーシュ、またはfull時のbaselink姿勢を検査し、危険なら関節/補償指令を保持 |
 | `link4_anchor_max_abs_roll` / `link4_anchor_max_abs_pitch` | `0.6` / `0.6` | `full` 時のlink4アンカー補償で許容するbaselink roll/pitch絶対値 [rad] |
 | `link4_anchor_min_cog_z` / `link4_anchor_max_cog_z` | `0.6` / `2.5` | link4アンカー補償で許容するCOG高度範囲 [m]。max `0.0` は上限チェック無効 |
-| `link4_anchor_max_cog_xy_offset` | `1.0` | link4アンカー補償でホバー開始時COGから許容する水平距離 [m]。`0.0` 以下で無効 |
+| `link4_anchor_max_cog_xy_offset` | `0.5` | link4アンカー補償でホバー開始時COGから許容する水平距離 [m]。`0.0` 以下で無効 |
+| `link4_anchor_max_abs_yaw_delta` | `1.047` | `position_yaw` のCOG yaw目標をホバー開始時COG yawからの差分で制限する上限 [rad]。`0.0` 以下で無効 |
+| `enable_link4_anchor_tracking_safety` | `true` | 実COG/yaw/roll/pitchがlink4アンカー目標へ追従していない時に形状更新を保持 |
+| `link4_anchor_max_cog_tracking_error` | `0.2` | COG位置目標と実COG位置の許容誤差 [m] |
+| `link4_anchor_max_yaw_tracking_error` | `0.349` | `position_yaw` のCOG yaw目標と実yawの許容誤差 [rad] |
+| `link4_anchor_max_tracking_roll` / `link4_anchor_max_tracking_pitch` | `0.262` / `0.262` | link4アンカー中に許容する実roll/pitch絶対値 [rad] |
+| `enable_link4_anchor_joint_tracking_safety` | `true` | DRAGON実関節が`joints_ctrl`へ追従していない時に形状更新を保持 |
+| `link4_anchor_max_joint_tracking_error` | `0.3` | DRAGON各関節の目標-実値差の許容値 [rad] |
+| `link4_anchor_joint_tracking_timeout` | `0.5` | DRAGON関節状態を追従判定に使う最大経過時間 [s] |
 | `enable_baselink_roll_mapping` | `true` | `distal` 時に上腕ロールと前腕ロールの中立値からの差分和をbaselink rollへ加算 |
 | `baselink_roll_source_joints` | `[upper_arm_external_internal_rotation_joint, wrist_supination_joint]` | baselink roll に使う Dracomancer ロール関節 |
 | `baselink_roll_signs` | `[-1.0, -1.0]` | baselink roll 差分の符号。回転方向が逆なら該当要素を反転 |
@@ -451,7 +459,7 @@ flowchart TD
 | `torque_radius_threshold` | `0.015400` | トルクの下限しきい値（同上） |
 | `force_radius_recover_threshold` | `0.249220` | `hold` モードで拒否状態から復帰する力のしきい値（topic 未受信時のフォールバック） |
 | `torque_radius_recover_threshold` | `0.278159` | `hold` モードで拒否状態から復帰するトルクのしきい値（同上） |
-| `max_step` | `0.04` | 1周期あたりの最大変化量 |
+| `max_step` | `0.015` | 1周期あたりの最大変化量 |
 | `startup_pose` | `[0, pi/2, 0, pi/2, 0, pi/2]` | 立ち上げ時の通常姿勢 |
 
 `shape_feasibility_node`（teleoperation.launch、`ns=dragon`）:
@@ -654,7 +662,7 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | `axis_x/y/z` | `0 / 1 / 2` | ジョイスティック軸番号 |
 | `xy_vel` | `0.3` | XY速度スケール |
 | `z_vel` | `0.2` | Z速度スケール |
-| `max_step` | `0.04` | 関節指令のレート制限 |
+| `max_step` | `0.015` | 関節指令のレート制限 |
 | `enable_wrist_roll_switching` | `true` | 飽和ロール総和に応じた手首屈曲の `joint1_pitch` / `joint1_yaw` 配分 |
 | `wrist_roll_offsets` | `[0.0, 0.0]` | `wrist_roll_joints` と同順の基準角 [rad] |
 | `enable_elbow_roll_switching` | `true` | 飽和上腕ロール角に応じた肘屈曲の `joint2_pitch` / `joint2_yaw` 配分 |
@@ -662,6 +670,8 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | `enable_link4_anchor` | `true` | link4固定補償を有効化する |
 | `link4_anchor_mode` | `position_yaw` | link4固定の補償方式（`position_only` / `position_yaw` / `full`）。既定はCOG位置+COG yawで補償 |
 | `enable_link4_anchor_body_safety` | `true` | link4固定ON時にbody補償後の高度・水平距離、full時は姿勢も検査 |
+| `enable_link4_anchor_tracking_safety` | `true` | link4固定ON時にCOG/yaw/roll/pitch追従遅れが大きければ形状更新を保持 |
+| `enable_link4_anchor_joint_tracking_safety` | `true` | link4固定ON時にDRAGON実関節の追従遅れが大きければ形状更新を保持 |
 
 ## 形態目標到達タスク実験（shape_task）
 
