@@ -38,9 +38,11 @@
   <!-- shape_feasibility prediction mode:
          model            : legacy getFeasibleControlF/TMin() after updateRobotModel().
          optimized_gimbal : DRAGON full-vectoring model's gimbal-processed state.
-         controller       : default; use latest controller gimbal command and optional body
-                            attitude feedback to approximate /debug/fc_*_min. -->
-  <arg name="shape_feasibility_prediction_mode" default="controller"/>
+         controller       : use latest controller gimbal command and optional body
+                            attitude feedback to approximate /debug/fc_*_min.
+         allocation       : default; run static hover allocation for the candidate shape,
+                            then evaluate fc with the allocated gimbal roll angles. -->
+  <arg name="shape_feasibility_prediction_mode" default="allocation"/>
   <arg name="shape_feasibility_gimbal_feedback_topic" default="gimbals_ctrl"/>
   <arg name="shape_feasibility_baselink_rpy_topic" default="final_target_baselink_rpy"/>
   <arg name="shape_feasibility_baselink_odom_topic" default="uav/baselink/odom"/>
@@ -48,6 +50,8 @@
   <arg name="shape_feasibility_use_baselink_rpy_feedback" default="true"/>
   <arg name="shape_feasibility_use_baselink_odom_feedback" default="true"/>
   <arg name="shape_feasibility_feedback_timeout" default="0.25"/>
+  <arg name="shape_feasibility_allocation_refine_max_iteration" default="5"/>
+  <arg name="shape_feasibility_allocation_refine_threshold" default="0.0001"/>
   <arg name="enable_target_fc_prediction" default="true"/>
   <arg name="target_fc_prediction_rate" default="10.0"/>
   <!-- Gate fallback used only until the threshold topic arrives.
@@ -424,5 +428,7 @@
     <param name="use_baselink_rpy_feedback" value="$(arg shape_feasibility_use_baselink_rpy_feedback)"/>
     <param name="use_baselink_odom_feedback" value="$(arg shape_feasibility_use_baselink_odom_feedback)"/>
     <param name="feedback_timeout" value="$(arg shape_feasibility_feedback_timeout)"/>
+    <param name="allocation_refine_max_iteration" value="$(arg shape_feasibility_allocation_refine_max_iteration)"/>
+    <param name="allocation_refine_threshold" value="$(arg shape_feasibility_allocation_refine_threshold)"/>
   </node>
 </launch>

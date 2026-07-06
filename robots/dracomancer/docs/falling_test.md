@@ -75,11 +75,14 @@ failsafe直前の指令関節角:
   - 最新 `/dragon/gimbals_ctrl` のgimbal roll指令を使い、controller側のgimbal条件へ寄せる。
   - `final_target_baselink_rpy` または任意で `uav/baselink/odom` の姿勢feedbackを使い、torque fc計算の姿勢条件へ反映する。
   - gimbal feedbackが新鮮でない場合は従来の `optimized_gimbal` へfallbackする。
+- `shape_feasibility_prediction_mode=allocation` を既定化。
+  - 候補形状に対して静的ホバーallocationを行い、割当後のgimbal roll角でfcを再評価する。
+  - `controller` modeは最新gimbal指令を使う旧近似として残す。
 - gate前candidateだけでなく、rate limit / link4 safety後に実際へ送る最終targetの予測fcを追加。
   - `/dracomancer/target/fc_f_min`
   - `/dracomancer/target/fc_t_min`
 
-残る課題は、DRAGON controller内部のallocation関数そのものを共有ライブラリ化し、`shape_feasibility_node` から完全に同じ割当器を呼ぶこと。
+残る課題は、DRAGON controller内部のallocation関数そのものを共有ライブラリ化し、`shape_feasibility_node` から完全に同じ割当器を呼ぶこと。現状の `allocation` mode はDracomancer側に必要最小限の静的allocationを再実装している。
 
 ## 出力
 
