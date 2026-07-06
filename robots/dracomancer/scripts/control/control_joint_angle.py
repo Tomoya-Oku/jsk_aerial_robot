@@ -343,10 +343,12 @@ class ControlJoints:
         self.feasibility_service_name = rospy.get_param(
             "~feasibility_service", "/" + self.robot_name + "/shape_feasibility/check_shape")
         self.feasibility_service_timeout = rospy.get_param("~feasibility_service_timeout", 2.0)
-        # The model plugin runs a gimbal-planning optimization per call, so throttle
-        # how often the candidate is re-evaluated (Hz). Between checks the last
-        # feasible shape is held.
-        self.feasibility_rate = rospy.get_param("~feasibility_rate", 20.0)
+        # The model plugin runs a gimbal-planning optimization per call, so this
+        # limits how often the candidate is re-evaluated (Hz). Keep the default
+        # aligned with the 40 Hz DRAGON fc monitor to make prediction/measured
+        # traces easier to compare; if CPU load becomes a problem, lower this
+        # parameter at launch.
+        self.feasibility_rate = rospy.get_param("~feasibility_rate", 40.0)
         # Threshold fallback params; overridden by [hard_min, min] threshold topics.
         self.force_radius_threshold = rospy.get_param("~force_radius_threshold", 0.1)
         self.torque_radius_threshold = rospy.get_param("~torque_radius_threshold", 0.01)
