@@ -1,0 +1,20 @@
+bag_start_abs: 46.865
+failsafe_rt: 83.566
+force_landing_rt: 83.566
+flight_state_17_rt: 83.571
+z_below_0.3_after_hover_rt: 83.534
+thresholds: force_hard=0.10899 torque_hard=0.01540
+candidate_force: {'min': 0.8276169358146047, 'max': 2.3035693963091037, 'below': 0, 'count': 951, 'first_below': None}
+candidate_torque: {'min': 0.028219812033060652, 'max': 0.577675769524943, 'below': 0, 'count': 951, 'first_below': None}
+actual_force: {'min': 0.05012206565418287, 'max': 5.0656858196946075, 'below': 44, 'count': 2448, 'first_below': (21.157999999999994, 0.08190052591565304)}
+actual_torque: {'min': 0.0, 'max': 1.702243887908163, 'below': 154, 'count': 2398, 'first_below': (22.225999999999992, 0.0)}
+pose_before_failsafe: (83.566, {'x': 0.21970300954101382, 'y': -0.3586874356898259, 'z': 0.23979087292502466, 'roll': -1.003392046593973, 'pitch': 0.15655866713633565, 'yaw': 0.9861597315026359})
+joints_ctrl_before_failsafe: (83.55499999999998, {'joint1_pitch': -0.15800002115222103, 'joint1_yaw': -0.3727573314562108, 'joint2_pitch': -0.49394181369917645, 'joint2_yaw': 0.0, 'joint3_pitch': 0.7424467013366504, 'joint3_yaw': 0.17027186745530618})
+candidate_before_failsafe: (83.547, {'joint1_pitch': -0.15033011721279282, 'joint1_yaw': -0.37889325460775336, 'joint2_pitch': -0.49854375606283335, 'joint2_yaw': 0.0, 'joint3_pitch': 0.7424467013366504, 'joint3_yaw': 0.17640779060684875})
+safety_scale_before_failsafe: (83.55799999999999, 0.10873869948578381)
+failsafe_message: failsafe: the roll pitch angles are too large, roll: -1.003392 (1.000000), pitch: 0.156559 (1.000000)
+joint_mapping_pdf: robots/dracomancer/figures/shape_test_20260706_175417/joint_mapping.pdf
+safety_overview_png: robots/dracomancer/figures/shape_test_20260706_175417/safety_overview.png
+safety_overview_svg: robots/dracomancer/figures/shape_test_20260706_175417/safety_overview.svg
+fc_prediction_error_png: robots/dracomancer/figures/shape_test_20260706_175417/fc_prediction_error.png
+fc_prediction_error_svg: robots/dracomancer/figures/shape_test_20260706_175417/fc_prediction_error.svg

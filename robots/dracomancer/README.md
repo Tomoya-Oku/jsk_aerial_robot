@@ -346,7 +346,7 @@ flowchart TD
 - **判定基準**：force・torque **両方**の予測半径が `hard_min` 以上なら変形可。`hold` モードで一度 `hard_min` 未満になった場合は、両方が `min` 以上へ復帰するまで直前の可行姿勢を保持する（ヒステリシス）。
 - **NG時**：`feasibility_gate_mode` に応じて、保持・小ステップ探索・縮小移動のいずれかを行う。
 - 予測はサービス `shape_feasibility/check_shape` が `dragon/full_vectoring_robot_model` プラグインで計算します。既定の `shape_feasibility_prediction_mode=allocation` では、候補形状に対して静的ホバーallocationを行い、割当後のgimbal roll角と利用可能なbaselink姿勢feedbackを使って `calcFeasibleControlFxyDists()` / `calcFeasibleControlTDists()` を再評価します。`controller` は最新の `/dragon/gimbals_ctrl` のgimbal roll指令を使う旧近似、`optimized_gimbal` はDRAGONモデルのジンバル処理済み状態だけを使う形状中心の予測です。
-- 最適化が毎回走るため、評価は `feasibility_rate`（既定 20Hz）にスロットルされます。
+- 最適化が毎回走るため、評価は `feasibility_rate`（既定 40Hz）にスロットルされます。CPU負荷が高い場合はlaunch引数で下げられます。
 
 > `shape_feasibility_node` は DRAGON の namespace（`ns=dragon`）で起動し、モデルが `/dragon/robot_description` と機体パラメータを読みます。**DRAGON が起動している必要があります。**
 
@@ -443,10 +443,10 @@ flowchart TD
 | `feasibility_min_step_fraction` | `0.03` | `step_search` の最小探索ステップ |
 | `feasibility_soft_min_scale` | `0.0` | `soft_scale` の移動倍率下限 |
 | `feasibility_service` | `/dragon/shape_feasibility/check_shape` | 予測サービス名 |
-| `feasibility_rate` | `20.0` | 候補評価のスロットル周波数 [Hz] |
+| `feasibility_rate` | `40.0` | 候補評価のスロットル周波数 [Hz] |
 | `shape_feasibility_prediction_mode` | `allocation` | 予測fcの計算方法。`allocation` は候補形状に対して静的ホバーallocationを行い、割当後のgimbal rollでfcを再評価する。`controller` は最新gimbal指令・姿勢feedbackを使う旧近似、`optimized_gimbal` は従来の形状中心予測、`model` は `updateRobotModel()` 後の標準fc |
 | `enable_target_fc_prediction` | `true` | gate/rate-limit/link4 safety後に実際へ送る最終targetの予測fcを `/dracomancer/target/fc_*_min` にpublish |
-| `target_fc_prediction_rate` | `10.0` | 最終target予測fcの評価周波数 [Hz] |
+| `target_fc_prediction_rate` | `40.0` | 最終target予測fcの評価周波数 [Hz] |
 | `force_radius_threshold` | `0.108990` | 力の下限しきい値（topic 未受信時のフォールバック） |
 | `torque_radius_threshold` | `0.015400` | トルクの下限しきい値（同上） |
 | `force_radius_recover_threshold` | `0.249220` | `hold` モードで拒否状態から復帰する力のしきい値（topic 未受信時のフォールバック） |
