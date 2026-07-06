@@ -105,7 +105,7 @@ class ControlJoints:
         # Default: wrist flexion (beckoning) -> joint1_pitch, wrist abduction (sweep
         # parallel to the palm) -> joint1_yaw, elbow flexion -> joint2 (pitch/yaw
         # selected by upper-arm roll below), shoulder flexion -> joint3_pitch,
-        # shoulder abduction -> joint3_yaw. Signs default to [1, -1, 1, 1, -1] (flip
+        # shoulder abduction -> joint3_yaw. Signs default to [1, -1, -1, 1, -1] (flip
         # per joint if DRAGON bends the wrong way); scales 1.0 give a 1:1 angle match;
         # offsets shift the zero. The default keeps joint3_pitch as a direct
         # absolute-angle match without the previous 90deg shoulder-flexion offset.
@@ -126,7 +126,7 @@ class ControlJoints:
             "joint3_pitch",
             "joint3_yaw",
         ])
-        distal_signs = rospy.get_param("~distal_signs", [1.0, -1.0, 1.0, 1.0, -1.0])
+        distal_signs = rospy.get_param("~distal_signs", [1.0, -1.0, -1.0, 1.0, -1.0])
         distal_scales = rospy.get_param("~distal_scales", [1.0, 1.0, 1.0, 1.0, 1.0])
         # Per-joint additive offset [rad]: target = clamp(sign*scale*source + offset).
         distal_offsets = rospy.get_param("~distal_offsets", [0.0, 0.0, 0.0, 0.0, 0.0])
@@ -159,7 +159,7 @@ class ControlJoints:
             "~elbow_yaw_target_joint", "joint2_yaw")
         self.elbow_roll_offset = float(rospy.get_param("~elbow_roll_offset", 0.0))
         self.elbow_pitch_sign = float(rospy.get_param("~elbow_pitch_sign", 1.0))
-        self.elbow_yaw_sign = float(rospy.get_param("~elbow_yaw_sign", 1.0))
+        self.elbow_yaw_sign = float(rospy.get_param("~elbow_yaw_sign", -1.0))
         self.elbow_pitch_scale = float(rospy.get_param("~elbow_pitch_scale", 1.0))
         self.elbow_yaw_scale = float(rospy.get_param("~elbow_yaw_scale", 1.0))
         self.elbow_pitch_offset = float(rospy.get_param("~elbow_pitch_offset", 0.0))
