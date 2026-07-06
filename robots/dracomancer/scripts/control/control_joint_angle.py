@@ -206,19 +206,28 @@ class ControlJoints:
 
         # --- distal link4 anchor -------------------------------------------------
         # Experimental helper: keep the arm-tip link (default link4) roughly fixed in
-        # the world while joints bend. The default mode anchors only the link4
-        # position via COG POS_MODE; full pose anchoring also compensates baselink
-        # attitude, but is much more aggressive for a flying platform.
+        # the world while joints bend. The default mode (position_yaw) anchors the
+        # link4 position via COG POS_MODE and holds the link4 yaw through the COG yaw
+        # target (roll/pitch stay under normal attitude control); position_only skips
+        # the yaw hold; full pose anchoring also compensates baselink attitude, but is
+        # much more aggressive for a flying platform.
         self.enable_link4_anchor = rospy.get_param("~enable_link4_anchor", False)
-        self.link4_anchor_mode = rospy.get_param("~link4_anchor_mode", "position_only")
-        if self.link4_anchor_mode not in ("position_only", "full"):
+        self.link4_anchor_mode = rospy.get_param("~link4_anchor_mode", "position_yaw")
+        if self.link4_anchor_mode not in ("position_only", "position_yaw", "full"):
             rospy.logwarn("unknown link4_anchor_mode '%s'; fallback to position_only",
                           self.link4_anchor_mode)
             self.link4_anchor_mode = "position_only"
         self.link4_anchor_full_pose = self.link4_anchor_mode == "full"
+        self.link4_anchor_yaw_pose = self.link4_anchor_mode == "position_yaw"
         self.world_frame = rospy.get_param("~world_frame", "world")
         anchor_link = rospy.get_param("~anchor_link", "link4")
         self.anchor_frame = rospy.get_param("~anchor_frame", self.robot_name + "/" + anchor_link)
+        # Offset of the anchored point along the anchor link x-axis [m]. 0.0 anchors
+        # the link4 frame origin (= the joint3 side). Setting it to dragon_link_length
+        # anchors the tail tip, so tail-side joint inputs translate the head-side
+        # links instead of leaving them world-fixed (position_only mode).
+        self.link4_anchor_offset_x = float(rospy.get_param("~link4_anchor_offset_x", 0.0))
+        self.anchor_offset_mat = self.xyz_to_matrix([self.link4_anchor_offset_x, 0.0, 0.0])
         self.cog_frame = rospy.get_param("~cog_frame", self.robot_name + "/cog")
         self.baselink_frame = rospy.get_param("~baselink_frame", self.robot_name + "/fc")
         self.nav_topic = rospy.get_param("~nav_topic", "/" + self.robot_name + "/uav/nav")
@@ -453,8 +462,9 @@ class ControlJoints:
         rospy.loginfo("joint command gating: only_when_hovering=%s, before_device_ready=%s",
                       self.publish_only_when_hovering, self.publish_before_device_ready)
         rospy.loginfo("hover flight_state for joint/link4 commands: %d", self.hover_flight_state)
-        rospy.loginfo("link4 anchor: enable=%s, mode=%s, anchor=%s, world=%s, cog=%s, baselink=%s",
-                      self.enable_link4_anchor, self.link4_anchor_mode, self.anchor_frame, self.world_frame,
+        rospy.loginfo("link4 anchor: enable=%s, mode=%s, anchor=%s, offset_x=%.3f, world=%s, cog=%s, baselink=%s",
+                      self.enable_link4_anchor, self.link4_anchor_mode, self.anchor_frame,
+                      self.link4_anchor_offset_x, self.world_frame,
                       self.cog_frame, self.baselink_frame)
         rospy.loginfo("link4 anchor baselink motion: enable=%s, topic=%s",
                       self.publish_baselink_motion, self.baselink_motion_topic)
@@ -1068,11 +1078,13 @@ class ControlJoints:
         rpy_delta = 0.0
         if self.link4_anchor_full_pose:
             rpy_delta = max(abs(self.wrap(dst_rpy[i] - cur_rpy[i])) for i in range(3))
+        elif self.link4_anchor_yaw_pose:
+            rpy_delta = abs(self.wrap(dst_rpy[2] - cur_rpy[2]))
 
         scale = 1.0
         if pos_limit > 0.0 and pos_delta > pos_limit:
             scale = min(scale, pos_limit / pos_delta)
-        if self.link4_anchor_full_pose and rpy_limit > 0.0 and rpy_delta > rpy_limit:
+        if rpy_limit > 0.0 and rpy_delta > rpy_limit:
             scale = min(scale, rpy_limit / rpy_delta)
         if scale >= 1.0:
             return target
@@ -1207,7 +1219,10 @@ class ControlJoints:
         try:
             captured = False
             if self.anchor_mat is None or self.want_capture_anchor:
-                self.anchor_mat = self.lookup_matrix(self.world_frame, self.anchor_frame)
+                # The same x offset is applied to the target-shape FK, so the anchored
+                # point and its reference are expressed consistently.
+                self.anchor_mat = self.lookup_matrix(
+                    self.world_frame, self.anchor_frame).dot(self.anchor_offset_mat)
                 self.want_capture_anchor = False
                 self.anchor_cog_pos = None
                 captured = True
@@ -1256,12 +1271,24 @@ class ControlJoints:
     def link4_anchor_body_target(self, target_joints):
         if self.anchor_mat is None or self.cog_fc_mat is None or target_joints is None:
             return None
-        m_bl_link4 = self.dragon_fc_to_link4_matrix(target_joints)
+        m_bl_link4 = self.dragon_fc_to_link4_matrix(target_joints).dot(self.anchor_offset_mat)
         m_cog_link4 = self.cog_fc_mat.dot(m_bl_link4)
 
         if not self.link4_anchor_full_pose:
             if self.world_cog_mat is None:
                 return None
+            if self.link4_anchor_yaw_pose:
+                # position_yaw: hold the anchor yaw too, so tail-side joint inputs
+                # swing the head-side links about the anchor instead of only rotating
+                # link4 in place. The yaw command is the COG yaw of the full-pose
+                # solution; the COG position assumes that commanded yaw combined with
+                # the current roll/pitch (which stay under normal attitude control).
+                m_world_cog_des = self.anchor_mat.dot(tft.inverse_matrix(m_cog_link4))
+                yaw_cmd = tft.euler_from_matrix(m_world_cog_des)[2]
+                roll_cur, pitch_cur, _ = tft.euler_from_matrix(self.world_cog_mat)
+                rot_pred = tft.euler_matrix(roll_cur, pitch_cur, yaw_cmd)[0:3, 0:3]
+                pos = self.anchor_mat[0:3, 3] - rot_pred.dot(m_cog_link4[0:3, 3])
+                return np.array(pos, dtype=float), [0.0, 0.0, float(yaw_cmd)]
             # In position_only mode we do not command baselink attitude. Compute the
             # COG position that places link4 at the anchor under the current body
             # orientation, instead of using the full-pose inverse solution.
@@ -1311,6 +1338,11 @@ class ControlJoints:
         nav.target_pos_x = float(pos[0])
         nav.target_pos_y = float(pos[1])
         nav.target_pos_z = float(pos[2])
+        if self.link4_anchor_yaw_pose:
+            # Hold the anchor-link yaw by steering the COG yaw target. Roll/pitch
+            # stay under the normal DRAGON attitude control.
+            nav.yaw_nav_mode = FlightNav.POS_MODE
+            nav.target_yaw = float(rpy_target[2])
         self.nav_pub.publish(nav)
 
         if self.link4_anchor_full_pose:

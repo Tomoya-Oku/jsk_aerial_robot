@@ -127,11 +127,18 @@
        offsets=[0,0,0,0,0], scales=1.0. -->
   <arg name="capture_neutral_on_first_msg" default="false"/>
   <!-- distal link4 anchor: helper to keep the arm-tip link (link4) ~fixed in
-       world while joints bend. Default mode anchors only link4 position by
-       commanding COG position (uav/nav POS_MODE) alongside joints_ctrl. The full
-       mode also compensates baselink attitude and is much more aggressive. -->
+       world while joints bend. The default position_yaw mode anchors the link4
+       position by commanding COG position (uav/nav POS_MODE) alongside
+       joints_ctrl, and also holds the link4 yaw through the COG yaw target
+       (roll/pitch untouched), so shoulder inputs swing links1-3 about the
+       anchor. position_only skips the yaw hold. The full mode also compensates
+       baselink attitude and is much more aggressive. -->
   <arg name="enable_link4_anchor" default="true"/>
-  <arg name="link4_anchor_mode" default="position_only"/> <!-- position_only / full -->
+  <arg name="link4_anchor_mode" default="position_yaw"/> <!-- position_only / position_yaw / full -->
+  <!-- Offset of the anchored point along link4 x [m]. 0.0 = link4 frame origin
+       (joint3 side). Set to the link length (0.474) to anchor the tail tip so
+       tail-side joint inputs visibly translate the head-side links. -->
+  <arg name="link4_anchor_offset_x" default="0.0"/>
   <arg name="publish_link4_anchor_baselink_motion" default="false"/>
   <!-- Limit joint-step progress so the link4-anchor body compensation target does
        not require excessive COG position, or baselink attitude motion in full mode. -->
@@ -335,6 +342,7 @@
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
     <param name="enable_link4_anchor" value="$(arg enable_link4_anchor)"/>
     <param name="link4_anchor_mode" value="$(arg link4_anchor_mode)"/>
+    <param name="link4_anchor_offset_x" value="$(arg link4_anchor_offset_x)"/>
     <param name="publish_baselink_motion" value="$(arg publish_link4_anchor_baselink_motion)"/>
     <param name="enable_link4_anchor_body_step_scaling" value="$(arg enable_link4_anchor_body_step_scaling)"/>
     <param name="link4_anchor_max_body_pos_rate" value="$(arg link4_anchor_max_body_pos_rate)"/>
