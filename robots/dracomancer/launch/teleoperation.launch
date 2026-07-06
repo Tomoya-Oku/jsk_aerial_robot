@@ -94,9 +94,9 @@
   <arg name="joint_pairing_reference" default="circular"/>  <!-- deprecated alias of mapping_reference -->
   <arg name="mapping_reference" default="$(arg joint_pairing_reference)"/>
   <arg name="joint_pairing_scale" default="1.0"/>
-  <!-- Elbow-plane mapping for distal mode: route elbow flexion to joint2_pitch
-       when upper-arm roll is within +/-15deg, otherwise route it to joint2_yaw.
-       Set yaw_zone larger than pitch_zone only when a blend band is desired. -->
+  <!-- Elbow-plane mapping for distal mode: saturate upper-arm roll to +/-90deg
+       and allocate elbow flexion as joint2 pitch:yaw = theta:(pi/2 - theta).
+       The zone args are kept only for compatibility with old launch overrides. -->
   <arg name="enable_elbow_roll_switching" default="true"/>
   <arg name="elbow_roll_pitch_zone" default="0.2617993877991494"/>
   <arg name="elbow_roll_yaw_zone" default="0.2617993877991494"/>
@@ -104,10 +104,10 @@
   <arg name="elbow_yaw_sign" default="1.0"/>
   <arg name="elbow_pitch_scale" default="1.0"/>
   <arg name="elbow_yaw_scale" default="1.0"/>
-  <!-- Wrist-plane mapping for distal mode: route wrist flexion to joint1_pitch
-       when the upper-arm + forearm roll sum is closer to the palm-horizontal
-       reference, and to joint1_yaw when it is closer to palm-vertical.
-       Set yaw_zone larger than pitch_zone only when a blend band is desired. -->
+  <!-- Wrist-plane mapping for distal mode: saturate upper-arm and wrist rolls to
+       +/-90deg each, then allocate wrist flexion to joint1 pitch/yaw with
+       cos(theta + phi):sin(theta + phi). The zone args are kept only for
+       compatibility with old launch overrides. -->
   <arg name="enable_wrist_roll_switching" default="true"/>
   <arg name="wrist_roll_parallel_offset" default="0.0"/>
   <arg name="wrist_roll_pitch_zone" default="0.7853981633974483"/>

@@ -99,7 +99,7 @@ flowchart TB
 | `/dracomancer/shape_control_error` | `std_msgs/Float64MultiArray` | 力覚提示用の形状抑制量 `q_des - q_tar` |
 | `/dracomancer/haptic_torque` | `sensor_msgs/JointState` | 安全スケーリングで抑制された入力差から計算した Dracomancer 7関節の提示トルク |
 | `/dracomancer/candidate/joint_target` | `sensor_msgs/JointState` | フィージビリティ・ゲート前の候補 DRAGON 関節角（`mapped_target()` の出力そのもの。teleoperationモードのみ） |
-| `/dracomancer/joint_map/switch_ratio` | `std_msgs/Float64MultiArray` | 手首/肘のロール切替配分量 `[r1, rho1, c1_pitch, c1_yaw, r2, rho2, c2_pitch, c2_yaw]`（joint1=手首, joint2=肘。`r_i` はロール総和、`rho_i` は smoothstep 配分比 [0,1]、`c_i_pitch/c_i_yaw` は実際に使われる cos/sin 重み） |
+| `/dracomancer/joint_map/switch_ratio` | `std_msgs/Float64MultiArray` | 手首/肘のロール配分量 `[r1, rho1, c1_pitch, c1_yaw, r2, rho2, c2_pitch, c2_yaw]`（joint1=手首, joint2=肘。`r_i` は飽和後の配分入力、`rho_i` はyaw側寄与の目安 [0,1]、`c_i_pitch/c_i_yaw` は実際に使われるpitch/yaw重み） |
 
 ## 操作モード
 
@@ -286,9 +286,9 @@ target_joint[k] = clamp(sign[k] * scale[k] * source_angle[k] + offset[k],  -join
 - 絶対角の直接対応なので中立姿勢の記録（`capture_neutral_on_first_msg`）は不要・不使用。
 - `distal_signs` 既定は `[1.0, -1.0, 1.0, 1.0, -1.0]`（手首内外転・肩内外転が -1、他は +1。各関節ごとに、DRAGON が逆向きに動く場合に反転）。`distal_scales` 既定 `1.0` で 1:1 角度一致。
 - `distal_offsets` 既定は `[0, 0, 0, 0, 0]`：joint3_pitch は以前の `+π/2` 肩屈曲オフセットを使わず、`sign=+1` の絶対角一致で扱う。肩内外転の向きは未検証なので sim で要確認。
-- **手首のロール総和切替**（`enable_wrist_roll_switching` 既定 ON）: `wrist_roll_joints`（既定: `upper_arm_external_internal_rotation_joint` + `wrist_supination_joint`）の総和から `wrist_roll_parallel_offset`（手のひら水平基準、既定0）を引いた絶対値が `wrist_roll_pitch_zone`（既定45°）以下なら、手のひらが地面に平行に近い側として手首屈曲を `joint1_pitch`、手首内外転を `joint1_yaw` に入れる。ロール総和が大きく手のひらが地面に垂直に近い側では、手首屈曲を `joint1_yaw` 側へ、手首内外転を `joint1_pitch` 側へ回転させる。必要な場合だけ `wrist_roll_yaw_zone` を pitch zone より大きくすると、その間をpitch/yawのベクトル長を保ちながら滑らかに遷移できる。
-- **肘の上腕ロール切替**（`enable_elbow_roll_switching` 既定 ON）: `upper_arm_external_internal_rotation_joint` の絶対値が `elbow_roll_pitch_zone`（既定15°）以下なら肘屈曲を `joint2_pitch` のみに入れる。それ以外では `joint2_yaw` のみに入れる。必要な場合だけ `elbow_roll_yaw_zone` を pitch zone より大きくすると、その間をpitch/yawのベクトル長を保ちながら滑らかに遷移できる。これにより、操作者から見て前腕が地面に垂直に近いときはpitch、肘が地面と平行な面で開閉するときはyawを使う。
-- 手首・肘それぞれの配分比 `rho_i`（0=pitch側, 1=yaw側）とその入力・重みは `/dracomancer/joint_map/switch_ratio` に毎周期publishされ、比較・解析用に記録できる（`scripts/shape_task/task_recorder.py` は `r1,rho1,c1_pitch,c1_yaw,r2,rho2,c2_pitch,c2_yaw` 列としてCSVに記録）。
+- **手首のロール総和配分**（`enable_wrist_roll_switching` 既定 ON）: `wrist_roll_joints`（既定: `upper_arm_external_internal_rotation_joint` + `wrist_supination_joint`）の各ロール角をそれぞれ ±90° で飽和し、その和から `wrist_roll_parallel_offset`（手のひら水平基準、既定0）を引いた角度を `alpha = theta + phi` として扱う。手首屈曲と手首内外転の2Dベクトルを `cos(alpha):sin(alpha)` で `joint1_pitch` / `joint1_yaw` へ回転配分する。
+- **肘の上腕ロール配分**（`enable_elbow_roll_switching` 既定 ON）: `upper_arm_external_internal_rotation_joint` の絶対角を ±90° で飽和し、`theta` を 0..π/2 の範囲にしたうえで、肘屈曲を `joint2_pitch:joint2_yaw = theta:(pi/2 - theta)` の線形比で配分する。`theta=0` ではyaw側、`theta=pi/2` ではpitch側に寄る。
+- 手首・肘それぞれの配分比 `rho_i` とその入力・重みは `/dracomancer/joint_map/switch_ratio` に毎周期publishされ、比較・解析用に記録できる（`scripts/shape_task/task_recorder.py` は `r1,rho1,c1_pitch,c1_yaw,r2,rho2,c2_pitch,c2_yaw` 列としてCSVに記録）。`wrist_roll_pitch_zone` / `wrist_roll_yaw_zone` / `elbow_roll_pitch_zone` / `elbow_roll_yaw_zone` は後方互換のため残しているが、現在の配分式では使用しない。
 - **link4 アンカー（`enable_link4_anchor` 既定 ON）**: 関節を曲げても DRAGON の **link4（腕先端）位置をワールドにおおよそ固定**するため、ホバー開始時に link4 位置を基準化し、`joints_ctrl` と同じ目標関節角からCOG位置（`uav/nav` POS_MODE）を逆算する。既定の `link4_anchor_mode:=position_only` ではbaselink姿勢補償を送らない。`link4_anchor_mode:=full` ではCOG位置+baselink姿勢でlink4姿勢も補償できるが、姿勢failsafeに近づきやすいため明示指定時のみ使う。ON時も `enable_link4_anchor_body_safety` がCOG高度・水平リーシュ・full時の姿勢を検査し、危険なbody補償やTF断時は関節/補償指令を保持する。詳細は [docs/link4_anchor.md](docs/link4_anchor.md)。**移動制御（`enable_position_control`）とは併用不可**（`uav/nav` が競合）。
 - 未対応の関節は `mapping_reference` の straight/circular に関係なく動かない。
 - 対応関係は平行リスト `distal_source_joints` / `distal_target_joints` / `distal_signs` / `distal_scales`（同じ長さ）で自由に変更可。
@@ -409,14 +409,14 @@ flowchart TD
 | `distal_scales` | `[1.0, 1.0, 1.0, 1.0, 1.0]` | `distal` の各ゲイン（`1.0` で 1:1 角度一致） |
 | `distal_offsets` | `[0, 0, 0, 0, 0]` | `distal` の各加算オフセット[rad]（`sign*scale*source + offset`）。joint3_pitch は90degオフセットなし |
 | `enable_wrist_roll_switching` | `true` | ロール総和に応じて手首屈曲を `joint1_pitch` / `joint1_yaw` へ配分 |
-| `wrist_roll_joints` | `[upper_arm_external_internal_rotation_joint, wrist_supination_joint]` | 手首のpitch/yaw切替判定に使うロール関節。各値を足して判定 |
+| `wrist_roll_joints` | `[upper_arm_external_internal_rotation_joint, wrist_supination_joint]` | 手首のpitch/yaw配分に使うロール関節。各値を ±90° で飽和してから足す |
 | `wrist_roll_parallel_offset` | `0.0` | 手のひらが地面に平行なときのロール総和基準 [rad] |
-| `wrist_roll_pitch_zone` / `wrist_roll_yaw_zone` | `π/4` / `π/4` | ロール総和から水平基準を引いた絶対値が pitch zone 以下ならpitch配分、それ以外はyaw配分。yaw zoneを大きくすると中間を滑らかに遷移 |
+| `wrist_roll_pitch_zone` / `wrist_roll_yaw_zone` | `π/4` / `π/4` | 後方互換用に残す未使用パラメータ。現在は各ロールを ±90° で飽和し、`cos(theta + phi):sin(theta + phi)` で配分 |
 | `wrist_pitch_sign` / `wrist_yaw_sign` | `1.0` / `1.0` | 手首屈曲を `joint1_pitch` / `joint1_yaw` へ入れる符号 |
 | `wrist_pitch_scale` / `wrist_yaw_scale` | `1.0` / `1.0` | 手首屈曲を `joint1_pitch` / `joint1_yaw` へ入れるゲイン |
 | `wrist_yaw_source_sign` / `wrist_yaw_source_scale` | `-1.0` / `1.0` | 手首内外転を手首ロール切替の yaw 初期成分へ入れる符号・ゲイン |
 | `enable_elbow_roll_switching` | `true` | 上腕ロール角に応じて肘屈曲を `joint2_pitch` / `joint2_yaw` へ配分 |
-| `elbow_roll_pitch_zone` / `elbow_roll_yaw_zone` | `π/12` / `π/12` | 上腕ロール絶対値が pitch zone 以下ならpitchのみ、それ以外はyawのみ。yaw zoneを大きくすると中間を滑らかに遷移 |
+| `elbow_roll_pitch_zone` / `elbow_roll_yaw_zone` | `π/12` / `π/12` | 後方互換用に残す未使用パラメータ。現在は上腕ロールを ±90° で飽和し、`theta:(pi/2 - theta)` で配分 |
 | `elbow_pitch_sign` / `elbow_yaw_sign` | `1.0` / `1.0` | 肘屈曲を `joint2_pitch` / `joint2_yaw` へ入れる符号 |
 | `elbow_pitch_scale` / `elbow_yaw_scale` | `1.0` / `1.0` | 肘屈曲を `joint2_pitch` / `joint2_yaw` へ入れるゲイン |
 | `enable_link4_anchor` | `true` | `distal` 時に link4 位置をワールド固定するためCOG位置を補償。`enable_position_control` とは併用不可 |
@@ -558,7 +558,7 @@ roslaunch dracomancer bringup.launch \
 roslaunch dracomancer rviz.launch
 ```
 
-RViz には `/dracomancer/servo/states` のサーボtickを `center_tick`（既定2048）基準で換算した各サーボ角度が表示されます。換算式は `(tick - center_tick) * 2π / ticks_per_rev`（`ticks_per_rev` 既定4096）で、表示は deg / rad です。同じMarker内に、`/dracomancer/joint_map/switch_ratio`（`control_joint_angle.py` が publish）から joint1（手首）/joint2（肘）のロール切替配分比 `rho_i` と pitch/yaw 重み `c_i_pitch`/`c_i_yaw`、切替入力のロール総和 `r_i` も併せて表示されます（`control_joint_angle.py` が起動していない場合は「waiting for ...」表示）。`servo_labels.py` はいずれかのトピックを受信するたびに即時Markerを更新し、既定では最大30Hzに制限します。受信が `reconnect_timeout`（既定3秒）以上途絶えた場合は購読を自動で張り直します（rospyはWi-Fi瞬断などで切れた購読TCP接続を自動再接続しないため）。更新レート・無通信判定はsim時間（`/clock`）に影響されない壁時計基準です。不要な場合は `show_servo_labels:=false` を指定します。
+RViz には `/dracomancer/servo/states` のサーボtickを `center_tick`（既定2048）基準で換算した各サーボ角度が表示されます。換算式は `(tick - center_tick) * 2π / ticks_per_rev`（`ticks_per_rev` 既定4096）で、表示は deg / rad です。同じMarker内に、`/dracomancer/joint_map/switch_ratio`（`control_joint_angle.py` が publish）から joint1（手首）/joint2（肘）のロール配分比 `rho_i` と pitch/yaw 重み `c_i_pitch`/`c_i_yaw`、配分入力 `r_i` も併せて表示されます（`control_joint_angle.py` が起動していない場合は「waiting for ...」表示）。`servo_labels.py` はいずれかのトピックを受信するたびに即時Markerを更新し、既定では最大30Hzに制限します。受信が `reconnect_timeout`（既定3秒）以上途絶えた場合は購読を自動で張り直します（rospyはWi-Fi瞬断などで切れた購読TCP接続を自動再接続しないため）。更新レート・無通信判定はsim時間（`/clock`）に影響されない壁時計基準です。不要な場合は `show_servo_labels:=false` を指定します。
 
 ROS master は親機PCに固定します。子機PCでは `ROS_MASTER_URI` を親機PCに向け、親機PCでは `ROS_MASTER_URI` を自身に向けた状態で `rviz.launch` のみを起動してください。両PCで `ROS_IP` または `ROS_HOSTNAME` は、それぞれ相手PCから到達可能なIP/ホスト名に設定します。
 
@@ -651,11 +651,11 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | `xy_vel` | `0.3` | XY速度スケール |
 | `z_vel` | `0.2` | Z速度スケール |
 | `max_step` | `0.04` | 関節指令のレート制限 |
-| `enable_wrist_roll_switching` | `true` | ロール総和に応じた手首屈曲の `joint1_pitch` / `joint1_yaw` 切替 |
+| `enable_wrist_roll_switching` | `true` | 飽和ロール総和に応じた手首屈曲の `joint1_pitch` / `joint1_yaw` 配分 |
 | `wrist_roll_parallel_offset` | `0.0` | 手のひらが地面に平行なときのロール総和基準 [rad] |
-| `wrist_roll_pitch_zone` / `wrist_roll_yaw_zone` | `0.7853981633974483` / `0.7853981633974483` | pitch / yaw へ切り替わる水平基準からのロール総和角 [rad] |
-| `enable_elbow_roll_switching` | `true` | 上腕ロール角に応じた肘屈曲の `joint2_pitch` / `joint2_yaw` 切替 |
-| `elbow_roll_pitch_zone` / `elbow_roll_yaw_zone` | `0.2617993877991494` / `0.2617993877991494` | pitchのみ / yawのみへ切り替わる上腕ロール角 [rad] |
+| `wrist_roll_pitch_zone` / `wrist_roll_yaw_zone` | `0.7853981633974483` / `0.7853981633974483` | 後方互換用の未使用値。現在は ±90° 飽和後の `cos(theta + phi):sin(theta + phi)` 配分 |
+| `enable_elbow_roll_switching` | `true` | 飽和上腕ロール角に応じた肘屈曲の `joint2_pitch` / `joint2_yaw` 配分 |
+| `elbow_roll_pitch_zone` / `elbow_roll_yaw_zone` | `0.2617993877991494` / `0.2617993877991494` | 後方互換用の未使用値。現在は ±90° 飽和後の `theta:(pi/2 - theta)` 配分 |
 | `enable_link4_anchor` | `true` | link4固定補償を有効化する |
 | `link4_anchor_mode` | `position_only` | link4固定の補償方式。既定はCOG位置だけ補償 |
 | `enable_link4_anchor_body_safety` | `true` | link4固定ON時にbody補償後の高度・水平距離、full時は姿勢も検査 |
