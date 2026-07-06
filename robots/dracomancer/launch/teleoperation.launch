@@ -144,8 +144,8 @@
   <!-- Limit joint-step progress so the link4-anchor body compensation target does
        not require excessive COG position, or baselink attitude motion in full mode. -->
   <arg name="enable_link4_anchor_body_step_scaling" default="true"/>
-  <arg name="link4_anchor_max_body_pos_rate" default="0.15"/>
-  <arg name="link4_anchor_max_body_rpy_rate" default="0.25"/>
+  <arg name="link4_anchor_max_body_pos_rate" default="0.4"/>
+  <arg name="link4_anchor_max_body_rpy_rate" default="0.8"/>
   <!-- Reject link4-anchor targets that would require unsafe body attitude,
        altitude, or horizontal drift from the hover-start COG.
        These limits are evaluated after max_step/body-step scaling; rejected targets
@@ -155,14 +155,14 @@
   <arg name="link4_anchor_max_abs_pitch" default="0.6"/>
   <arg name="link4_anchor_min_cog_z" default="0.6"/>
   <arg name="link4_anchor_max_cog_z" default="2.5"/>
-  <arg name="link4_anchor_max_cog_xy_offset" default="0.5"/>
-  <arg name="link4_anchor_max_abs_yaw_delta" default="1.0471975511965976"/>
+  <arg name="link4_anchor_max_cog_xy_offset" default="0.9"/>
+  <arg name="link4_anchor_max_abs_yaw_delta" default="2.0943951023931953"/>
   <!-- Hold shape updates when the controlled robot is not tracking the current
        link4-anchor body/joint targets.  These guards keep position_yaw enabled,
        but prevent shape commands from running ahead of COG/yaw/joint response. -->
   <arg name="enable_link4_anchor_tracking_safety" default="true"/>
   <arg name="link4_anchor_max_cog_tracking_error" default="0.2"/>
-  <arg name="link4_anchor_max_yaw_tracking_error" default="0.3490658503988659"/>
+  <arg name="link4_anchor_max_yaw_tracking_error" default="0.5235987755982988"/>
   <arg name="link4_anchor_max_tracking_roll" default="0.2617993877991494"/>
   <arg name="link4_anchor_max_tracking_pitch" default="0.2617993877991494"/>
   <arg name="enable_link4_anchor_joint_tracking_safety" default="true"/>

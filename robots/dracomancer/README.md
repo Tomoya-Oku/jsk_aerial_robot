@@ -424,16 +424,16 @@ flowchart TD
 | `link4_anchor_offset_x` | `0.0` | 固定点の link4 x軸方向オフセット [m]。`0.474`（リンク長）で尾端を固定 |
 | `publish_link4_anchor_baselink_motion` | `false` | `full` 時に `/dragon/target_rotation_motion` へbaselink姿勢を即時指令する。姿勢failsafeに近づきやすいため既定OFF |
 | `enable_link4_anchor_body_step_scaling` | `true` | link4アンカーのCOG位置、またはfull時のbaselink姿勢の必要変化量が大きすぎる場合、関節ステップを自動縮小 |
-| `link4_anchor_max_body_pos_rate` | `0.15` | body step scalingで許容するCOG位置目標の最大変化速度 [m/s] |
-| `link4_anchor_max_body_rpy_rate` | `0.25` | body step scalingで許容する姿勢目標の最大変化速度 [rad/s]（`full`: baselink RPY / `position_yaw`: COG yaw） |
+| `link4_anchor_max_body_pos_rate` | `0.4` | body step scalingで許容するCOG位置目標の最大変化速度 [m/s] |
+| `link4_anchor_max_body_rpy_rate` | `0.8` | body step scalingで許容する姿勢目標の最大変化速度 [rad/s]（`full`: baselink RPY / `position_yaw`: COG yaw） |
 | `enable_link4_anchor_body_safety` | `true` | link4アンカー補償後のCOG高度・水平リーシュ、またはfull時のbaselink姿勢を検査し、危険なら関節/補償指令を保持 |
 | `link4_anchor_max_abs_roll` / `link4_anchor_max_abs_pitch` | `0.6` / `0.6` | `full` 時のlink4アンカー補償で許容するbaselink roll/pitch絶対値 [rad] |
 | `link4_anchor_min_cog_z` / `link4_anchor_max_cog_z` | `0.6` / `2.5` | link4アンカー補償で許容するCOG高度範囲 [m]。max `0.0` は上限チェック無効 |
-| `link4_anchor_max_cog_xy_offset` | `0.5` | link4アンカー補償でホバー開始時COGから許容する水平距離 [m]。`0.0` 以下で無効 |
-| `link4_anchor_max_abs_yaw_delta` | `1.047` | `position_yaw` のCOG yaw目標をホバー開始時COG yawからの差分で制限する上限 [rad]。`0.0` 以下で無効 |
+| `link4_anchor_max_cog_xy_offset` | `0.9` | link4アンカー補償でホバー開始時COGから許容する水平距離 [m]。`0.0` 以下で無効 |
+| `link4_anchor_max_abs_yaw_delta` | `2.094` | `position_yaw` のCOG yaw目標をホバー開始時COG yawからの差分で制限する上限 [rad]。`0.0` 以下で無効 |
 | `enable_link4_anchor_tracking_safety` | `true` | 実COG/yaw/roll/pitchがlink4アンカー目標へ追従していない時に形状更新を保持 |
 | `link4_anchor_max_cog_tracking_error` | `0.2` | COG位置目標と実COG位置の許容誤差 [m] |
-| `link4_anchor_max_yaw_tracking_error` | `0.349` | `position_yaw` のCOG yaw目標と実yawの許容誤差 [rad] |
+| `link4_anchor_max_yaw_tracking_error` | `0.524` | `position_yaw` のCOG yaw目標と実yawの許容誤差 [rad] |
 | `link4_anchor_max_tracking_roll` / `link4_anchor_max_tracking_pitch` | `0.262` / `0.262` | link4アンカー中に許容する実roll/pitch絶対値 [rad] |
 | `enable_link4_anchor_joint_tracking_safety` | `true` | DRAGON実関節が`joints_ctrl`へ追従していない時に形状更新を保持 |
 | `link4_anchor_max_joint_tracking_error` | `0.3` | DRAGON各関節の目標-実値差の許容値 [rad] |

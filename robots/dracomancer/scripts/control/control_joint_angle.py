@@ -252,9 +252,9 @@ class ControlJoints:
         self.enable_link4_anchor_body_step_scaling = rospy.get_param(
             "~enable_link4_anchor_body_step_scaling", True)
         self.link4_anchor_max_body_pos_rate = float(rospy.get_param(
-            "~link4_anchor_max_body_pos_rate", 0.15))
+            "~link4_anchor_max_body_pos_rate", 0.4))
         self.link4_anchor_max_body_rpy_rate = float(rospy.get_param(
-            "~link4_anchor_max_body_rpy_rate", 0.25))
+            "~link4_anchor_max_body_rpy_rate", 0.8))
         self.enable_link4_anchor_body_safety = rospy.get_param(
             "~enable_link4_anchor_body_safety", True)
         # Keep these below DRAGON's attitude failsafe (about 1.0 rad in the simulator
@@ -270,15 +270,15 @@ class ControlJoints:
         self.link4_anchor_max_cog_z = float(rospy.get_param(
             "~link4_anchor_max_cog_z", 2.5))
         self.link4_anchor_max_cog_xy_offset = float(rospy.get_param(
-            "~link4_anchor_max_cog_xy_offset", 0.5))
+            "~link4_anchor_max_cog_xy_offset", 0.9))
         self.link4_anchor_max_abs_yaw_delta = abs(float(rospy.get_param(
-            "~link4_anchor_max_abs_yaw_delta", np.deg2rad(60.0))))
+            "~link4_anchor_max_abs_yaw_delta", np.deg2rad(120.0))))
         self.enable_link4_anchor_tracking_safety = rospy.get_param(
             "~enable_link4_anchor_tracking_safety", True)
         self.link4_anchor_max_cog_tracking_error = abs(float(rospy.get_param(
             "~link4_anchor_max_cog_tracking_error", 0.2)))
         self.link4_anchor_max_yaw_tracking_error = abs(float(rospy.get_param(
-            "~link4_anchor_max_yaw_tracking_error", np.deg2rad(20.0))))
+            "~link4_anchor_max_yaw_tracking_error", np.deg2rad(30.0))))
         self.link4_anchor_max_tracking_roll = abs(float(rospy.get_param(
             "~link4_anchor_max_tracking_roll", np.deg2rad(15.0))))
         self.link4_anchor_max_tracking_pitch = abs(float(rospy.get_param(
