@@ -144,10 +144,10 @@ class ControlJoints:
             rospy.logwarn("distal: no valid source->target mapping; no joint will move")
 
         # Route elbow flexion to DRAGON joint2 using the upper-arm roll ratio.
-        # The roll input is saturated to +/-90deg and linearly allocates elbow
-        # flexion as pitch:yaw = |roll|:(pi/2 - |roll|). The legacy zone params
-        # are still accepted for launch/API compatibility but no longer shape the
-        # allocation curve.
+        # The roll delta from its reference is saturated to +/-90deg and linearly
+        # allocates elbow flexion as pitch:yaw = |roll|:(pi/2 - |roll|). The roll
+        # sign is preserved on the yaw side so left/right roll directions remain
+        # distinguishable.
         self.enable_elbow_roll_switching = rospy.get_param("~enable_elbow_roll_switching", True)
         self.elbow_source_joint = rospy.get_param(
             "~elbow_source_joint", "elbow_flexion_extension_joint")
@@ -157,10 +157,7 @@ class ControlJoints:
             "~elbow_pitch_target_joint", "joint2_pitch")
         self.elbow_yaw_target_joint = rospy.get_param(
             "~elbow_yaw_target_joint", "joint2_yaw")
-        self.elbow_roll_pitch_zone = abs(float(rospy.get_param(
-            "~elbow_roll_pitch_zone", np.deg2rad(15.0))))
-        self.elbow_roll_yaw_zone = abs(float(rospy.get_param(
-            "~elbow_roll_yaw_zone", np.deg2rad(15.0))))
+        self.elbow_roll_offset = float(rospy.get_param("~elbow_roll_offset", 0.0))
         self.elbow_pitch_sign = float(rospy.get_param("~elbow_pitch_sign", 1.0))
         self.elbow_yaw_sign = float(rospy.get_param("~elbow_yaw_sign", 1.0))
         self.elbow_pitch_scale = float(rospy.get_param("~elbow_pitch_scale", 1.0))
@@ -169,9 +166,10 @@ class ControlJoints:
         self.elbow_yaw_offset = float(rospy.get_param("~elbow_yaw_offset", 0.0))
 
         # Same roll-plane routing for wrist flexion: saturated upper-arm and
-        # forearm roll deltas estimate the palm orientation. The wrist bend vector
-        # is rotated by theta + phi, so joint1 pitch/yaw weights are cos/sin of
-        # that saturated roll sum.
+        # forearm roll deltas estimate the palm orientation. Each delta is formed
+        # against its reference before saturation; the wrist bend vector is then
+        # rotated by theta + phi, so joint1 pitch/yaw weights are cos/sin of that
+        # saturated roll sum.
         self.enable_wrist_roll_switching = rospy.get_param("~enable_wrist_roll_switching", True)
         self.wrist_source_joint = rospy.get_param(
             "~wrist_source_joint", "wrist_flexion_extension_joint")
@@ -187,12 +185,9 @@ class ControlJoints:
             "~wrist_pitch_target_joint", "joint1_pitch")
         self.wrist_yaw_target_joint = rospy.get_param(
             "~wrist_yaw_target_joint", "joint1_yaw")
-        self.wrist_roll_parallel_offset = float(rospy.get_param(
-            "~wrist_roll_parallel_offset", 0.0))
-        self.wrist_roll_pitch_zone = abs(float(rospy.get_param(
-            "~wrist_roll_pitch_zone", np.deg2rad(45.0))))
-        self.wrist_roll_yaw_zone = abs(float(rospy.get_param(
-            "~wrist_roll_yaw_zone", np.deg2rad(45.0))))
+        default_wrist_offsets = [0.0] * len(self.wrist_roll_joints)
+        self.wrist_roll_offsets = self.normalized_param_list(
+            "~wrist_roll_offsets", default_wrist_offsets, len(self.wrist_roll_joints))
         self.wrist_pitch_sign = float(rospy.get_param("~wrist_pitch_sign", 1.0))
         self.wrist_yaw_sign = float(rospy.get_param("~wrist_yaw_sign", 1.0))
         self.wrist_pitch_scale = float(rospy.get_param("~wrist_pitch_scale", 1.0))
@@ -206,7 +201,7 @@ class ControlJoints:
         # "all pitch" default until apply_roll_plane_switching runs at least once.
         self.switch_diag = {
             "wrist": {"r": 0.0, "rho": 0.0, "c_pitch": 1.0, "c_yaw": 0.0},
-            "elbow": {"r": 0.0, "rho": 0.0, "c_pitch": 1.0, "c_yaw": 0.0},
+            "elbow": {"r": 0.0, "rho": 1.0, "c_pitch": 0.0, "c_yaw": 1.0},
         }
 
         # --- distal link4 anchor -------------------------------------------------
@@ -425,22 +420,23 @@ class ControlJoints:
                 "{}<-clamp({:+.1f}*{:.2f}*{}{:+.3f})".format(dst, sign, scale, src, offset)
                 for src, dst, sign, scale, offset in self.distal_map))
             rospy.loginfo(
-                "distal elbow roll allocation: enable=%s, elbow=%s, roll=%s, pitch=%s, yaw=%s, limit=%.3f rad",
+                "distal elbow roll allocation: enable=%s, elbow=%s, roll=%s, pitch=%s, yaw=%s, roll_offset=%.3f rad, limit=%.3f rad",
                 self.enable_elbow_roll_switching,
                 self.elbow_source_joint,
                 self.elbow_roll_joint,
                 self.elbow_pitch_target_joint,
                 self.elbow_yaw_target_joint,
+                self.elbow_roll_offset,
                 np.pi / 2.0)
             rospy.loginfo(
-                "distal wrist roll allocation: enable=%s, wrist=%s, yaw_source=%s, roll=%s, pitch=%s, yaw=%s, offset=%.3f rad, per-roll-limit=%.3f rad",
+                "distal wrist roll allocation: enable=%s, wrist=%s, yaw_source=%s, roll=%s, pitch=%s, yaw=%s, roll_offsets=%s, per-roll-limit=%.3f rad",
                 self.enable_wrist_roll_switching,
                 self.wrist_source_joint,
                 self.wrist_yaw_source_joint,
                 "+".join(self.wrist_roll_joints),
                 self.wrist_pitch_target_joint,
                 self.wrist_yaw_target_joint,
-                self.wrist_roll_parallel_offset,
+                ["{:.3f}".format(v) for v in self.wrist_roll_offsets],
                 np.pi / 2.0)
         rospy.loginfo("joint mapping: %s",
                       ", ".join("{}<-{}".format(dst, src)
@@ -505,6 +501,17 @@ class ControlJoints:
 
     def clamp_target(self, target):
         return [self.clamp(v) for v in target]
+
+    def normalized_param_list(self, name, default, size):
+        values = rospy.get_param(name, default)
+        if isinstance(values, (int, float)):
+            values = [float(values)]
+        values = list(values)
+        normalized = []
+        for i in range(size):
+            fallback = default[i] if i < len(default) else 0.0
+            normalized.append(float(values[i]) if i < len(values) else float(fallback))
+        return normalized
 
     def maybe_capture_baselink_roll_neutral(self, force=False):
         if not self.enable_baselink_roll_mapping:
@@ -644,8 +651,7 @@ class ControlJoints:
             self.elbow_roll_joint,
             self.elbow_pitch_target_joint,
             self.elbow_yaw_target_joint,
-            self.elbow_roll_pitch_zone,
-            self.elbow_roll_yaw_zone,
+            [self.elbow_roll_offset],
             self.elbow_pitch_sign,
             self.elbow_yaw_sign,
             self.elbow_pitch_scale,
@@ -665,8 +671,7 @@ class ControlJoints:
             self.wrist_roll_joints,
             self.wrist_pitch_target_joint,
             self.wrist_yaw_target_joint,
-            self.wrist_roll_pitch_zone,
-            self.wrist_roll_yaw_zone,
+            self.wrist_roll_offsets,
             self.wrist_pitch_sign,
             self.wrist_yaw_sign,
             self.wrist_pitch_scale,
@@ -676,16 +681,14 @@ class ControlJoints:
             "wrist",
             self.wrist_yaw_source_joint,
             self.wrist_yaw_source_sign,
-            self.wrist_yaw_source_scale,
-            self.wrist_roll_parallel_offset)
+            self.wrist_yaw_source_scale)
 
     def apply_roll_plane_switching(self, target, enabled, source_joint, roll_joint,
                                    pitch_target_joint, yaw_target_joint,
-                                   pitch_zone, yaw_zone, pitch_sign, yaw_sign,
+                                   roll_offsets, pitch_sign, yaw_sign,
                                    pitch_scale, yaw_scale, pitch_offset, yaw_offset,
                                    label, yaw_source_joint=None,
-                                   yaw_source_sign=1.0, yaw_source_scale=1.0,
-                                   roll_offset=0.0):
+                                   yaw_source_sign=1.0, yaw_source_scale=1.0):
         if not enabled:
             return
         if (pitch_target_joint not in self.joint_index or
@@ -715,36 +718,30 @@ class ControlJoints:
                 [value is not None for value in roll_values])
             return
 
-        roll_components = [self.saturate_roll_angle(value) for value in roll_values]
-        roll_sum = self.wrap(sum(roll_components) - roll_offset)
+        roll_offsets = list(roll_offsets)
+        roll_deltas = []
+        for i, value in enumerate(roll_values):
+            offset = roll_offsets[i] if i < len(roll_offsets) else 0.0
+            roll_deltas.append(value - offset)
+        roll_components = [self.saturate_roll_angle(delta) for delta in roll_deltas]
+        roll_sum = sum(roll_components)
         if label == "wrist":
             # Each roll contribution is saturated independently to +/-90deg, so
             # the summed wrist allocation angle covers the requested +/-180deg range.
-            allocation_angle = self.wrap(roll_sum)
-            pitch_weight = np.cos(allocation_angle)
-            yaw_weight = np.sin(allocation_angle)
+            pitch_weight = np.cos(roll_sum)
+            yaw_weight = np.sin(roll_sum)
             denom = abs(pitch_weight) + abs(yaw_weight)
             yaw_ratio = abs(yaw_weight) / denom if denom > 1e-9 else 0.0
         elif label == "elbow":
             # Elbow flexion is linearly allocated by upper-arm roll percentage:
             # pitch:yaw = theta:(pi/2 - theta), theta in [0, pi/2].
-            theta = self.saturate_half_pi(abs(self.wrap(sum(roll_components))))
+            signed_theta = roll_components[0] if roll_components else 0.0
+            theta = abs(signed_theta)
             pitch_weight = theta / (np.pi / 2.0)
-            yaw_weight = 1.0 - pitch_weight
-            yaw_ratio = yaw_weight
-            roll_sum = theta
-        else:
-            abs_roll = abs(self.wrap(roll_sum))
-            if abs_roll <= pitch_zone:
-                yaw_ratio = 0.0
-            elif abs_roll >= yaw_zone:
-                yaw_ratio = 1.0
-            else:
-                width = max(1e-9, yaw_zone - pitch_zone)
-                yaw_ratio = self.smoothstep((abs_roll - pitch_zone) / width)
-            theta = yaw_ratio * np.pi / 2.0
-            pitch_weight = np.cos(theta)
-            yaw_weight = np.sin(theta)
+            yaw_direction = -1.0 if signed_theta < 0.0 else 1.0
+            yaw_weight = yaw_direction * (1.0 - pitch_weight)
+            yaw_ratio = abs(yaw_weight)
+            roll_sum = signed_theta
 
         # Treat pitch/yaw as a bend vector. For elbow the yaw component is zero.
         # For wrist, abduction/adduction supplies the initial yaw component and
@@ -829,17 +826,7 @@ class ControlJoints:
 
     @staticmethod
     def saturate_roll_angle(angle):
-        wrapped = np.arctan2(np.sin(angle), np.cos(angle))
-        return ControlJoints.saturate_half_pi(wrapped)
-
-    @staticmethod
-    def saturate_half_pi(angle):
         return max(-np.pi / 2.0, min(np.pi / 2.0, angle))
-
-    @staticmethod
-    def smoothstep(x):
-        x = max(0.0, min(1.0, float(x)))
-        return x * x * (3.0 - 2.0 * x)
 
     def geometric_relative(self, joints):
         # Inter-segment (child - parent) azimuth/elevation per arm joint, ordered

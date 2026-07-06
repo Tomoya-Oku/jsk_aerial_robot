@@ -95,23 +95,19 @@
   <arg name="mapping_reference" default="$(arg joint_pairing_reference)"/>
   <arg name="joint_pairing_scale" default="1.0"/>
   <!-- Elbow-plane mapping for distal mode: saturate upper-arm roll to +/-90deg
-       and allocate elbow flexion as joint2 pitch:yaw = theta:(pi/2 - theta).
-       The zone args are kept only for compatibility with old launch overrides. -->
+       from its reference and allocate elbow flexion as joint2 pitch:yaw =
+       theta:(pi/2 - theta). The roll sign is preserved on joint2_yaw. -->
   <arg name="enable_elbow_roll_switching" default="true"/>
-  <arg name="elbow_roll_pitch_zone" default="0.2617993877991494"/>
-  <arg name="elbow_roll_yaw_zone" default="0.2617993877991494"/>
+  <arg name="elbow_roll_offset" default="0.0"/>
   <arg name="elbow_pitch_sign" default="1.0"/>
   <arg name="elbow_yaw_sign" default="1.0"/>
   <arg name="elbow_pitch_scale" default="1.0"/>
   <arg name="elbow_yaw_scale" default="1.0"/>
   <!-- Wrist-plane mapping for distal mode: saturate upper-arm and wrist rolls to
-       +/-90deg each, then allocate wrist flexion to joint1 pitch/yaw with
-       cos(theta + phi):sin(theta + phi). The zone args are kept only for
-       compatibility with old launch overrides. -->
+       +/-90deg after subtracting each reference, then allocate wrist flexion to
+       joint1 pitch/yaw with cos(theta + phi):sin(theta + phi). -->
   <arg name="enable_wrist_roll_switching" default="true"/>
-  <arg name="wrist_roll_parallel_offset" default="0.0"/>
-  <arg name="wrist_roll_pitch_zone" default="0.7853981633974483"/>
-  <arg name="wrist_roll_yaw_zone" default="0.7853981633974483"/>
+  <arg name="wrist_roll_offsets" default="[0.0, 0.0]"/>
   <arg name="wrist_pitch_sign" default="1.0"/>
   <arg name="wrist_yaw_sign" default="1.0"/>
   <arg name="wrist_pitch_scale" default="1.0"/>
@@ -316,17 +312,14 @@
     <rosparam param="distal_scales">[1.0, 1.0, 1.0, 1.0, 1.0]</rosparam>
     <rosparam param="distal_offsets">[0.0, 0.0, 0.0, 0.0, 0.0]</rosparam>
     <param name="enable_elbow_roll_switching" value="$(arg enable_elbow_roll_switching)"/>
-    <param name="elbow_roll_pitch_zone" value="$(arg elbow_roll_pitch_zone)"/>
-    <param name="elbow_roll_yaw_zone" value="$(arg elbow_roll_yaw_zone)"/>
+    <param name="elbow_roll_offset" value="$(arg elbow_roll_offset)"/>
     <param name="elbow_pitch_sign" value="$(arg elbow_pitch_sign)"/>
     <param name="elbow_yaw_sign" value="$(arg elbow_yaw_sign)"/>
     <param name="elbow_pitch_scale" value="$(arg elbow_pitch_scale)"/>
     <param name="elbow_yaw_scale" value="$(arg elbow_yaw_scale)"/>
     <param name="enable_wrist_roll_switching" value="$(arg enable_wrist_roll_switching)"/>
     <rosparam param="wrist_roll_joints">["upper_arm_external_internal_rotation_joint", "wrist_supination_joint"]</rosparam>
-    <param name="wrist_roll_parallel_offset" value="$(arg wrist_roll_parallel_offset)"/>
-    <param name="wrist_roll_pitch_zone" value="$(arg wrist_roll_pitch_zone)"/>
-    <param name="wrist_roll_yaw_zone" value="$(arg wrist_roll_yaw_zone)"/>
+    <rosparam param="wrist_roll_offsets" subst_value="true">$(arg wrist_roll_offsets)</rosparam>
     <param name="wrist_pitch_sign" value="$(arg wrist_pitch_sign)"/>
     <param name="wrist_yaw_sign" value="$(arg wrist_yaw_sign)"/>
     <param name="wrist_pitch_scale" value="$(arg wrist_pitch_scale)"/>
