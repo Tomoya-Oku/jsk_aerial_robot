@@ -99,9 +99,14 @@ class ControlJoints:
         # otherwise. "circular" keeps mapped commands near DRAGON's circular shape.
         self.offsets = rospy.get_param("~offsets", default_offsets)
 
-        # --- distal mapping (absolute match of distal arm joints) ----------------
-        # Each listed human arm joint is matched in ABSOLUTE angle to a DRAGON joint:
-        #   target_joint = clamp(sign * scale * source_angle + offset)  (no neutral).
+        # --- distal mapping (per-joint match of distal arm joints) ---------------
+        # Each listed human arm joint drives one DRAGON joint:
+        #   target_joint = clamp(ref + sign * scale * source_angle + offset).
+        # With ~distal_relative (default true) source_angle is the delta from the
+        # engage-time neutral pose and ref is the engage-time feasible target, so
+        # engaging is bumpless and the servo zero-point bias (assembly tick 2048
+        # != anatomical zero) cancels; distal_relative:=false restores the legacy
+        # absolute-angle match (ref = 0, raw source angle).
         # Default: wrist flexion (beckoning) -> joint1_pitch, wrist abduction (sweep
         # parallel to the palm) -> joint1_yaw, elbow flexion -> joint2 (pitch/yaw
         # selected by upper-arm roll below), shoulder flexion -> joint3_pitch,
@@ -142,6 +147,10 @@ class ControlJoints:
             self.distal_map.append((distal_sources[k], dst, sign, scale, offset))
         if self.mapping_mode == "distal" and not self.distal_map:
             rospy.logwarn("distal: no valid source->target mapping; no joint will move")
+        self.distal_relative = rospy.get_param("~distal_relative", True)
+        self.distal_neutral = {}
+        self.distal_ref_pose = None
+        self.want_capture_distal_neutral = True
 
         # Route elbow flexion to DRAGON joint2 using the upper-arm roll ratio.
         # The saturated roll delta r from its reference linearly allocates elbow
@@ -453,7 +462,9 @@ class ControlJoints:
         rospy.loginfo("mapping_mode: %s, mapping_reference: %s",
                       self.mapping_mode, self.mapping_reference)
         if self.mapping_mode == "distal":
-            rospy.loginfo("distal absolute match: %s", ", ".join(
+            rospy.loginfo("distal relative mapping (engage-time neutral capture): %s",
+                          self.distal_relative)
+            rospy.loginfo("distal match: %s", ", ".join(
                 "{}<-clamp({:+.1f}*{:.2f}*{}{:+.3f})".format(dst, sign, scale, src, offset)
                 for src, dst, sign, scale, offset in self.distal_map))
             rospy.loginfo(
@@ -543,6 +554,9 @@ class ControlJoints:
         if mode != self.teleop_mode:
             rospy.loginfo("teleop mode: %s -> %s", self.teleop_mode, mode)
             self.teleop_mode = mode
+            if mode == "teleoperation":
+                # Re-anchor the relative distal mapping at every engage.
+                self.want_capture_distal_neutral = True
 
     def clamp(self, x):
         return max(-self.joint_limit, min(self.joint_limit, x))
@@ -605,6 +619,60 @@ class ControlJoints:
             total = max(-self.baselink_roll_limit, min(self.baselink_roll_limit, total))
         return total
 
+    def distal_source_joint_names(self):
+        # Every device joint the distal mapping reads, for the neutral capture.
+        names = {src for src, _dst, _sign, _scale, _offset in self.distal_map}
+        if self.enable_elbow_roll_switching:
+            names.add(self.elbow_source_joint)
+            names.add(self.elbow_roll_joint)
+        if self.enable_wrist_roll_switching:
+            names.add(self.wrist_source_joint)
+            names.update(self.wrist_roll_joints)
+            names.add(self.wrist_yaw_source_joint)
+        names.discard("")
+        names.discard(None)
+        return names
+
+    def maybe_capture_distal_neutral(self):
+        if self.mapping_mode != "distal" or not self.distal_relative:
+            return
+        if not self.want_capture_distal_neutral:
+            return
+        needed = self.distal_source_joint_names()
+        missing = [name for name in needed if name not in self.latest_device_joints]
+        if missing:
+            rospy.logwarn_throttle(
+                2.0, "distal neutral capture waiting for joints: %s", ", ".join(missing))
+            return
+        self.distal_neutral = {name: self.latest_device_joints[name] for name in needed}
+        # The engage-time feasible target anchors the deformation, so the command
+        # is continuous across the mode switch (bumpless engage).
+        self.distal_ref_pose = list(self.last_feasible_target)
+        self.want_capture_distal_neutral = False
+        rospy.loginfo("Captured distal neutral (%d joints), ref pose: %s",
+                      len(self.distal_neutral),
+                      ", ".join("%.2f" % v for v in self.distal_ref_pose))
+
+    def device_value(self, name):
+        # Device joint angle as the distal mapping input. In relative mode the
+        # engage-time neutral is subtracted; until the capture completes the
+        # joint reads as missing, so the mapping holds instead of jumping.
+        if not name:
+            return None
+        value = self.latest_device_joints.get(name)
+        if value is None or self.mapping_mode != "distal" or not self.distal_relative:
+            return value
+        neutral = self.distal_neutral.get(name)
+        if neutral is None:
+            return None
+        return value - neutral
+
+    def distal_ref(self, joint_name):
+        # DRAGON-side anchor of the relative deformation (0 in absolute mode).
+        if self.distal_relative and self.distal_ref_pose is not None:
+            return self.distal_ref_pose[self.joint_index[joint_name]]
+        return 0.0
+
     def device_joint_cb(self, msg):
         self.latest_device_joints = {
             name: float(pos) for name, pos in zip(msg.name, msg.position)
@@ -633,16 +701,20 @@ class ControlJoints:
 
     def robot_flight_state_cb(self, msg):
         hovering = int(msg.data) == self.hover_flight_state
-        # Capture the link4 anchor at the moment hovering starts.
+        # Capture the link4 anchor at the moment hovering starts. The distal
+        # neutral is recaptured too, so the mapping neutral matches the arm pose
+        # at the moment joint commands actually start flowing.
         if hovering and not self.robot_hovering:
             self.want_capture_anchor = True
             self.want_capture_baselink_roll_neutral = True
+            self.want_capture_distal_neutral = True
         self.robot_hovering = hovering
 
     def recapture_anchor_cb(self, msg):
         self.want_capture_anchor = True
         self.want_capture_baselink_roll_neutral = True
-        rospy.loginfo("link4 anchor recapture requested")
+        self.want_capture_distal_neutral = True
+        rospy.loginfo("link4 anchor / distal neutral recapture requested")
 
     def force_threshold_cb(self, msg):
         if len(msg.data) > 0:
@@ -684,16 +756,19 @@ class ControlJoints:
         return target
 
     def distal_target(self):
-        # Absolute match: each mapped DRAGON joint directly tracks its human arm joint
-        # angle (clamp(sign*scale*source)), with no neutral capture. Every unmapped
-        # joint is held at its last commanded (feasible) value, so only the mapped
-        # joints move.
+        # Per-joint match: target = clamp(ref + sign*scale*source + offset). In
+        # relative mode source is the delta from the engage-time neutral and ref
+        # the engage-time feasible target; in absolute mode source is the raw
+        # device angle and ref is 0. Unmapped (or not yet captured) joints hold
+        # their last commanded (feasible) value.
+        self.maybe_capture_distal_neutral()
         target = list(self.last_feasible_target)
         for src, dst, sign, scale, offset in self.distal_map:
-            val = self.latest_device_joints.get(src)
+            val = self.device_value(src)
             if val is None:
                 continue
-            target[self.joint_index[dst]] = self.clamp(sign * scale * val + offset)
+            target[self.joint_index[dst]] = self.clamp(
+                self.distal_ref(dst) + sign * scale * val + offset)
         self.apply_elbow_roll_switching(target)
         self.apply_wrist_roll_switching(target)
         return target
@@ -756,12 +831,12 @@ class ControlJoints:
                 yaw_target_joint)
             return
 
-        source = self.latest_device_joints.get(source_joint)
+        source = self.device_value(source_joint)
         roll_joint_names = roll_joint if isinstance(roll_joint, list) else [roll_joint]
-        roll_values = [self.latest_device_joints.get(name) for name in roll_joint_names]
+        roll_values = [self.device_value(name) for name in roll_joint_names]
         yaw_source = None
         if yaw_source_joint:
-            yaw_source = self.latest_device_joints.get(yaw_source_joint)
+            yaw_source = self.device_value(yaw_source_joint)
         if (source is None or any(value is None for value in roll_values) or
                 (yaw_source_joint and yaw_source is None)):
             rospy.logwarn_throttle(
@@ -805,8 +880,12 @@ class ControlJoints:
         yaw_component = 0.0
         if yaw_source_joint:
             yaw_component = yaw_source_sign * yaw_source_scale * yaw_source
-        pitch = pitch_offset + pitch_weight * pitch_component - yaw_weight * yaw_component
-        yaw = yaw_offset + yaw_weight * yaw_sign * yaw_scale * source + pitch_weight * yaw_component
+        # The rotated bend delta is superposed on the engage-time reference shape
+        # (distal_ref() is 0 in absolute mode).
+        pitch = (self.distal_ref(pitch_target_joint) + pitch_offset +
+                 pitch_weight * pitch_component - yaw_weight * yaw_component)
+        yaw = (self.distal_ref(yaw_target_joint) + yaw_offset +
+               yaw_weight * yaw_sign * yaw_scale * source + pitch_weight * yaw_component)
 
         target[self.joint_index[pitch_target_joint]] = self.clamp(pitch)
         target[self.joint_index[yaw_target_joint]] = self.clamp(yaw)
