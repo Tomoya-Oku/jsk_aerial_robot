@@ -144,10 +144,11 @@ class ControlJoints:
             rospy.logwarn("distal: no valid source->target mapping; no joint will move")
 
         # Route elbow flexion to DRAGON joint2 using the upper-arm roll ratio.
-        # The roll delta from its reference is saturated to +/-90deg and linearly
-        # allocates elbow flexion as pitch:yaw = |roll|:(pi/2 - |roll|). The roll
-        # sign is preserved on the yaw side so left/right roll directions remain
-        # distinguishable.
+        # The saturated roll delta r from its reference linearly allocates elbow
+        # flexion as pitch:yaw = r:(pi/2 - |r|): the roll sign is carried on the
+        # pitch side (the bend plane flips with the roll direction) and the yaw
+        # weight is even in r, so the allocation stays continuous when the roll
+        # crosses its reference (a sign on the yaw side would jump by 2*flexion).
         self.enable_elbow_roll_switching = rospy.get_param("~enable_elbow_roll_switching", True)
         self.elbow_source_joint = rospy.get_param(
             "~elbow_source_joint", "elbow_flexion_extension_joint")
@@ -787,13 +788,13 @@ class ControlJoints:
             denom = abs(pitch_weight) + abs(yaw_weight)
             yaw_ratio = abs(yaw_weight) / denom if denom > 1e-9 else 0.0
         elif label == "elbow":
-            # Elbow flexion is linearly allocated by upper-arm roll percentage:
-            # pitch:yaw = theta:(pi/2 - theta), theta in [0, pi/2].
+            # Elbow flexion is linearly allocated by the saturated upper-arm roll r:
+            # pitch:yaw = r:(pi/2 - |r|). The pitch weight is odd in r (the bend
+            # plane flips with the roll direction) and the yaw weight is even, so
+            # the allocation is continuous across r = 0.
             signed_theta = roll_components[0] if roll_components else 0.0
-            theta = abs(signed_theta)
-            pitch_weight = theta / (np.pi / 2.0)
-            yaw_direction = -1.0 if signed_theta < 0.0 else 1.0
-            yaw_weight = yaw_direction * (1.0 - pitch_weight)
+            pitch_weight = signed_theta / (np.pi / 2.0)
+            yaw_weight = 1.0 - abs(signed_theta) / (np.pi / 2.0)
             yaw_ratio = abs(yaw_weight)
             roll_sum = signed_theta
 

@@ -93,8 +93,9 @@
   <arg name="mapping_reference" default="$(arg joint_pairing_reference)"/>
   <arg name="joint_pairing_scale" default="1.0"/>
   <!-- Elbow-plane mapping for distal mode: saturate upper-arm roll to +/-90deg
-       from its reference and allocate elbow flexion as joint2 pitch:yaw =
-       theta:(pi/2 - theta). The roll sign is preserved on joint2_yaw. -->
+       from its reference (r) and allocate elbow flexion as joint2 pitch:yaw =
+       r:(pi/2 - |r|). The roll sign is carried on joint2_pitch, so joint2_yaw
+       stays continuous across the neutral roll. -->
   <arg name="enable_elbow_roll_switching" default="true"/>
   <arg name="elbow_roll_offset" default="0.0"/>
   <arg name="elbow_pitch_sign" default="1.0"/>
