@@ -96,8 +96,8 @@ rosrun dracomancer keyboard_baseline.py _enable_feasibility_gate:=false
 Dracomancer 側のダミー入力で試す場合は `dracomancer bringup.launch rm:=false sim:=true`
 （GUI スライダ → `/dracomancer/joint_states`）+ `teleoperation.launch
 enable_feasibility_gate:=false enable_link4_anchor:=false` を併用する。
-`teleoperation.launch` 単体で servo から `/dracomancer/joint_states` を作る場合だけ
-`enable_servo_to_joint_states:=true` を付ける。
+`teleoperation.launch` は `/dracomancer/joint_states` を生成しないため、先に
+`bringup.launch` 側を起動して入力を用意する。
 
 ### 試行管理サービス
 

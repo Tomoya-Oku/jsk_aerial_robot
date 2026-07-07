@@ -12,13 +12,6 @@
   <arg name="js_raw_topic" default="/joystick/raw"/>
   <arg name="js_calibrated_topic" default="/$(arg device_ns)/joystick/calibrated"/>
   <arg name="device_joint_topic" default="/$(arg device_ns)/joint_states"/>
-  <arg name="servo_topic" default="/dracomancer/servo/states"/>
-  <!-- bringup.launch is the owner of /<device_ns>/joint_states in the normal
-       workflow. Keep this off by default so rm:=false fake joint_states are not
-       overwritten by a second servo converter with no servo input. Enable only
-       when running teleoperation.launch without dracomancer bringup.launch. -->
-  <arg name="enable_servo_to_joint_states" default="false"/>
-  <arg name="servo_to_joint_states_rate" default="40.0"/>
   <!-- Predictive shape-feasibility gate (teleoperation mode).
        shape_feasibility_node runs in the controlled robot's namespace so its
        robot model can read <robot_ns>/robot_description.
@@ -245,16 +238,6 @@
     <param name="save_yaml" value="true"/>
     <param name="use_saved_calibration" value="true"/>
     <param name="yaml_path" value="$(find dracomancer)/config/joystick_calibration.yaml"/>
-  </node>
-
-  <node pkg="dracomancer"
-        type="convert_servo_to_joint_states.py"
-        name="$(arg device_ns)_convert_servo_to_joint_states"
-        output="screen"
-        if="$(arg enable_servo_to_joint_states)">
-    <param name="servo_topic" value="$(arg servo_topic)"/>
-    <param name="joint_states_topic" value="$(arg device_joint_topic)"/>
-    <param name="rate" value="$(arg servo_to_joint_states_rate)"/>
   </node>
 
   <!-- Position Control -->

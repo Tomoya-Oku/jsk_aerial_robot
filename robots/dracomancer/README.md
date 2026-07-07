@@ -14,12 +14,12 @@ flowchart TB
     subgraph BU["bringup.launch（Dracomancer 側）"]
         URDF["URDF / TF"]
         SB["servo_bridge または publish_fake_joint_states"]
+        S2J["サーボ → 関節状態 変換"]
         FC["Spinal FC / IMU 接続<br/>（任意）"]
         WEB["Web Console<br/>（任意）"]
     end
     subgraph TO["teleoperation.launch（操作変換）"]
         CALIB["joystick 較正"]
-        S2J["サーボ → 関節状態 変換"]
         CP["位置指令 control_position.py"]
         AC["姿勢指令 control_orientation.py"]
         CJ["関節角指令 control_joint_angle.py"]
@@ -38,7 +38,7 @@ flowchart TB
 | ノード | 役割 | 主な入力 | 主な出力 |
 | --- | --- | --- | --- |
 | `calibrate_joystick.py` | 操縦桿の生値を較正して正規化 | `/joystick/raw` | `/dracomancer/joystick/calibrated` |
-| `convert_servo_to_joint_states.py` | サーボtickをラジアンの関節状態へ変換 | `/dracomancer/servo/states` | `/dracomancer/joint_states` |
+| `convert_servo_to_joint_states.py` | `bringup.launch` でサーボtickをラジアンの関節状態へ変換 | `/dracomancer/servo/states` | `/dracomancer/joint_states` |
 | `control_position.py` | 操縦桿とIMUから DRAGON の速度指令を生成 | joystick, IMU, flight_state | `/dragon/uav/nav` |
 | `control_orientation.py` | 操縦桿から姿勢指令を生成 | joystick, flight_state | `/dragon/final_target_baselink_rpy` |
 | `control_joint_angle.py` | 腕関節から DRAGON の形状指令を生成（候補姿勢のフィージビリティで変形可否を判定） | joint_states, shape_feasibility, threshold, flight_state | `/dragon/joints_ctrl`, `/dracomancer/shape_control_error`, `/dracomancer/candidate/joint_target`, `/dracomancer/joint_map/switch_ratio` |
@@ -70,7 +70,7 @@ flowchart TB
     end
     subgraph JOINT["形状系統（腕の動き → 機体関節）"]
         B1["Dracomancer サーボ状態"] --> B2["/dracomancer/servo/states"]
-        B2 --> B3["convert_servo_to_joint_states.py"]
+        B2 --> B3["convert_servo_to_joint_states.py<br/>（bringup.launch）"]
         B3 --> B4["/dracomancer/joint_states"]
         B4 --> B5["control_joint_angle.py"]
         B5 --> B6["/dragon/joints_ctrl"]
@@ -580,7 +580,11 @@ ROS master は親機PCに固定します。子機PCでは `ROS_MASTER_URI` を�
 roslaunch dracomancer bringup.launch rm:=false sim:=true headless:=false
 ```
 
-通常のテレオペレーション:
+通常のテレオペレーション（別端末で順に起動）:
+
+```bash
+roslaunch dracomancer bringup.launch
+```
 
 ```bash
 roslaunch dracomancer teleoperation.launch
@@ -645,7 +649,6 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | `enable_joystick_serial` | `false` | rosserial の joystick serial node を起動する |
 | `js_raw_topic` | `/joystick/raw` | 操縦桿生値 |
 | `js_calibrated_topic` | `/dracomancer/joystick/calibrated` | 較正済み操縦桿 |
-| `enable_servo_to_joint_states` | `false` | サーボ状態をDracomancer関節状態へ変換する。通常はbringup.launch側が担当するため既定OFF |
 | `enable_position_control` | `false` | `/dragon/uav/nav`（操縦桿による移動）を送る。既定 OFF（落下防止のため。下記「既知の課題」参照） |
 | `enable_attitude_control` | `false` | `/dragon/final_target_baselink_rpy` を送る |
 | `enable_joint_angle_control` | `true` | `/dragon/joints_ctrl` を送る |
