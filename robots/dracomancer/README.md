@@ -207,7 +207,7 @@ Dracomancer の腕関節を、DRAGON を1本の直列アームとみなして対
 | --- | --- |
 | `joint_pairing` | 3つの屈曲関節を DRAGON の3つの yaw に1:1対応、pitch は 0 固定で平面保持 |
 | `geometric` | 腕の順運動学からリンク方向ベクトルを求め、面内(yaw)/面外(pitch)成分に分解 |
-| `distal`（**既定**） | 遠位腕関節（手首・肘）を DRAGON 関節へ対応させる（既定 `distal_relative=true` はエンゲージ時キャプチャの相対変形、`false` で絶対角一致。手首屈曲→上腕ロール+前腕ロール角に応じてjoint1_pitch/joint1_yawへ配分、肘屈曲→上腕ロール角に応じてjoint2_pitch/joint2_yawへ配分、肩屈曲→joint3_pitch、肩内外転→joint3_yaw。上腕ロール+前腕ロールの差分和はbaselink rollへ加算）。旧名 `elbow_only` も後方互換で可 |
+| `distal`（**既定**） | 遠位腕関節（手首・肘）を DRAGON 関節へ絶対角で一致させる（pitch/yaw配分に使う上腕・前腕ロールのみエンゲージ時中立からの差分。手首屈曲→上腕ロール+前腕ロール角に応じてjoint1_pitch/joint1_yawへ配分、肘屈曲→上腕ロール角に応じてjoint2_pitch/joint2_yawへ配分、肩屈曲→joint3_pitch、肩内外転→joint3_yaw。上腕ロール+前腕ロールの差分和はbaselink rollへ加算）。旧名 `elbow_only` も後方互換で可 |
 
 ### joint_pairing（中期方式）
 
@@ -262,11 +262,11 @@ FK -> 上腕/前腕/手の方向ベクトル
 - 主用途の屈曲ベース面内整形はクリーン。外転・捻りなど面外DOFは、リンク構造オフセットの影響で遠位関節に pitch/yaw 結合が出ることがある（既知の限界、研究比較用）。
 - パラメータ: `geom_chain`, `geom_plane_normal`, `geom_yaw_sign/scale`, `geom_pitch_sign/scale`。
 
-### distal（遠位腕関節の対応写像・**既定**）
+### distal（遠位腕関節の絶対一致・**既定**）
 
-> 旧名 `elbow_only`（後方互換のエイリアスとして引き続き使用可）。肘1自由度だった写像を、手首・肩を加えた**腕関節の対応写像**に一般化したものです。
+> 旧名 `elbow_only`（後方互換のエイリアスとして引き続き使用可）。肘1自由度だった写像を、手首・肩を加えた**腕関節の絶対角一致**に一般化したものです。
 
-人間の腕の各関節を、DRAGON の各関節に対応させます。既定（`distal_relative=true`）は**エンゲージ時キャプチャの相対方式**：teleoperation への切替時（およびホバー開始時・`~recapture_anchor` 受信時）に、その瞬間の腕姿勢を中立、直前の可行 DRAGON 目標（通常は円形の離陸形状）を基準としてキャプチャし、以後は**中立からの腕の変化量**を基準形状へ上乗せします。サーボ零点（組立で決まる tick 2048 の向き）と解剖学的零点のズレが毎回自動で打ち消され、切替時のジャンプも起きません。`distal_relative:=false` で従来の**絶対角一致**（中立記録なし。人間が 90° なら DRAGON も 90°）に戻せます。既定の対応は以下の5つ：
+人間の腕の各関節を、DRAGON の各関節に**絶対角で一致**させます（人間が 90° なら DRAGON も 90°）。ただし **pitch/yaw 配分に使う上腕・前腕ロールのみ**、teleoperation への切替時（およびホバー開始時・`~recapture_anchor` 受信時）にその瞬間の値を中立としてキャプチャし、以後は中立からの差分を配分入力に使います（`capture_roll_neutral` 既定 `true`。ロールサーボの組立零点ズレで配分が飽和端に張り付くのを防ぐ）。既定の対応は以下の5つ：
 
 | 人間の腕関節（source） | DRAGON 関節（target） | 意味 |
 | --- | --- | --- |
@@ -279,17 +279,16 @@ FK -> 上腕/前腕/手の方向ベクトル
 対応リストに無い関節は**直前に指令した値のまま保持され、一切変化しません**。ただし既定では `enable_wrist_roll_switching=true` と `enable_elbow_roll_switching=true` により、`wrist_flexion_extension_joint` は `joint1_pitch` / `joint1_yaw` へ、`elbow_flexion_extension_joint` は `joint2_pitch` / `joint2_yaw` へ、`distal_target_joints` 適用後に再配分されます。
 
 ```text
-target_joint[k] = clamp(ref[k] + sign[k] * scale[k] * source_angle[k] + offset[k],  -joint_limit, joint_limit)
-  distal_relative=true（既定）: source_angle = 腕角度 − エンゲージ時中立, ref = エンゲージ時の可行目標
-  distal_relative=false       : source_angle = 腕の絶対角, ref = 0
+target_joint[k] = clamp(sign[k] * scale[k] * source_angle[k] + offset[k],  -joint_limit, joint_limit)
+  ※ pitch/yaw配分のロール入力のみ r = (ロール角 − エンゲージ時中立) − ロールオフセット（capture_roll_neutral 既定true）
 未対応の関節     = 直前の可行値（last_feasible_target、変化させない）
 ```
 
-- `capture_neutral_on_first_msg` は distal では不使用（distal は独自のエンゲージ時キャプチャを使う。`distal_relative:=false` なら中立記録なしの絶対一致）。
+- `capture_neutral_on_first_msg` は distal では不使用（distal は配分ロールのみエンゲージ時キャプチャ、屈曲・内外転系は中立記録なしの絶対一致）。
 - `distal_signs` 既定は `[1.0, -1.0, 1.0, 1.0, -1.0]`（手首内外転・肩内外転が -1、他は +1。各関節ごとに、DRAGON が逆向きに動く場合に反転）。`distal_scales` 既定 `1.0` で 1:1 角度一致。
-- `distal_offsets` 既定は `[0, 0, 0, 0, 0]`：joint3_pitch は以前の `+π/2` 肩屈曲オフセットを使わない（相対方式ではエンゲージ時キャプチャがサーボ零点ズレを吸収する）。肩内外転の向きは未検証なので sim で要確認。
-- **手首のロール総和配分**（`enable_wrist_roll_switching` 既定 ON）: `wrist_roll_joints`（既定: `upper_arm_external_internal_rotation_joint` + `wrist_supination_joint`）の各ロール角から `wrist_roll_offsets`（既定 `[0, 0]`）を先に引き、各差分を ±90° で飽和する。その和を `alpha = theta + phi` として扱い、手首屈曲と手首内外転の2Dベクトルを `cos(alpha):sin(alpha)` で `joint1_pitch` / `joint1_yaw` へ回転配分する。`alpha > 90°` で `joint1_pitch` 側の符号が反転する挙動は維持する。
-- **肘の上腕ロール配分**（`enable_elbow_roll_switching` 既定 ON）: `upper_arm_external_internal_rotation_joint` から `elbow_roll_offset`（既定0）を先に引き、その差分を ±90° で飽和する（飽和後の値を `r` とする）。肘屈曲を `joint2_pitch:joint2_yaw = r:(π/2 - |r|)` の線形比で配分する。上腕ロールの符号は `joint2_pitch` 側に反映され（ロール方向で曲げ面が反転）、`joint2_yaw` 側の重みは偶関数なので中立ロールをまたいでも連続に変化する。`joint2_yaw` の符号は `elbow_yaw_sign`（既定 `1.0`）で必要に応じて反転できる。
+- `distal_offsets` 既定は `[0, 0, 0, 0, 0]`：joint3_pitch は以前の `+π/2` 肩屈曲オフセットを使わず、`sign=+1` の絶対角一致で扱う（屈曲・内外転系サーボの零点ズレは組立較正または `distal_offsets` で対処する）。肩内外転の向きは未検証なので sim で要確認。
+- **手首のロール総和配分**（`enable_wrist_roll_switching` 既定 ON）: `wrist_roll_joints`（既定: `upper_arm_external_internal_rotation_joint` + `wrist_supination_joint`）の各ロール角から**エンゲージ時中立**と `wrist_roll_offsets`（既定 `[0, 0]`）を先に引き、各差分を ±90° で飽和する。その和を `alpha = theta + phi` として扱い、手首屈曲と手首内外転の2Dベクトルを `cos(alpha):sin(alpha)` で `joint1_pitch` / `joint1_yaw` へ回転配分する。`alpha > 90°` で `joint1_pitch` 側の符号が反転する挙動は維持する。
+- **肘の上腕ロール配分**（`enable_elbow_roll_switching` 既定 ON）: `upper_arm_external_internal_rotation_joint` から**エンゲージ時中立**と `elbow_roll_offset`（既定0）を先に引き、その差分を ±90° で飽和する（飽和後の値を `r` とする）。肘屈曲を `joint2_pitch:joint2_yaw = r:(π/2 - |r|)` の線形比で配分する。上腕ロールの符号は `joint2_pitch` 側に反映され（ロール方向で曲げ面が反転）、`joint2_yaw` 側の重みは偶関数なので中立ロールをまたいでも連続に変化する。`joint2_yaw` の符号は `elbow_yaw_sign`（既定 `1.0`）で必要に応じて反転できる。
 - 手首・肘それぞれの配分比 `rho_i` とその入力・重みは `/dracomancer/joint_map/switch_ratio` に毎周期publishされ、比較・解析用に記録できる（`scripts/shape_task/task_recorder.py` は `r1,rho1,c1_pitch,c1_yaw,r2,rho2,c2_pitch,c2_yaw` 列としてCSVに記録）。
 - **link4 アンカー（`enable_link4_anchor` 既定 ON）**: 関節を曲げても DRAGON の **link4（腕先端）位置をワールドにおおよそ固定**するため、ホバー開始時に link4 位置を基準化し、`joints_ctrl` と同じ目標関節角からCOG位置（`uav/nav` POS_MODE）を逆算する。既定の `link4_anchor_mode:=position_yaw` ではCOG位置に加えてCOG yaw目標（`uav/nav` の `target_yaw`）でlink4 yawも固定する（baselink姿勢補償は送らない）。`link4_anchor_mode:=position_only` ではCOG位置だけを補償する。`link4_anchor_mode:=full` ではCOG位置+baselink姿勢でlink4姿勢も補償できるが、姿勢failsafeに近づきやすいため明示指定時のみ使う。ON時も `enable_link4_anchor_body_safety` がCOG高度・水平リーシュ・full時の姿勢を検査し、`enable_link4_anchor_tracking_safety` がCOG/yaw/roll/pitch追従遅れを検査し、`enable_link4_anchor_joint_tracking_safety` がDRAGON関節追従遅れを検査する。危険なbody補償、追従遅れ、TF断時は関節/補償指令を保持する。詳細は [docs/link4_anchor.md](docs/link4_anchor.md)。**移動制御（`enable_position_control`）とは併用不可**（`uav/nav` が競合）。
 - 未対応の関節は `mapping_reference` の straight/circular に関係なく動かない。
@@ -411,7 +410,7 @@ flowchart TD
 | `distal_signs` | `[1.0, -1.0, 1.0, 1.0, -1.0]` | `distal` の各符号（逆向きに動く関節を反転） |
 | `distal_scales` | `[1.0, 1.0, 1.0, 1.0, 1.0]` | `distal` の各ゲイン（`1.0` で 1:1 角度一致） |
 | `distal_offsets` | `[0, 0, 0, 0, 0]` | `distal` の各加算オフセット[rad]（`sign*scale*source + offset`）。joint3_pitch は90degオフセットなし |
-| `distal_relative` | `true` | エンゲージ時キャプチャの相対方式。teleoperation切替・ホバー開始・`~recapture_anchor` で腕中立と基準形状をキャプチャし、中立からの変化量を基準形状へ上乗せする（`false` で絶対角一致） |
+| `capture_roll_neutral` | `true` | 配分ロール（上腕・前腕）の中立をteleoperation切替・ホバー開始・`~recapture_anchor` でキャプチャし、差分を配分入力に使う（`false` でロールも絶対角） |
 | `enable_wrist_roll_switching` | `true` | ロール総和に応じて手首屈曲を `joint1_pitch` / `joint1_yaw` へ配分 |
 | `wrist_roll_joints` | `[upper_arm_external_internal_rotation_joint, wrist_supination_joint]` | 手首のpitch/yaw配分に使うロール関節。各基準差分を ±90° で飽和してから足す |
 | `wrist_roll_offsets` | `[0.0, 0.0]` | `wrist_roll_joints` と同順の基準角 [rad]。各ロールは基準差分を作ってから ±90° で飽和 |
@@ -447,7 +446,7 @@ flowchart TD
 | `baselink_roll_scales` | `[1.0, 1.0]` | baselink roll 差分の各ゲイン |
 | `baselink_roll_limit` | `π/2` | baselink roll へ加算する差分の絶対値上限 [rad] |
 | `hover_flight_state` | `5` | DRAGON の HOVER_STATE。`/dragon/uav/nav` はHOVER以外では無視されるため、link4アンカーもこの状態でのみ有効 |
-| `capture_neutral_on_first_msg` | `false` | 最初の Dracomancer 関節角を中立姿勢として記憶（`distal` では不使用。distal はエンゲージ時キャプチャを使用） |
+| `capture_neutral_on_first_msg` | `false` | 最初の Dracomancer 関節角を中立姿勢として記憶（`distal` では不使用。distal は配分ロールのみエンゲージ時キャプチャ） |
 | `enable_feasibility_gate` | `true` | 予測ゲートの有効化。true でForce/Torque Volume radiusに基づく危険姿勢回避を行う。false で候補をそのまま採用 |
 | `feasibility_gate_mode` | `hold` | 不可行候補への対処。`hold` / `step_search` / `soft_scale` |
 | `feasibility_step_fraction` | `0.25` | `step_search` の初期探索ステップ |

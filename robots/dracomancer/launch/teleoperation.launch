@@ -92,13 +92,13 @@
   <arg name="joint_pairing_reference" default="circular"/>  <!-- deprecated alias of mapping_reference -->
   <arg name="mapping_reference" default="$(arg joint_pairing_reference)"/>
   <arg name="joint_pairing_scale" default="1.0"/>
-  <!-- Relative distal mapping (engage-time capture): at every switch into
-       teleoperation (and hover start / ~recapture_anchor), the current device
-       pose is captured as the mapping neutral and the current feasible DRAGON
-       target as the deformation reference. This cancels the servo zero-point
-       bias (assembly tick 2048 != anatomical zero) and makes the engage
-       bumpless. false restores the legacy absolute-angle match. -->
-  <arg name="distal_relative" default="true"/>
+  <!-- Allocation-roll neutral capture: at every switch into teleoperation
+       (and hover start / ~recapture_anchor), the upper-arm / forearm roll
+       angles are captured as the allocation neutral, so their assembly-defined
+       servo zeros do not pin the elbow/wrist pitch-yaw allocation at the
+       saturation edge. Every other source joint stays an absolute-angle match.
+       false uses raw absolute roll angles. -->
+  <arg name="capture_roll_neutral" default="true"/>
   <!-- Elbow-plane mapping for distal mode: saturate upper-arm roll to +/-90deg
        from its reference (r) and allocate elbow flexion as joint2 pitch:yaw =
        r:(pi/2 - |r|). The roll sign is carried on joint2_pitch, so joint2_yaw
@@ -318,7 +318,7 @@
     <param name="mapping_mode" value="$(arg mapping_mode)"/>
     <param name="mapping_reference" value="$(arg mapping_reference)"/>
     <param name="joint_pairing_scale" value="$(arg joint_pairing_scale)"/>
-    <param name="distal_relative" value="$(arg distal_relative)"/>
+    <param name="capture_roll_neutral" value="$(arg capture_roll_neutral)"/>
     <!-- distal mapping (absolute match of arm joints; see comment above).
          target = clamp(sign*scale*source + offset). joint3_pitch no longer uses
          the previous +pi/2 shoulder-flexion offset. -->

@@ -70,17 +70,17 @@ yaw_weight = 1.0 - abs(signed_theta) / (np.pi / 2.0) # 偶: 中立で yaw 最大
 - サーボ読みは tick 2048 中心の絶対角（`convert_servo_to_joint_states.py`）なので、**操縦者の自然姿勢のロール読みが 0 である保証がない**。ずれていると手首・肘の pitch/yaw 配分が常に事前回転され、「屈曲だけ動かしたのに斜めに曲がる」。
 - baselink roll 側は中立キャプチャ方式（ホバー開始時等）を採用しており、**同じロール関節に対して基準の思想が二重**。
 
-### 修正案C ※2026-07-07 `distal_relative` として実装済み（案B1と統合）
+### 修正案C ※2026-07-07 `capture_roll_neutral` として実装済み
 
 ホバー開始 / teleoperation 切替 / `~recapture_anchor` 受信時に、現在のロール値を `elbow_roll_offset` / `wrist_roll_offsets` としてキャプチャするオプション（例: `~capture_roll_reference_on_engage`、既定 ON 推奨）を追加する。既存の `want_capture_baselink_roll_neutral` トリガに相乗りでき、変更は小さい。修正案Aとセットで「自然姿勢＝連続な yaw 純点」になる。
-→ 実装では個別オプションではなく、全 distal ソース関節＋ロール関節を同じタイミングでキャプチャする `distal_relative`（既定 true）として案B1と統合した。
+→ 一旦、全ソース関節＋基準形状をキャプチャする `distal_relative` として案B1と統合実装したが、指示により**配分ロール（上腕・前腕）のみ**のキャプチャ（`capture_roll_neutral` 既定 true）へ変更。屈曲・内外転系は絶対角一致を維持する。
 
 ## 3. teleoperation 開始時のジャンプ（mapping_reference 未適用）
 
 - `mapping_reference`（launch 既定 `circular`）はコメント上「全 mapping_mode 共通」だが、実際は **joint_pairing の既定オフセットにしか使われていない**（[control_joint_angle.py:58-71](../scripts/control/control_joint_angle.py#L58-L71), [95-100](../scripts/control/control_joint_angle.py#L95-L100)）。distal は `distal_offsets=[0,...]` の絶対一致。
 - startup 円形 `[0, π/2, 0, π/2, 0, π/2]` を distal 写像で保持するには、例えば `joint1_yaw=+π/2` に手首内外転 −90°、`joint3_yaw=+π/2` に肩内外転 −90° が必要で、**人体可動域的にほぼ不可能**。つまり teleop へ切り替えた瞬間、候補は必ず円形から大きく離れ（概ね直線形状方向）、DRAGON が数秒かけて意図しない大変形をする。直線寄り形状で fc が下限を割れば gate hold で途中フリーズ。
 
-### 修正案B（いずれか） ※2026-07-07 B1相当を `distal_relative` として実装済み（基準はエンゲージ時の可行目標。`mapping_reference` パラメータ自体は引き続き distal では未使用）
+### 修正案B（いずれか） ※2026-07-07 B1として一旦実装後、指示により撤回（屈曲・内外転系は絶対角一致を維持。teleop開始時のジャンプはサーボ零点較正・運用で対処）
 
 - **B1（コード・推奨）**: distal にも `mapping_reference` を実装する。teleoperation 切替（またはホバー開始）時の腕角 `source0` をキャプチャし、`target = ref + sign*scale*(source - source0)`（`ref` は `circular` なら `startup_pose`、`straight` なら 0）とする相対変形。切替がバンプレスになり、円形を保ったまま「そこからの変形」を腕で指示できる。
 - **B2（設定のみ・応急）**: 既存パラメータで「脱力姿勢＝円形」に寄せる: `wrist_yaw_offset:=1.5708`、`elbow_yaw_offset:=1.5708`、`distal_offsets:=[0,0,0,0,1.5708]`（joint3_yaw）。ただし絶対一致のままなので可動域の片側性が残る（肘屈曲は片方向のみ→`elbow_yaw_scale:=2.0` で ±90° をカバーする等の調整が必要）。
@@ -122,8 +122,8 @@ yaw_weight = 1.0 - abs(signed_theta) / (np.pi / 2.0) # 偶: 中立で yaw 最大
 ## 実施推奨順
 
 1. 修正案A（肘配分の連続化・**実装済み**）→ sim で肘曲げ+ロール掃引を確認（`/dracomancer/joint_map/switch_ratio` と `/dracomancer/candidate/joint_target` を記録）
-2. 修正案C（ロール基準のエンゲージ時キャプチャ・**`distal_relative` として実装済み**）
-3. 修正案B1（distal の相対変形対応・**`distal_relative` として実装済み**）
+2. 修正案C（ロール基準のエンゲージ時キャプチャ・**`capture_roll_neutral` として実装済み**）
+3. 修正案B1（distal の相対変形対応・**実装後に指示で撤回、絶対角一致を維持**）
 4. 診断ログ追加（#4）・ドキュメント整合（#10）
 5. 実機で #5/#6 の実測（gate ログ・ループ周期）
 
