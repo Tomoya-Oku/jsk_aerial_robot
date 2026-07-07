@@ -99,7 +99,7 @@
   <arg name="enable_elbow_roll_switching" default="true"/>
   <arg name="elbow_roll_offset" default="0.0"/>
   <arg name="elbow_pitch_sign" default="1.0"/>
-  <arg name="elbow_yaw_sign" default="-1.0"/>
+  <arg name="elbow_yaw_sign" default="1.0"/>
   <arg name="elbow_pitch_scale" default="1.0"/>
   <arg name="elbow_yaw_scale" default="1.0"/>
   <!-- Wrist-plane mapping for distal mode: saturate upper-arm and wrist rolls to
@@ -316,7 +316,7 @@
          the previous +pi/2 shoulder-flexion offset. -->
     <rosparam param="distal_source_joints">["wrist_flexion_extension_joint", "wrist_abduction_adduction_joint", "elbow_flexion_extension_joint", "shoulder_flexion_extension_joint", "shoulder_abduction_adduction_joint"]</rosparam>
     <rosparam param="distal_target_joints">["joint1_pitch", "joint1_yaw", "joint2_yaw", "joint3_pitch", "joint3_yaw"]</rosparam>
-    <rosparam param="distal_signs">[1.0, -1.0, -1.0, 1.0, -1.0]</rosparam>
+    <rosparam param="distal_signs">[1.0, -1.0, 1.0, 1.0, -1.0]</rosparam>
     <rosparam param="distal_scales">[1.0, 1.0, 1.0, 1.0, 1.0]</rosparam>
     <rosparam param="distal_offsets">[0.0, 0.0, 0.0, 0.0, 0.0]</rosparam>
     <param name="enable_elbow_roll_switching" value="$(arg enable_elbow_roll_switching)"/>

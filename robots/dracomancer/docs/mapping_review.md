@@ -61,6 +61,7 @@ yaw_weight = 1.0 - abs(signed_theta) / (np.pi / 2.0) # 偶: 中立で yaw 最大
 - r=±90°: `joint2_pitch = ±flexion`（ロール方向に応じ反転、手首と整合）。
 - 三角関数版 `pitch_weight=sin(r)`, `yaw_weight=cos(r)` にすれば手首（cos/sin 回転）と完全に同型になる。L1線形（現行 README 記載の theta:(π/2-θ) 比）を保つなら上記の線形版。
 - 注意: この修正で `bf3ccc0c` の `elbow_yaw_sign=-1` 反転が正しかったかは再検証が必要（症状対処だった可能性）。sim で肘曲げ→ロール掃引を再確認すること。
+  → 2026-07-07 指示により `elbow_yaw_sign` と `distal_signs[2]` を bf3ccc0c 以前の `+1` へ戻した（sim での向き確認は未実施）。
 - `rho`（switch_ratio 診断）は `abs(yaw_weight)` 定義のままで整合。README の「上腕ロールの符号はjoint2_yaw側に反映」記述の更新が必要。
 
 ## 2. ロール基準の絶対角0固定
