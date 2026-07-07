@@ -54,6 +54,7 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 ## FlightNav（aerial_robot_msgs）の要点
 
 移動指令で使う主フィールド:
+
 - `control_frame`: `WORLD_FRAME(0)` / `LOCAL_FRAME(1)`
 - `target`: `BASELINK(0)` / `COG(1)`
 - `*_nav_mode`: `POS_VEL_MODE(4)` などを使用。control_position は速度指令（`target_vel_*`）を送る。
@@ -64,6 +65,7 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 **操作者の向きに対する相対移動**に変換する。重心/ベースリンク切替も持つ。
 
 主なパラメータ:
+
 - `nav_target`: `cog`(既定) / `baselink` → FlightNav.target。
 - `direction_mode`: `none` / `yaw`(既定) / `yaw_pitch` / `full`。
 - `imu_topic`: 既定 `/dracomancer/imu`。
