@@ -112,14 +112,14 @@
   <arg name="wrist_yaw_sign" default="1.0"/>
   <arg name="wrist_pitch_scale" default="1.0"/>
   <arg name="wrist_yaw_scale" default="1.0"/>
-  <arg name="wrist_yaw_source_sign" default="-1.0"/>
+  <arg name="wrist_yaw_source_sign" default="1.0"/>
   <arg name="wrist_yaw_source_scale" default="1.0"/>
   <!-- distal mapping lists are set as private params inside the control_joint_angle
        node below (parallel lists: human source joint -> DRAGON target joint, sign,
        scale). Default: wrist flexion -> joint1_pitch, wrist abduction -> joint1_yaw,
        elbow flexion -> joint2_pitch/yaw selected by upper-arm roll, shoulder
        flexion -> joint3_pitch, shoulder abduction -> joint3_yaw;
-       target=clamp(sign*scale*source+offset), signs=[1,-1,1,1,-1],
+       target=clamp(sign*scale*source+offset), signs=[1,1,1,1,-1],
        offsets=[0,0,0,0,0], scales=1.0. -->
   <arg name="capture_neutral_on_first_msg" default="false"/>
   <!-- distal link4 anchor: helper to keep the arm-tip link (link4) ~fixed in
@@ -308,7 +308,7 @@
          the previous +pi/2 shoulder-flexion offset. -->
     <rosparam param="distal_source_joints">["wrist_flexion_extension_joint", "wrist_abduction_adduction_joint", "elbow_flexion_extension_joint", "shoulder_flexion_extension_joint", "shoulder_abduction_adduction_joint"]</rosparam>
     <rosparam param="distal_target_joints">["joint1_pitch", "joint1_yaw", "joint2_yaw", "joint3_pitch", "joint3_yaw"]</rosparam>
-    <rosparam param="distal_signs">[1.0, -1.0, 1.0, 1.0, -1.0]</rosparam>
+    <rosparam param="distal_signs">[1.0, 1.0, 1.0, 1.0, -1.0]</rosparam>
     <rosparam param="distal_scales">[1.0, 1.0, 1.0, 1.0, 1.0]</rosparam>
     <rosparam param="distal_offsets">[0.0, 0.0, 0.0, 0.0, 0.0]</rosparam>
     <param name="enable_elbow_roll_switching" value="$(arg enable_elbow_roll_switching)"/>

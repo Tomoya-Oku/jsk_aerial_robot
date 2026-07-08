@@ -1,0 +1,42 @@
+bag: /home/oku/rosbags/20260708_151650_joint_angles_mapping.bag
+duration: 287.511 s
+link4_source: /gazebo/link_states[dragon::link4]
+raw_topic_counts:
+  /dracomancer/joint_states: 6496
+  /dracomancer/candidate/joint_target: 3860
+  /dragon/joints_ctrl: 3860
+  /dragon/joint_states: 14322
+  /dragon/uav/cog/odom: 28743
+  /gazebo/link_states: 287431
+kept_position_samples:
+  /dragon/uav/cog/odom: 10743
+  link4: 11431
+cog_ranges:
+  x: -0.858315 0.328765
+  y: -0.205134 0.297216
+  z: 0.084018 1.019547
+link4_ranges:
+  x: -0.466156 0.003434
+  y: 0.364056 0.529602
+  z: 0.084300 0.972517
+outputs:
+  joint1_pitch.png
+  joint1_pitch.svg
+  joint1_yaw.png
+  joint1_yaw.svg
+  joint2_pitch.png
+  joint2_pitch.svg
+  joint2_yaw.png
+  joint2_yaw.svg
+  joint3_pitch.png
+  joint3_pitch.svg
+  joint3_yaw.png
+  joint3_yaw.svg
+  joint_relation_scatter.png
+  joint_relation_scatter.svg
+  dragon_joint_traces.png
+  dragon_joint_traces.svg
+  cog_link4_position.png
+  cog_link4_position.svg
+  cog_link4_xy.png
+  cog_link4_xy.svg

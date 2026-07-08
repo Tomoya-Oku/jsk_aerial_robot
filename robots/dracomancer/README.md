@@ -284,7 +284,7 @@ target_joint[k] = clamp(sign[k] * scale[k] * source_angle[k] + offset[k],  -join
 ```
 
 - 絶対角の直接対応なので中立姿勢の記録（`capture_neutral_on_first_msg`）は不要・不使用。
-- `distal_signs` 既定は `[1.0, -1.0, 1.0, 1.0, -1.0]`（手首内外転・肩内外転が -1、他は +1。各関節ごとに、DRAGON が逆向きに動く場合に反転）。`distal_scales` 既定 `1.0` で 1:1 角度一致。
+- `distal_signs` 既定は `[1.0, 1.0, 1.0, 1.0, -1.0]`（肩内外転が -1、他は +1。各関節ごとに、DRAGON が逆向きに動く場合に反転）。`distal_scales` 既定 `1.0` で 1:1 角度一致。
 - `distal_offsets` 既定は `[0, 0, 0, 0, 0]`：joint3_pitch は以前の `+π/2` 肩屈曲オフセットを使わず、`sign=+1` の絶対角一致で扱う。肩内外転の向きは未検証なので sim で要確認。
 - **手首のロール総和配分**（`enable_wrist_roll_switching` 既定 ON）: `wrist_roll_joints`（既定: `upper_arm_external_internal_rotation_joint` + `wrist_supination_joint`）の各ロール角から `wrist_roll_offsets`（既定 `[0, 0]`）を先に引き、各差分を ±90° で飽和する。その和を `alpha = theta + phi` として扱い、手首屈曲と手首内外転の2Dベクトルを `cos(alpha):sin(alpha)` で `joint1_pitch` / `joint1_yaw` へ回転配分する。`alpha > 90°` で `joint1_pitch` 側の符号が反転する挙動は維持する。
 - **肘の上腕ロール配分**（`enable_elbow_roll_switching` 既定 ON）: `upper_arm_external_internal_rotation_joint` から `elbow_roll_offset`（既定0）を先に引き、その差分を ±90° で飽和する。絶対値 `theta` を 0..π/2 の範囲にしたうえで、肘屈曲を `joint2_pitch:joint2_yaw = theta:(pi/2 - theta)` の線形比で配分する。上腕ロールの符号は `joint2_yaw` 側に反映される。
@@ -405,7 +405,7 @@ flowchart TD
 | `joint_pairing_scale` | `1.0` | `joint_pairing` の一括写像ゲイン |
 | `distal_source_joints` | `[wrist_flexion_extension_joint, wrist_abduction_adduction_joint, elbow_flexion_extension_joint, shoulder_flexion_extension_joint, shoulder_abduction_adduction_joint]` | `distal` の入力（人間の腕）関節リスト |
 | `distal_target_joints` | `[joint1_pitch, joint1_yaw, joint2_yaw, joint3_pitch, joint3_yaw]` | `distal` の出力 DRAGON 関節リスト（source と同順）。肘はこの基本写像後、`enable_elbow_roll_switching` により `joint2_pitch` / `joint2_yaw` へ再配分 |
-| `distal_signs` | `[1.0, -1.0, 1.0, 1.0, -1.0]` | `distal` の各符号（逆向きに動く関節を反転） |
+| `distal_signs` | `[1.0, 1.0, 1.0, 1.0, -1.0]` | `distal` の各符号（逆向きに動く関節を反転） |
 | `distal_scales` | `[1.0, 1.0, 1.0, 1.0, 1.0]` | `distal` の各ゲイン（`1.0` で 1:1 角度一致） |
 | `distal_offsets` | `[0, 0, 0, 0, 0]` | `distal` の各加算オフセット[rad]（`sign*scale*source + offset`）。joint3_pitch は90degオフセットなし |
 | `enable_wrist_roll_switching` | `true` | ロール総和に応じて手首屈曲を `joint1_pitch` / `joint1_yaw` へ配分 |
@@ -413,7 +413,7 @@ flowchart TD
 | `wrist_roll_offsets` | `[0.0, 0.0]` | `wrist_roll_joints` と同順の基準角 [rad]。各ロールは基準差分を作ってから ±90° で飽和 |
 | `wrist_pitch_sign` / `wrist_yaw_sign` | `1.0` / `1.0` | 手首屈曲を `joint1_pitch` / `joint1_yaw` へ入れる符号 |
 | `wrist_pitch_scale` / `wrist_yaw_scale` | `1.0` / `1.0` | 手首屈曲を `joint1_pitch` / `joint1_yaw` へ入れるゲイン |
-| `wrist_yaw_source_sign` / `wrist_yaw_source_scale` | `-1.0` / `1.0` | 手首内外転を手首ロール切替の yaw 初期成分へ入れる符号・ゲイン |
+| `wrist_yaw_source_sign` / `wrist_yaw_source_scale` | `1.0` / `1.0` | 手首内外転を手首ロール切替の yaw 初期成分へ入れる符号・ゲイン |
 | `enable_elbow_roll_switching` | `true` | 上腕ロール角に応じて肘屈曲を `joint2_pitch` / `joint2_yaw` へ配分 |
 | `elbow_roll_offset` | `0.0` | 上腕ロールの基準角 [rad]。基準差分を作ってから ±90° で飽和 |
 | `elbow_pitch_sign` / `elbow_yaw_sign` | `1.0` / `1.0` | 肘屈曲を `joint2_pitch` / `joint2_yaw` へ入れる符号 |
