@@ -216,14 +216,13 @@ class ControlJoints:
         }
 
         # --- distal link4 anchor -------------------------------------------------
-        # Experimental helper: keep the arm-tip link (default link4) roughly fixed in
-        # the world while joints bend. The default mode (position_yaw) anchors the
-        # link4 position via COG POS_MODE and holds the link4 yaw through the COG yaw
-        # target (roll/pitch stay under normal attitude control); position_only skips
-        # the yaw hold; full pose anchoring also compensates baselink attitude, but is
-        # much more aggressive for a flying platform.
+        # Experimental helper: keep the arm-tip link (default link4) roughly fixed
+        # in the world while joints bend. The default mode (position_only) anchors
+        # only the link4 position via COG POS_MODE. position_yaw additionally holds
+        # link4 yaw through the COG yaw target; full also compensates baselink
+        # attitude and is much more aggressive for a flying platform.
         self.enable_link4_anchor = rospy.get_param("~enable_link4_anchor", False)
-        self.link4_anchor_mode = rospy.get_param("~link4_anchor_mode", "position_yaw")
+        self.link4_anchor_mode = rospy.get_param("~link4_anchor_mode", "position_only")
         if self.link4_anchor_mode not in ("position_only", "position_yaw", "full"):
             rospy.logwarn("unknown link4_anchor_mode '%s'; fallback to position_only",
                           self.link4_anchor_mode)

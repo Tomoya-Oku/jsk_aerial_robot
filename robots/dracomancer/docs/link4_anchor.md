@@ -3,10 +3,10 @@
 > 状態: **実装済み・実験機能**（[../scripts/control/control_joint_angle.py](../scripts/control/control_joint_angle.py)
 > `update_link4_anchor`）。関節操作時に DRAGON の **link4（腕先端側）の位置をワールドにおおよそ固定**
 > するため、`joints_ctrl` と同じ目標関節角から link4 の相対位置を先に計算し、COG 位置を
-> 同周期で補償する。既定は `link4_anchor_mode:=position_yaw` で、COG yaw 目標
+> 同周期で補償する。既定は `link4_anchor_mode:=position_only` で、yaw 固定を行わず
+> COG 位置だけを補償する。`link4_anchor_mode:=position_yaw` では COG yaw 目標
 >（`uav/nav` の `target_yaw`）を併用して link4 の位置＋yaw を固定する
 >（roll/pitch は通常の姿勢制御のまま。baselink RPY は送らない）。
-> `link4_anchor_mode:=position_only` では yaw 固定を行わず COG 位置だけを補償する。
 > `link4_anchor_mode:=full` では link4 姿勢まで補償するが、姿勢failsafeや高度低下に直結しやすいため
 > 明示指定時のみ使う。機能全体は既定 ON（`enable_link4_anchor:=true`）。
 > `link4_anchor_offset_x` で固定点を link4 x軸方向にずらせる（リンク長 0.474 で尾端固定）。
@@ -51,10 +51,10 @@ link4姿勢まで完全固定（full）しようとすると baselink姿勢を�
 2. **基準（link4 の固定目標姿勢）はホバー開始時にキャプチャ**する。
    - `flight_state == 5`（HOVER_STATE）への遷移時に、その時点の link4 world pose を記録。
    - `~recapture_anchor`(std_msgs/Empty) で再キャプチャ可能。ホバリングを抜けると基準は破棄し次のホバーで再取得。
-3. **標準は位置＋yaw固定**（roll/pitch は通常制御のまま）。
-   - `link4_anchor_mode:=position_yaw`（既定）では COG 位置に加えて `uav/nav` の `target_yaw`（COG yaw, POS_MODE）で
+3. **標準は位置固定のみ**（yaw/roll/pitch は通常制御のまま）。
+   - `link4_anchor_mode:=position_only`（既定）では `uav/nav` の COG 位置だけを補償し、yaw 固定は行わない。
+   - `link4_anchor_mode:=position_yaw` では COG 位置に加えて `uav/nav` の `target_yaw`（COG yaw, POS_MODE）で
      link4 yaw も固定する。roll/pitch は通常制御のままで、baselink RPY はpublishしない。
-   - `link4_anchor_mode:=position_only` では `uav/nav` の COG 位置だけを補償し、yaw 固定は行わない。
    - `link4_anchor_mode:=full` では旧来の6DoF寄り補償として COG位置 + baselink姿勢を補償する。
    - `link4_anchor_offset_x` で固定点を link4 x軸方向にオフセットできる（既定 0.0 = link4原点 = joint3側）。
 4. **危険なbody補償は送らない**。
@@ -163,7 +163,7 @@ SVG版の全体図は [../figures/link4_anchor_algorithm.svg](../figures/link4_a
   実質的に保持側へ倒れる（保守側）。
 - position_yaw の DRAGON 実機・シミュレータでの yaw 追従品質は未計測（要シミュレーション確認）。
 - full モードは baselink姿勢のスルーレート制限で、速い関節操作時は link4 が一時的にズレ、遅れて追従する。
-- full モードで補償姿勢が大きいとベクタリングのフィージビリティ限界や姿勢failsafeに当たる。既定では position_yaw とし、full は明示指定時だけ使う。
+- position_yaw / full は明示指定時だけ使う。full モードで補償姿勢が大きいとベクタリングのフィージビリティ限界や姿勢failsafeに当たる。
 - 位置制御を使う必要がある。既存 `enable_position_control` の経路は `POS_VEL_MODE`＋`target_pos`
   未設定で落下するバグがあるため（[../README.md](../README.md) 既知の課題）、本機能は**絶対 COG 位置
   (POS_MODE)** を送る別ロジックで実装する。
@@ -175,7 +175,7 @@ SVG版の全体図は [../figures/link4_anchor_algorithm.svg](../figures/link4_a
 | param | 既定 | 説明 |
 | --- | --- | --- |
 | `~enable_link4_anchor` | `true` | distal 時に link4 アンカーを有効化する |
-| `~link4_anchor_mode` | `position_yaw` | `position_only`: link4位置だけをCOG位置で補償 / `position_yaw`: COG位置+COG yaw目標でlink4位置とyawを補償 / `full`: COG位置+baselink姿勢でlink4姿勢も補償 |
+| `~link4_anchor_mode` | `position_only` | `position_only`: link4位置だけをCOG位置で補償 / `position_yaw`: COG位置+COG yaw目標でlink4位置とyawを補償 / `full`: COG位置+baselink姿勢でlink4姿勢も補償 |
 | `~anchor_link` | `link4` | 固定するリンク名（`<robot>/<anchor_link>`） |
 | `~link4_anchor_offset_x` | `0.0` | 固定点の link4 x軸方向オフセット [m]。`0.474`（リンク長）で尾端を固定 |
 | `~world_frame` | `world` | アンカー基準のワールドフレーム |

@@ -129,14 +129,12 @@
        offsets=[0,0,0,0,0], scales=1.0. -->
   <arg name="capture_neutral_on_first_msg" default="false"/>
   <!-- distal link4 anchor: helper to keep the arm-tip link (link4) ~fixed in
-       world while joints bend. The default position_yaw mode anchors the link4
-       position by commanding COG position (uav/nav POS_MODE) alongside
-       joints_ctrl, and also holds the link4 yaw through the COG yaw target
-       (roll/pitch untouched), so shoulder inputs swing links1-3 about the
-       anchor. position_only skips the yaw hold. The full mode also compensates
-       baselink attitude and is much more aggressive. -->
+       world while joints bend. The default position_only mode anchors only the
+       link4 position by commanding COG position (uav/nav POS_MODE) alongside
+       joints_ctrl. Use position_yaw to also hold link4 yaw through the COG yaw
+       target (roll/pitch untouched), or full to compensate baselink attitude. -->
   <arg name="enable_link4_anchor" default="true"/>
-  <arg name="link4_anchor_mode" default="position_yaw"/> <!-- position_only / position_yaw / full -->
+  <arg name="link4_anchor_mode" default="position_only"/> <!-- position_only / position_yaw / full -->
   <!-- Offset of the anchored point along link4 x [m]. 0.0 = link4 frame origin
        (joint3 side). Set to the link length (0.474) to anchor the tail tip so
        tail-side joint inputs visibly translate the head-side links. -->
@@ -159,8 +157,8 @@
   <arg name="link4_anchor_max_cog_xy_offset" default="0.9"/>
   <arg name="link4_anchor_max_abs_yaw_delta" default="2.0943951023931953"/>
   <!-- Hold shape updates when the controlled robot is not tracking the current
-       link4-anchor body/joint targets.  These guards keep position_yaw enabled,
-       but prevent shape commands from running ahead of COG/yaw/joint response. -->
+       link4-anchor body/joint targets.  In position_yaw, the yaw guard prevents
+       shape commands from running ahead of the COG yaw response. -->
   <arg name="enable_link4_anchor_tracking_safety" default="true"/>
   <arg name="link4_anchor_max_cog_tracking_error" default="0.2"/>
   <arg name="link4_anchor_max_yaw_tracking_error" default="0.5235987755982988"/>
