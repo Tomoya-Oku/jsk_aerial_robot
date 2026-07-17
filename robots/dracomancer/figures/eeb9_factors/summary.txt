@@ -1,0 +1,129 @@
+event_time_z_below_0.3: 96.992
+flight_changes: [(0.0, 5)]
+ground_truth_z min: (0.28845574492026893, 97.29599999999999)
+cog_z min: (0.4585479496198378, 97.298)
+nav_z min: (0.6011853218078613, 45.151)
+ground_truth_vz max_abs: (0.5778428037124502, 103.763)
+cog_vz max_abs: (0.5597474000785517, 103.73599999999999)
+
+event_window: 92.992..100.992
+ground_truth_z min: (0.28845574492026893, 97.29599999999999) max_abs: (1.0602604364680015, 93.15199999999999)
+cog_z min: (0.4585479496198378, 97.298) max_abs: (1.0240306005790127, 93.99599999999998)
+nav_z min: (0.6135644316673279, 96.215) max_abs: (1.0173168182373047, 92.995)
+ground_truth_vz min: (-0.3839580186670749, 95.16399999999999) max_abs: (-0.3839580186670749, 95.16399999999999)
+cog_vz min: (-0.3995757575628528, 95.59899999999999) max_abs: (-0.3995757575628528, 95.59899999999999)
+ground_truth_roll min: (-0.09565991644337597, 96.332) max_abs: (-0.09565991644337597, 96.332)
+ground_truth_pitch min: (-0.11098662205687272, 96.16999999999999) max_abs: (-0.11098662205687272, 96.16999999999999)
+imu_ang_vel_norm min: (0.007486845367275069, 99.58699999999999) max_abs: (0.5536043754926031, 96.084)
+pid_z_total min: (9.413961410522461, 93.043) max_abs: (10.22447681427002, 96.644)
+thrust_sum min: (66.4781904220581, 94.42099999999999) max_abs: (73.07157707214355, 97.048)
+pwm_span min: (33.0, 99.488) max_abs: (234.0, 93.00399999999999)
+external_force_norm min: (0.12624993550445732, 95.36699999999999) max_abs: (4.20916964943009, 96.195)
+interfere_force_norm min: (9.959476512787739e-88, 95.471) max_abs: (0.4758522749760735, 100.494)
+nav_z_rate max_abs all: (2.3839175701140456, 115.14999999999999)
+nav_z_rate max_abs event: (-0.7157705046916651, 94.05649999999999)
+
+target_z_drop_intervals start end t_min target_z_min actual_z_at_min:
+  (43.821, 49.130, 45.151, 0.601, 0.647)
+  (78.194, 84.071, 79.092, 0.711, 0.678)
+  (94.333, 101.634, 96.215, 0.614, 0.440)
+  (101.746, 102.900, 101.972, 0.741, 0.655)
+
+nav_z_rate_vs_joint_command_rate_event:
+  joint1_pitch corr=-0.036 max_abs_rate_when_nav_descending=1.230
+  joint1_yaw corr=0.194 max_abs_rate_when_nav_descending=1.094
+  joint2_pitch corr=0.678 max_abs_rate_when_nav_descending=1.781
+  joint2_yaw corr=-0.584 max_abs_rate_when_nav_descending=1.781
+  joint3_pitch corr=0.039 max_abs_rate_when_nav_descending=0.213
+  joint3_yaw corr=-0.327 max_abs_rate_when_nav_descending=0.141
+
+joint_velocity_max_abs_all:
+  joint1_pitch actual=(-2.5013399156355165, 44.873) command_rate=(-5.714285714281636, 68.7885)
+  joint1_yaw actual=(3.1103634571814065, 78.173) command_rate=(-8.000000000007283, 59.636500000000005)
+  joint2_pitch actual=(3.5628573653627695, 103.793) command_rate=(-3.4343177162953538, 113.761)
+  joint2_yaw actual=(4.342131478463521, 95.83699999999999) command_rate=(3.4343177162953538, 113.761)
+  joint3_pitch actual=(2.8896151738992923, 43.434000000000005) command_rate=(2.3213926135144645, 43.091)
+  joint3_yaw actual=(3.854094257817212, 74.91299999999998) command_rate=(-2.321392613514461, 43.091)
+
+joint_velocity_max_abs_event:
+  joint1_pitch actual=(-2.0427212378854693, 95.83699999999999) command_rate=(1.3818690016175954, 93.57399999999998)
+  joint1_yaw actual=(-0.6603891197190478, 95.174) command_rate=(1.3553705294886014, 100.30099999999999)
+  joint2_pitch actual=(-1.3029923262293885, 94.57300000000001) command_rate=(-2.5866789785360305, 95.77449999999999)
+  joint2_yaw actual=(4.342131478463521, 95.83699999999999) command_rate=(1.882504724123881, 94.05799999999999)
+  joint3_pitch actual=(0.4326697476889782, 98.33599999999998) command_rate=(0.9203884727309107, 98.18499999999999)
+  joint3_yaw actual=(-1.0870043998702394, 94.57300000000001) command_rate=(-0.6691449363413071, 100.39049999999999)
+
+joint_tracking_error_event:
+  joint1_pitch max_abs_err=-0.2242 at 93.813 rmse=0.0626
+  joint1_yaw max_abs_err=0.7923 at 92.993 rmse=0.2385
+  joint2_pitch max_abs_err=-0.4928 at 100.974 rmse=0.1371
+  joint2_yaw max_abs_err=-0.4086 at 95.495 rmse=0.1632
+  joint3_pitch max_abs_err=-0.0528 at 100.173 rmse=0.0264
+  joint3_yaw max_abs_err=0.0325 at 100.515 rmse=0.0084
+
+gimbal_velocity_max_abs_event:
+  gimbal1_pitch actual=(13.578582282693507, 94.674)
+  gimbal1_roll actual=(-3.852990727411177, 95.83699999999999)
+  gimbal2_pitch actual=(13.685289527152676, 97.173)
+  gimbal2_roll actual=(-4.07197538408759, 95.83699999999999)
+  gimbal3_pitch actual=(14.035061687180969, 95.83699999999999)
+  gimbal3_roll actual=(12.424757363113978, 96.03399999999999)
+  gimbal4_pitch actual=(-13.734213084621523, 93.977)
+  gimbal4_roll actual=(1.8712354099371482, 95.934)
+
+nearest_values_at_event:
+  ground_truth_z: 0.2996300611375884
+  cog_z: 0.4707292617363306
+  nav_z: 0.637410044670105
+  ground_truth_vz: -0.053793865493039245
+  cog_vz: -0.057089762740802255
+  ground_truth_roll: 0.0439228702727362
+  ground_truth_pitch: 0.0013199722997087723
+  pid_z_total: 10.048127174377441
+  thrust_sum: 71.71440124511719
+  pwm_min: 1425.0
+  pwm_max: 1558.0
+  external_force_norm: 0.5312019226268626
+  interfere_force_norm: 0.0004968814284932842
+
+rosout_key_messages:
+  0.004 /record_1783263014494249338 Subscribing to /dragon/teleop_command/land
+  0.004 /record_1783263014494249338 Subscribing to /dragon/teleop_command/force_landing
+  43.004 /record_1783263014494249338 Subscribing to /dracomancer/shape_control_error
+  43.629 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.3913 torque_volume_radius=0.1514 safety_scale=0.518 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  44.660 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.6377 torque_volume_radius=0.0868 safety_scale=0.272 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  53.753 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.1208 torque_volume_radius=0.2660 safety_scale=0.084 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  55.754 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.1282 torque_volume_radius=0.2868 safety_scale=0.137 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  61.795 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.2120 torque_volume_radius=1.0006 safety_scale=0.734 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  63.796 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.2309 torque_volume_radius=0.6824 safety_scale=0.870 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  64.797 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=3.7490 torque_volume_radius=0.0451 safety_scale=0.113 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  65.824 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=1.9164 torque_volume_radius=0.0620 safety_scale=0.177 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  66.828 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.9857 torque_volume_radius=0.0233 safety_scale=0.030 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  67.846 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.6308 torque_volume_radius=0.1141 safety_scale=0.375 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  69.853 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=1.1693 torque_volume_radius=0.0300 safety_scale=0.056 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  70.878 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.4754 torque_volume_radius=0.0685 safety_scale=0.202 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  74.930 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.7366 torque_volume_radius=0.2578 safety_scale=0.922 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  76.973 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.1596 torque_volume_radius=0.1040 safety_scale=0.337 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  84.049 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=1.4185 torque_volume_radius=0.2300 safety_scale=0.817 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  85.073 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=5.4730 torque_volume_radius=0.2123 safety_scale=0.749 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  86.077 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=1.1327 torque_volume_radius=0.0404 safety_scale=0.095 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  90.123 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.2057 torque_volume_radius=0.1275 safety_scale=0.427 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  91.161 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.3236 torque_volume_radius=0.0518 safety_scale=0.138 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  94.177 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.6859 torque_volume_radius=0.0718 safety_scale=0.215 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  96.224 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.4727 torque_volume_radius=0.0260 safety_scale=0.040 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  99.250 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.3802 torque_volume_radius=0.0254 safety_scale=0.038 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  100.278 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.3524 torque_volume_radius=0.0551 safety_scale=0.151 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  101.287 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.2939 torque_volume_radius=0.2216 safety_scale=0.785 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  102.294 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=2.6008 torque_volume_radius=0.2120 safety_scale=0.748 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  103.302 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=2.7204 torque_volume_radius=0.1566 safety_scale=0.537 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  107.400 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.1797 torque_volume_radius=0.6981 safety_scale=0.504 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  108.401 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.1616 torque_volume_radius=0.4416 safety_scale=0.375 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  111.448 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.5673 torque_volume_radius=0.1537 safety_scale=0.526 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  113.520 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=1.2782 torque_volume_radius=0.0671 safety_scale=0.197 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  114.730 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.7792 torque_volume_radius=0.2461 safety_scale=0.878 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  115.564 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.3338 torque_volume_radius=0.2040 safety_scale=0.718 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  119.605 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.1322 torque_volume_radius=0.3660 safety_scale=0.165 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  122.652 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.1596 torque_volume_radius=0.7007 safety_scale=0.361 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  127.703 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.3701 torque_volume_radius=0.0950 safety_scale=0.303 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  128.731 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=0.3037 torque_volume_radius=0.1235 safety_scale=0.411 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
+  130.779 /dracomancer_volume_radius_monitor shape_safety state=warning force_volume_radius=1.2616 torque_volume_radius=0.0332 safety_scale=0.068 thresholds force(hard/min)=0.1090/0.2492 torque(hard/min)=0.0154/0.2782
