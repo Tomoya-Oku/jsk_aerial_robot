@@ -1,0 +1,157 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1120" viewBox="0 0 1800 1120" role="img" aria-labelledby="title desc">
+  <title id="title">Predicted FC and Measured FC Data Flow</title>
+  <desc id="desc">System diagram comparing Dracomancer predicted feasible-control radii with DRAGON measured feasible-control radii.</desc>
+  <defs>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1f4e79"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2f6f4e"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9f2d2d"/>
+    </marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/>
+    </marker>
+    <style>
+      .bg { fill: #ffffff; }
+      .title { font-family: Arial, Helvetica, sans-serif; font-size: 38px; font-weight: 700; fill: #111827; }
+      .subtitle { font-family: Arial, Helvetica, sans-serif; font-size: 21px; font-weight: 400; fill: #4b5563; }
+      .lane-pred { fill: #f5fbff; stroke: #9cc6e6; stroke-width: 2.5; }
+      .lane-meas { fill: #f4fbf6; stroke: #9fc9aa; stroke-width: 2.5; }
+      .lane-note { fill: #fffaf0; stroke: #d6b66a; stroke-width: 2.5; }
+      .lane-title { font-family: Arial, Helvetica, sans-serif; font-size: 25px; font-weight: 700; fill: #111827; }
+      .box { fill: #ffffff; stroke: #334155; stroke-width: 2.2; }
+      .box-blue { fill: #eaf3fb; stroke: #1f4e79; stroke-width: 2.6; }
+      .box-green { fill: #edf7f0; stroke: #2f6f4e; stroke-width: 2.6; }
+      .box-amber { fill: #fff7e6; stroke: #9a6a00; stroke-width: 2.6; }
+      .box-red { fill: #fff0f0; stroke: #9f2d2d; stroke-width: 2.6; }
+      .box-gray { fill: #f8fafc; stroke: #64748b; stroke-width: 2.2; }
+      .label { font-family: Arial, Helvetica, sans-serif; font-size: 20px; font-weight: 700; fill: #111827; }
+      .small { font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: 400; fill: #374151; }
+      .small-bold { font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: 700; fill: #374151; }
+      .mono { font-family: Consolas, Menlo, monospace; font-size: 15px; font-weight: 400; fill: #334155; }
+      .mono-bold { font-family: Consolas, Menlo, monospace; font-size: 15px; font-weight: 700; fill: #111827; }
+      .arrow-blue { fill: none; stroke: #1f4e79; stroke-width: 3.2; marker-end: url(#arrow-blue); }
+      .arrow-green { fill: none; stroke: #2f6f4e; stroke-width: 3.2; marker-end: url(#arrow-green); }
+      .arrow-red { fill: none; stroke: #9f2d2d; stroke-width: 3.2; marker-end: url(#arrow-red); }
+      .arrow-gray { fill: none; stroke: #6b7280; stroke-width: 2.7; marker-end: url(#arrow-gray); stroke-dasharray: 9 7; }
+      .divider { stroke: #cbd5e1; stroke-width: 2; stroke-dasharray: 10 8; }
+      .pill-blue { fill: #dbeafe; stroke: #1f4e79; stroke-width: 1.6; }
+      .pill-green { fill: #dcfce7; stroke: #2f6f4e; stroke-width: 1.6; }
+      .pill-red { fill: #fee2e2; stroke: #9f2d2d; stroke-width: 1.6; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1800" height="1120"/>
+  <text class="title" x="70" y="68">Predicted FC vs Measured FC</text>
+  <text class="subtitle" x="70" y="106">The FC math is shared, but the evaluated state, timing, and purpose are different.</text>
+
+  <rect class="lane-pred" x="55" y="150" width="1690" height="360" rx="18"/>
+  <text class="lane-title" x="92" y="195">1. Predicted FC: Dracomancer-side pre-check</text>
+  <text class="small" x="92" y="225">Purpose: gate a dangerous shape before sending it. Evaluated state: candidate or final target.</text>
+
+  <rect class="box-blue" x="90" y="275" width="245" height="86" rx="10"/>
+  <text class="label" x="118" y="307">Dracomancer joints</text>
+  <text class="mono" x="118" y="333">q_exo</text>
+  <text class="small" x="118" y="353">operator arm input</text>
+
+  <rect class="box-blue" x="410" y="265" width="270" height="106" rx="10"/>
+  <text class="label" x="438" y="297">Candidate</text>
+  <text class="mono-bold" x="438" y="323">q_cand = mapped_target()</text>
+  <text class="small" x="438" y="346">shape before the gate</text>
+  <text class="mono" x="438" y="366">/dracomancer/candidate/joint_target</text>
+
+  <rect class="box-amber" x="760" y="248" width="330" height="140" rx="10"/>
+  <text class="label" x="790" y="280">shape_feasibility_node</text>
+  <text class="small" x="790" y="306">DRAGON model + candidate shape</text>
+  <text class="small" x="790" y="331">allocation / controller / optimized_gimbal</text>
+  <text class="mono" x="790" y="358">check_shape(q_cand)</text>
+  <text class="mono" x="790" y="378">calcFeasibleControl*</text>
+
+  <rect class="box-blue" x="1160" y="250" width="255" height="136" rx="10"/>
+  <text class="label" x="1188" y="282">Candidate predicted FC</text>
+  <text class="mono" x="1188" y="311">r_f(q_cand)</text>
+  <text class="mono" x="1188" y="334">r_tau(q_cand)</text>
+  <text class="mono" x="1188" y="360">/dracomancer/candidate/fc_*</text>
+  <text class="small-bold" x="1188" y="381">default: 40 Hz</text>
+
+  <rect class="box-amber" x="1160" y="405" width="255" height="74" rx="10"/>
+  <text class="label" x="1188" y="437">Gate / rate limit</text>
+  <text class="small" x="1188" y="462">hard/min threshold, link4 safety</text>
+
+  <rect class="box-blue" x="1490" y="274" width="205" height="186" rx="10"/>
+  <text class="label" x="1518" y="306">Target</text>
+  <text class="mono-bold" x="1518" y="332">q_tar</text>
+  <text class="small" x="1518" y="356">joint target to send</text>
+  <text class="mono" x="1518" y="382">/dracomancer/target/fc_*</text>
+  <text class="small-bold" x="1518" y="405">default: 40 Hz</text>
+  <text class="mono" x="1518" y="433">/dragon/joints_ctrl</text>
+
+  <path class="arrow-blue" d="M 335 318 L 410 318"/>
+  <path class="arrow-blue" d="M 680 318 L 760 318"/>
+  <path class="arrow-blue" d="M 1090 318 L 1160 318"/>
+  <path class="arrow-blue" d="M 1288 386 L 1288 405"/>
+  <path class="arrow-blue" d="M 1415 442 L 1490 442"/>
+  <path class="arrow-gray" d="M 1490 350 C 1445 350, 1445 248, 1090 248"/>
+  <text class="small" x="1275" y="232">target prediction re-evaluates q_tar after the gate</text>
+
+  <rect class="lane-meas" x="55" y="560" width="1690" height="330" rx="18"/>
+  <text class="lane-title" x="92" y="605">2. Measured FC: DRAGON-side current-state evaluation</text>
+  <text class="small" x="92" y="635">Purpose: monitor the state after controller, gimbal, joint, and attitude response. Used for logs and safety scale.</text>
+
+  <rect class="box-green" x="90" y="690" width="245" height="86" rx="10"/>
+  <text class="label" x="118" y="722">Commands received</text>
+  <text class="mono" x="118" y="748">q_tar, uav/nav</text>
+  <text class="small" x="118" y="768">already sent to DRAGON</text>
+
+  <rect class="box-green" x="405" y="670" width="300" height="126" rx="10"/>
+  <text class="label" x="433" y="702">DRAGON controller</text>
+  <text class="small" x="433" y="728">allocation, gimbal command</text>
+  <text class="small" x="433" y="751">joint tracking, attitude control</text>
+  <text class="mono" x="433" y="778">/dragon/gimbals_ctrl</text>
+
+  <rect class="box-green" x="780" y="670" width="310" height="126" rx="10"/>
+  <text class="label" x="808" y="702">Current robot state</text>
+  <text class="small" x="808" y="728">actual joints + gimbals</text>
+  <text class="small" x="808" y="751">baselink attitude, COG pose</text>
+  <text class="mono" x="808" y="778">/dragon/joint_states</text>
+
+  <rect class="box-green" x="1165" y="668" width="285" height="130" rx="10"/>
+  <text class="label" x="1193" y="700">Measured FC</text>
+  <text class="mono" x="1193" y="728">r_f(current)</text>
+  <text class="mono" x="1193" y="751">r_tau(current)</text>
+  <text class="mono" x="1193" y="778">/dragon/debug/fc_*_min</text>
+  <text class="small-bold" x="1193" y="794">about 40 Hz</text>
+
+  <rect class="box-green" x="1510" y="670" width="190" height="126" rx="10"/>
+  <text class="label" x="1538" y="702">Low-pass</text>
+  <text class="mono" x="1538" y="730">fc_*_filtered</text>
+  <text class="small" x="1538" y="754">shape safety scale</text>
+  <text class="small" x="1538" y="778">monitor / log</text>
+
+  <path class="arrow-green" d="M 335 733 L 405 733"/>
+  <path class="arrow-green" d="M 705 733 L 780 733"/>
+  <path class="arrow-green" d="M 1090 733 L 1165 733"/>
+  <path class="arrow-green" d="M 1450 733 L 1510 733"/>
+  <rect class="box-red" x="1305" y="820" width="395" height="40" rx="10"/>
+  <text class="small-bold" x="1328" y="845">Not fed back to the gate in the current implementation</text>
+
+  <line class="divider" x1="55" y1="920" x2="1745" y2="920"/>
+
+  <rect class="lane-note" x="55" y="950" width="1690" height="120" rx="18"/>
+  <text class="lane-title" x="92" y="994">3. Why the values differ</text>
+
+  <rect class="pill-blue" x="100" y="1020" width="350" height="34" rx="17"/>
+  <text class="small-bold" x="120" y="1043">Prediction: candidate/target pre-response</text>
+
+  <rect class="pill-green" x="485" y="1020" width="395" height="34" rx="17"/>
+  <text class="small-bold" x="505" y="1043">Measured: current state after response</text>
+
+  <rect class="pill-red" x="915" y="1020" width="370" height="34" rx="17"/>
+  <text class="small-bold" x="935" y="1043">Gap sources: gimbal, attitude, tracking, time offset</text>
+
+  <rect class="pill-green" x="1320" y="1020" width="370" height="34" rx="17"/>
+  <text class="small-bold" x="1340" y="1043">Same FC code, different state vector</text>
+</svg>

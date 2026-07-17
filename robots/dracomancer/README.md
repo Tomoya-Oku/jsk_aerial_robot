@@ -14,12 +14,12 @@ flowchart TB
     subgraph BU["bringup.launch（Dracomancer 側）"]
         URDF["URDF / TF"]
         SB["servo_bridge または publish_fake_joint_states"]
+        S2J["サーボ → 関節状態 変換"]
         FC["Spinal FC / IMU 接続<br/>（任意）"]
         WEB["Web Console<br/>（任意）"]
     end
     subgraph TO["teleoperation.launch（操作変換）"]
         CALIB["joystick 較正"]
-        S2J["サーボ → 関節状態 変換"]
         CP["位置指令 control_position.py"]
         AC["姿勢指令 control_orientation.py"]
         CJ["関節角指令 control_joint_angle.py"]
@@ -38,7 +38,7 @@ flowchart TB
 | ノード | 役割 | 主な入力 | 主な出力 |
 | --- | --- | --- | --- |
 | `calibrate_joystick.py` | 操縦桿の生値を較正して正規化 | `/joystick/raw` | `/dracomancer/joystick/calibrated` |
-| `convert_servo_to_joint_states.py` | サーボtickをラジアンの関節状態へ変換 | `/dracomancer/servo/states` | `/dracomancer/joint_states` |
+| `convert_servo_to_joint_states.py` | `bringup.launch` でサーボtickをラジアンの関節状態へ変換 | `/dracomancer/servo/states` | `/dracomancer/joint_states` |
 | `control_position.py` | 操縦桿とIMUから DRAGON の速度指令を生成 | joystick, IMU, flight_state | `/dragon/uav/nav` |
 | `control_orientation.py` | 操縦桿から姿勢指令を生成 | joystick, flight_state | `/dragon/final_target_baselink_rpy` |
 | `control_joint_angle.py` | 腕関節から DRAGON の形状指令を生成（候補姿勢のフィージビリティで変形可否を判定） | joint_states, shape_feasibility, threshold, flight_state | `/dragon/joints_ctrl`, `/dracomancer/shape_control_error`, `/dracomancer/candidate/joint_target`, `/dracomancer/joint_map/switch_ratio` |
@@ -70,7 +70,7 @@ flowchart TB
     end
     subgraph JOINT["形状系統（腕の動き → 機体関節）"]
         B1["Dracomancer サーボ状態"] --> B2["/dracomancer/servo/states"]
-        B2 --> B3["convert_servo_to_joint_states.py"]
+        B2 --> B3["convert_servo_to_joint_states.py<br/>（bringup.launch）"]
         B3 --> B4["/dracomancer/joint_states"]
         B4 --> B5["control_joint_angle.py"]
         B5 --> B6["/dragon/joints_ctrl"]
@@ -207,7 +207,7 @@ Dracomancer の腕関節を、DRAGON を1本の直列アームとみなして対
 | --- | --- |
 | `joint_pairing` | 3つの屈曲関節を DRAGON の3つの yaw に1:1対応、pitch は 0 固定で平面保持 |
 | `geometric` | 腕の順運動学からリンク方向ベクトルを求め、面内(yaw)/面外(pitch)成分に分解 |
-| `distal`（**既定**） | 遠位腕関節（手首・肘）を DRAGON 関節へ絶対角で一致させる（手首屈曲→上腕ロール+前腕ロール角に応じてjoint1_pitch/joint1_yawへ配分、肘屈曲→上腕ロール角に応じてjoint2_pitch/joint2_yawへ配分、肩屈曲→joint3_pitch、肩内外転→joint3_yaw。上腕ロール+前腕ロールの差分和はbaselink rollへ加算）。旧名 `elbow_only` も後方互換で可 |
+| `distal`（**既定**） | 遠位腕関節（手首・肘）を DRAGON 関節へ絶対角で一致させる（pitch/yaw配分に使う上腕・前腕ロールのみエンゲージ時中立からの差分。手首屈曲→上腕ロール+前腕ロール角に応じてjoint1_pitch/joint1_yawへ配分、肘屈曲→上腕ロール角に応じてjoint2_pitch/joint2_yawへ配分、肩屈曲→joint3_pitch、肩内外転→joint3_yaw。上腕ロール+前腕ロールの差分和はbaselink rollへ加算）。旧名 `elbow_only` も後方互換で可 |
 
 ### joint_pairing（中期方式）
 
@@ -266,7 +266,7 @@ FK -> 上腕/前腕/手の方向ベクトル
 
 > 旧名 `elbow_only`（後方互換のエイリアスとして引き続き使用可）。肘1自由度だった写像を、手首・肩を加えた**腕関節の絶対角一致**に一般化したものです。
 
-人間の腕の各関節を、DRAGON の各関節に**絶対角で一致**させます（中立記録なし。人間が 90° なら DRAGON も 90°）。既定の対応は以下の5つ：
+人間の腕の各関節を、DRAGON の各関節に**絶対角で一致**させます（人間が 90° なら DRAGON も 90°）。ただし **pitch/yaw 配分に使う上腕・前腕ロールのみ**、teleoperation への切替時（およびホバー開始時・`~recapture_anchor` 受信時）にその瞬間の値を中立としてキャプチャし、以後は中立からの差分を配分入力に使います（`capture_roll_neutral` 既定 `true`。ロールサーボの組立零点ズレで配分が飽和端に張り付くのを防ぐ）。既定の対応は以下の5つ：
 
 | 人間の腕関節（source） | DRAGON 関節（target） | 意味 |
 | --- | --- | --- |
@@ -280,16 +280,17 @@ FK -> 上腕/前腕/手の方向ベクトル
 
 ```text
 target_joint[k] = clamp(sign[k] * scale[k] * source_angle[k] + offset[k],  -joint_limit, joint_limit)
+  ※ pitch/yaw配分のロール入力のみ r = (ロール角 − エンゲージ時中立) − ロールオフセット（capture_roll_neutral 既定true）
 未対応の関節     = 直前の可行値（last_feasible_target、変化させない）
 ```
 
-- 絶対角の直接対応なので中立姿勢の記録（`capture_neutral_on_first_msg`）は不要・不使用。
-- `distal_signs` 既定は `[1.0, 1.0, 1.0, 1.0, -1.0]`（肩内外転が -1、他は +1。各関節ごとに、DRAGON が逆向きに動く場合に反転）。`distal_scales` 既定 `1.0` で 1:1 角度一致。
-- `distal_offsets` 既定は `[0, 0, 0, 0, 0]`：joint3_pitch は以前の `+π/2` 肩屈曲オフセットを使わず、`sign=+1` の絶対角一致で扱う。肩内外転の向きは未検証なので sim で要確認。
-- **手首のロール総和配分**（`enable_wrist_roll_switching` 既定 ON）: `wrist_roll_joints`（既定: `upper_arm_external_internal_rotation_joint` + `wrist_supination_joint`）の各ロール角から `wrist_roll_offsets`（既定 `[0, 0]`）を先に引き、各差分を ±90° で飽和する。その和を `alpha = theta + phi` として扱い、手首屈曲と手首内外転の2Dベクトルを `cos(alpha):sin(alpha)` で `joint1_pitch` / `joint1_yaw` へ回転配分する。`alpha > 90°` で `joint1_pitch` 側の符号が反転する挙動は維持する。
-- **肘の上腕ロール配分**（`enable_elbow_roll_switching` 既定 ON）: `upper_arm_external_internal_rotation_joint` から `elbow_roll_offset`（既定0）を先に引き、その差分を ±90° で飽和する。絶対値 `theta` を 0..π/2 の範囲にしたうえで、肘屈曲を `joint2_pitch:joint2_yaw = theta:(pi/2 - theta)` の線形比で配分する。上腕ロールの符号は `joint2_yaw` 側に反映される。
+- `capture_neutral_on_first_msg` は distal では不使用（distal は配分ロールのみエンゲージ時キャプチャ、屈曲・内外転系は中立記録なしの絶対一致）。
+- `distal_signs` 既定は `[1.0, -1.0, 1.0, 1.0, -1.0]`（手首内外転・肩内外転が -1、他は +1。各関節ごとに、DRAGON が逆向きに動く場合に反転）。`distal_scales` 既定 `1.0` で 1:1 角度一致。
+- `distal_offsets` 既定は `[0, 0, 0, 0, 0]`：joint3_pitch は以前の `+π/2` 肩屈曲オフセットを使わず、`sign=+1` の絶対角一致で扱う（屈曲・内外転系サーボの零点ズレは組立較正または `distal_offsets` で対処する）。肩内外転の向きは未検証なので sim で要確認。
+- **手首のロール総和配分**（`enable_wrist_roll_switching` 既定 ON）: `wrist_roll_joints`（既定: `upper_arm_external_internal_rotation_joint` + `wrist_supination_joint`）の各ロール角から**エンゲージ時中立**と `wrist_roll_offsets`（既定 `[0, 0]`）を先に引き、各差分を ±90° で飽和する。その和を `alpha = theta + phi` として扱い、手首屈曲と手首内外転の2Dベクトルを `cos(alpha):sin(alpha)` で `joint1_pitch` / `joint1_yaw` へ回転配分する。`alpha > 90°` で `joint1_pitch` 側の符号が反転する挙動は維持する。
+- **肘の上腕ロール配分**（`enable_elbow_roll_switching` 既定 ON）: `upper_arm_external_internal_rotation_joint` から**エンゲージ時中立**と `elbow_roll_offset`（既定0）を先に引き、その差分を ±90° で飽和する（飽和後の値を `r` とする）。肘屈曲を `joint2_pitch:joint2_yaw = r:(π/2 - |r|)` の線形比で配分する。上腕ロールの符号は `joint2_pitch` 側に反映され（ロール方向で曲げ面が反転）、`joint2_yaw` 側の重みは偶関数なので中立ロールをまたいでも連続に変化する。`joint2_yaw` の符号は `elbow_yaw_sign`（既定 `1.0`）で必要に応じて反転できる。
 - 手首・肘それぞれの配分比 `rho_i` とその入力・重みは `/dracomancer/joint_map/switch_ratio` に毎周期publishされ、比較・解析用に記録できる（`scripts/shape_task/task_recorder.py` は `r1,rho1,c1_pitch,c1_yaw,r2,rho2,c2_pitch,c2_yaw` 列としてCSVに記録）。
-- **link4 アンカー（`enable_link4_anchor` 既定 ON）**: 関節を曲げても DRAGON の **link4（腕先端）位置をワールドにおおよそ固定**するため、ホバー開始時に link4 位置を基準化し、`joints_ctrl` と同じ目標関節角からCOG位置（`uav/nav` POS_MODE）を逆算する。既定の `link4_anchor_mode:=position_only` ではbaselink姿勢補償を送らない。`link4_anchor_mode:=full` ではCOG位置+baselink姿勢でlink4姿勢も補償できるが、姿勢failsafeに近づきやすいため明示指定時のみ使う。ON時も `enable_link4_anchor_body_safety` がCOG高度・水平リーシュ・full時の姿勢を検査し、危険なbody補償やTF断時は関節/補償指令を保持する。詳細は [docs/link4_anchor.md](docs/link4_anchor.md)。**移動制御（`enable_position_control`）とは併用不可**（`uav/nav` が競合）。
+- **link4 アンカー（`enable_link4_anchor` 既定 ON）**: 関節を曲げても DRAGON の **link4（腕先端）位置をワールドにおおよそ固定**するため、ホバー開始時に link4 位置を基準化し、`joints_ctrl` と同じ目標関節角からCOG位置（`uav/nav` POS_MODE）を逆算する。既定の `link4_anchor_mode:=position_only` ではCOG位置だけを補償し、link4 yawは固定しない。`link4_anchor_mode:=position_yaw` ではCOG位置に加えてCOG yaw目標（`uav/nav` の `target_yaw`）でlink4 yawも固定する（baselink姿勢補償は送らない）。`link4_anchor_mode:=full` ではCOG位置+baselink姿勢でlink4姿勢も補償できるが、姿勢failsafeに近づきやすいため明示指定時のみ使う。ON時も `enable_link4_anchor_body_safety` がCOG高度・水平リーシュ・full時の姿勢を検査し、`enable_link4_anchor_tracking_safety` がCOG/yaw/roll/pitch追従遅れを検査し、`enable_link4_anchor_joint_tracking_safety` がDRAGON関節追従遅れを検査する。危険なbody補償、追従遅れ、TF断時は関節/補償指令を保持する。詳細は [docs/link4_anchor.md](docs/link4_anchor.md)。**移動制御（`enable_position_control`）とは併用不可**（`uav/nav` が競合）。
 - 未対応の関節は `mapping_reference` の straight/circular に関係なく動かない。
 - 対応関係は平行リスト `distal_source_joints` / `distal_target_joints` / `distal_signs` / `distal_scales`（同じ長さ）で自由に変更可。
 
@@ -345,8 +346,8 @@ flowchart TD
 
 - **判定基準**：force・torque **両方**の予測半径が `hard_min` 以上なら変形可。`hold` モードで一度 `hard_min` 未満になった場合は、両方が `min` 以上へ復帰するまで直前の可行姿勢を保持する（ヒステリシス）。
 - **NG時**：`feasibility_gate_mode` に応じて、保持・小ステップ探索・縮小移動のいずれかを行う。
-- 予測はサービス `shape_feasibility/check_shape` が `dragon/full_vectoring_robot_model` プラグインで計算します。既定の `shape_feasibility_prediction_mode=controller` では、候補形状に加えて最新の `/dragon/gimbals_ctrl` のgimbal roll指令と、利用可能なbaselink姿勢feedbackを使い、DRAGON controllerの `/dragon/debug/fc_*_min` に近い条件で `calcFeasibleControlFxyDists()` / `calcFeasibleControlTDists()` を再評価します。旧来の `optimized_gimbal` はDRAGONモデルのジンバル処理済み状態だけを使う形状中心の予測です。
-- 最適化が毎回走るため、評価は `feasibility_rate`（既定 20Hz）にスロットルされます。
+- 予測はサービス `shape_feasibility/check_shape` が `dragon/full_vectoring_robot_model` プラグインで計算します。既定の `shape_feasibility_prediction_mode=allocation` では、候補形状に対して静的ホバーallocationを行い、割当後のgimbal roll角と利用可能なbaselink姿勢feedbackを使って `calcFeasibleControlFxyDists()` / `calcFeasibleControlTDists()` を再評価します。`controller` は最新の `/dragon/gimbals_ctrl` のgimbal roll指令を使う旧近似、`optimized_gimbal` はDRAGONモデルのジンバル処理済み状態だけを使う形状中心の予測です。
+- 最適化が毎回走るため、評価は `feasibility_rate`（既定 10Hz）にスロットルされます。CPU負荷が高い場合はlaunch引数で下げられます。
 
 > `shape_feasibility_node` は DRAGON の namespace（`ns=dragon`）で起動し、モデルが `/dragon/robot_description` と機体パラメータを読みます。**DRAGON が起動している必要があります。**
 
@@ -354,11 +355,12 @@ flowchart TD
 
 | 要素 | 使うモード | 入力元 | 役割 |
 | --- | --- | --- | --- |
-| 候補DRAGON関節角 | `model` / `optimized_gimbal` / `controller` | `control_joint_angle.py` から `check_shape` serviceへ渡す `name[]` / `position[]` | link姿勢・ロータ位置・基本的なFC余裕を決める主入力 |
+| 候補DRAGON関節角 | `model` / `optimized_gimbal` / `controller` / `allocation` | `control_joint_angle.py` から `check_shape` serviceへ渡す `name[]` / `position[]` | link姿勢・ロータ位置・基本的なFC余裕を決める主入力 |
 | DRAGONモデル・機体パラメータ | 全モード | `/dragon/robot_description`、rotor rosparam、`dragon/full_vectoring_robot_model` | 質量、リンク、ロータ配置、gimbal制約を読む |
 | モデル内gimbal処理状態 | `optimized_gimbal` | `updateRobotModel()` 後の `getGimbalProcessedJoint()` / `getRollLockedGimbal()` | 候補形状だけからgimbal lockとroll角を推定する従来予測 |
 | 最新gimbal roll指令 | `controller` | `/dragon/gimbals_ctrl` | controllerが実際に使うgimbal roll条件へ近づける |
-| baselink姿勢feedback | `controller` | `/dragon/final_target_baselink_rpy`、または `/dragon/uav/baselink/odom` | torque fc計算の `cog_rot` 条件へ反映する |
+| static allocation | `allocation` | 候補形状、DRAGONモデル、ホバー重力補償レンチ | 候補形状に応じたgimbal rollを予測する |
+| baselink姿勢feedback | `controller` / `allocation` | `/dragon/final_target_baselink_rpy`、または `/dragon/uav/baselink/odom` | torque fc計算の `cog_rot` 条件へ反映する |
 | しきい値 | gate判定 | `/dracomancer/force_volume_radius_threshold`、`/dracomancer/torque_volume_radius_threshold` | 予測fcを採用/保持へ変換する判定基準 |
 | 最終送信target | 診断用 | gate / rate limit / link4 safety後の `current_target` | `/dracomancer/target/fc_*_min` として実測fc比較用にpublish |
 
@@ -408,6 +410,7 @@ flowchart TD
 | `distal_signs` | `[1.0, 1.0, 1.0, 1.0, -1.0]` | `distal` の各符号（逆向きに動く関節を反転） |
 | `distal_scales` | `[1.0, 1.0, 1.0, 1.0, 1.0]` | `distal` の各ゲイン（`1.0` で 1:1 角度一致） |
 | `distal_offsets` | `[0, 0, 0, 0, 0]` | `distal` の各加算オフセット[rad]（`sign*scale*source + offset`）。joint3_pitch は90degオフセットなし |
+| `capture_roll_neutral` | `true` | 配分ロール（上腕・前腕）の中立をteleoperation切替・ホバー開始・`~recapture_anchor` でキャプチャし、差分を配分入力に使う（`false` でロールも絶対角） |
 | `enable_wrist_roll_switching` | `true` | ロール総和に応じて手首屈曲を `joint1_pitch` / `joint1_yaw` へ配分 |
 | `wrist_roll_joints` | `[upper_arm_external_internal_rotation_joint, wrist_supination_joint]` | 手首のpitch/yaw配分に使うロール関節。各基準差分を ±90° で飽和してから足す |
 | `wrist_roll_offsets` | `[0.0, 0.0]` | `wrist_roll_joints` と同順の基準角 [rad]。各ロールは基準差分を作ってから ±90° で飽和 |
@@ -419,37 +422,46 @@ flowchart TD
 | `elbow_pitch_sign` / `elbow_yaw_sign` | `1.0` / `1.0` | 肘屈曲を `joint2_pitch` / `joint2_yaw` へ入れる符号 |
 | `elbow_pitch_scale` / `elbow_yaw_scale` | `1.0` / `1.0` | 肘屈曲を `joint2_pitch` / `joint2_yaw` へ入れるゲイン |
 | `enable_link4_anchor` | `true` | `distal` 時に link4 位置をワールド固定するためCOG位置を補償。`enable_position_control` とは併用不可 |
-| `link4_anchor_mode` | `position_only` | `position_only`: link4位置だけ固定 / `full`: COG位置+baselink姿勢でlink4姿勢も補償 |
+| `link4_anchor_mode` | `position_only` | `position_only`: link4位置だけ固定 / `position_yaw`: COG位置+COG yaw目標でlink4位置とyawを固定 / `full`: COG位置+baselink姿勢でlink4姿勢も補償 |
+| `link4_anchor_offset_x` | `0.0` | 固定点の link4 x軸方向オフセット [m]。`0.474`（リンク長）で尾端を固定 |
 | `publish_link4_anchor_baselink_motion` | `false` | `full` 時に `/dragon/target_rotation_motion` へbaselink姿勢を即時指令する。姿勢failsafeに近づきやすいため既定OFF |
 | `enable_link4_anchor_body_step_scaling` | `true` | link4アンカーのCOG位置、またはfull時のbaselink姿勢の必要変化量が大きすぎる場合、関節ステップを自動縮小 |
 | `link4_anchor_max_body_pos_rate` | `0.4` | body step scalingで許容するCOG位置目標の最大変化速度 [m/s] |
-| `link4_anchor_max_body_rpy_rate` | `0.8` | `full` 時のbody step scalingで許容するbaselink姿勢目標の最大変化速度 [rad/s] |
+| `link4_anchor_max_body_rpy_rate` | `0.8` | body step scalingで許容する姿勢目標の最大変化速度 [rad/s]（`full`: baselink RPY / `position_yaw`: COG yaw） |
 | `enable_link4_anchor_body_safety` | `true` | link4アンカー補償後のCOG高度・水平リーシュ、またはfull時のbaselink姿勢を検査し、危険なら関節/補償指令を保持 |
 | `link4_anchor_max_abs_roll` / `link4_anchor_max_abs_pitch` | `0.6` / `0.6` | `full` 時のlink4アンカー補償で許容するbaselink roll/pitch絶対値 [rad] |
 | `link4_anchor_min_cog_z` / `link4_anchor_max_cog_z` | `0.6` / `2.5` | link4アンカー補償で許容するCOG高度範囲 [m]。max `0.0` は上限チェック無効 |
-| `link4_anchor_max_cog_xy_offset` | `1.0` | link4アンカー補償でホバー開始時COGから許容する水平距離 [m]。`0.0` 以下で無効 |
+| `link4_anchor_max_cog_xy_offset` | `0.9` | link4アンカー補償でホバー開始時COGから許容する水平距離 [m]。`0.0` 以下で無効 |
+| `link4_anchor_max_abs_yaw_delta` | `2.094` | `position_yaw` のCOG yaw目標をホバー開始時COG yawからの差分で制限する上限 [rad]。`0.0` 以下で無効 |
+| `enable_link4_anchor_tracking_safety` | `true` | 実COG/yaw/roll/pitchがlink4アンカー目標へ追従していない時に形状更新を保持 |
+| `link4_anchor_max_cog_tracking_error` | `0.2` | COG位置目標と実COG位置の許容誤差 [m] |
+| `link4_anchor_max_yaw_tracking_error` | `0.524` | `position_yaw` のCOG yaw目標と実yawの許容誤差 [rad] |
+| `link4_anchor_max_tracking_roll` / `link4_anchor_max_tracking_pitch` | `0.262` / `0.262` | link4アンカー中に許容する実roll/pitch絶対値 [rad] |
+| `enable_link4_anchor_joint_tracking_safety` | `true` | DRAGON実関節が`joints_ctrl`へ追従していない時に形状更新を保持 |
+| `link4_anchor_max_joint_tracking_error` | `0.3` | DRAGON各関節の目標-実値差の許容値 [rad] |
+| `link4_anchor_joint_tracking_timeout` | `0.5` | DRAGON関節状態を追従判定に使う最大経過時間 [s] |
 | `enable_baselink_roll_mapping` | `true` | `distal` 時に上腕ロールと前腕ロールの中立値からの差分和をbaselink rollへ加算 |
 | `baselink_roll_source_joints` | `[upper_arm_external_internal_rotation_joint, wrist_supination_joint]` | baselink roll に使う Dracomancer ロール関節 |
 | `baselink_roll_signs` | `[-1.0, -1.0]` | baselink roll 差分の符号。回転方向が逆なら該当要素を反転 |
 | `baselink_roll_scales` | `[1.0, 1.0]` | baselink roll 差分の各ゲイン |
 | `baselink_roll_limit` | `π/2` | baselink roll へ加算する差分の絶対値上限 [rad] |
 | `hover_flight_state` | `5` | DRAGON の HOVER_STATE。`/dragon/uav/nav` はHOVER以外では無視されるため、link4アンカーもこの状態でのみ有効 |
-| `capture_neutral_on_first_msg` | `false` | 最初の Dracomancer 関節角を中立姿勢として記憶（`distal` では絶対角一致のため不使用） |
+| `capture_neutral_on_first_msg` | `false` | 最初の Dracomancer 関節角を中立姿勢として記憶（`distal` では不使用。distal は配分ロールのみエンゲージ時キャプチャ） |
 | `enable_feasibility_gate` | `true` | 予測ゲートの有効化。true でForce/Torque Volume radiusに基づく危険姿勢回避を行う。false で候補をそのまま採用 |
 | `feasibility_gate_mode` | `hold` | 不可行候補への対処。`hold` / `step_search` / `soft_scale` |
 | `feasibility_step_fraction` | `0.25` | `step_search` の初期探索ステップ |
 | `feasibility_min_step_fraction` | `0.03` | `step_search` の最小探索ステップ |
 | `feasibility_soft_min_scale` | `0.0` | `soft_scale` の移動倍率下限 |
 | `feasibility_service` | `/dragon/shape_feasibility/check_shape` | 予測サービス名 |
-| `feasibility_rate` | `20.0` | 候補評価のスロットル周波数 [Hz] |
-| `shape_feasibility_prediction_mode` | `controller` | 予測fcの計算方法。`controller` は最新gimbal指令・姿勢feedbackを使って controller 側debug fcへ寄せる。`optimized_gimbal` は従来の形状中心予測、`model` は `updateRobotModel()` 後の標準fc |
+| `feasibility_rate` | `10.0` | 候補評価のスロットル周波数 [Hz] |
+| `shape_feasibility_prediction_mode` | `allocation` | 予測fcの計算方法。`allocation` は候補形状に対して静的ホバーallocationを行い、割当後のgimbal rollでfcを再評価する。`controller` は最新gimbal指令・姿勢feedbackを使う旧近似、`optimized_gimbal` は従来の形状中心予測、`model` は `updateRobotModel()` 後の標準fc |
 | `enable_target_fc_prediction` | `true` | gate/rate-limit/link4 safety後に実際へ送る最終targetの予測fcを `/dracomancer/target/fc_*_min` にpublish |
 | `target_fc_prediction_rate` | `10.0` | 最終target予測fcの評価周波数 [Hz] |
 | `force_radius_threshold` | `0.108990` | 力の下限しきい値（topic 未受信時のフォールバック） |
 | `torque_radius_threshold` | `0.015400` | トルクの下限しきい値（同上） |
 | `force_radius_recover_threshold` | `0.249220` | `hold` モードで拒否状態から復帰する力のしきい値（topic 未受信時のフォールバック） |
 | `torque_radius_recover_threshold` | `0.278159` | `hold` モードで拒否状態から復帰するトルクのしきい値（同上） |
-| `max_step` | `0.04` | 1周期あたりの最大変化量 |
+| `max_step` | `0.015` | 1周期あたりの最大変化量 |
 | `startup_pose` | `[0, pi/2, 0, pi/2, 0, pi/2]` | 立ち上げ時の通常姿勢 |
 
 `shape_feasibility_node`（teleoperation.launch、`ns=dragon`）:
@@ -458,12 +470,15 @@ flowchart TD
 | --- | --- | --- |
 | `robot_model_plugin_name` | `dragon/full_vectoring_robot_model` | 予測に使う DRAGON モデルプラグイン |
 | `gimbal_feedback_topic` | `gimbals_ctrl` | `controller` modeで使う最新gimbal指令topic（`ns=dragon` 相対） |
-| `baselink_rpy_topic` | `final_target_baselink_rpy` | `controller` modeで使うbaselink目標RPY topic（`ns=dragon` 相対） |
+| `baselink_rpy_topic` | `final_target_baselink_rpy` | `controller` / `allocation` modeで使うbaselink目標RPY topic（`ns=dragon` 相対） |
 | `baselink_odom_topic` | `uav/baselink/odom` | 任意で使うbaselink実測姿勢topic（`ns=dragon` 相対） |
 | `use_gimbal_feedback` | `true` | `controller` modeでgimbal feedbackを使う |
-| `use_baselink_rpy_feedback` | `true` | `controller` modeでbaselink RPY feedbackを使う |
-| `use_baselink_odom_feedback` | `true` | `controller` modeでbaselink odom姿勢を使う |
+| `use_baselink_rpy_feedback` | `true` | `controller` / `allocation` modeでbaselink RPY feedbackを使う |
+| `use_baselink_odom_feedback` | `true` | `controller` / `allocation` modeでbaselink odom姿勢を使う |
 | `feedback_timeout` | `0.25` | gimbal/姿勢feedbackの有効期限 [s] |
+| `allocation_refine_max_iteration` | `5` | `allocation` modeの静的allocation反復回数 |
+| `allocation_refine_threshold` | `0.0001` | `allocation` modeのロータ位置収束判定 |
+| `allocation_target_acc` | 未指定 | 6要素を指定するとホバー重力補償の代わりにallocation目標加速度として使う |
 
 `volume_radius_monitor.py`（teleoperation.launch、ライブ監視）:
 
@@ -567,7 +582,11 @@ ROS master は親機PCに固定します。子機PCでは `ROS_MASTER_URI` を�
 roslaunch dracomancer bringup.launch rm:=false sim:=true headless:=false
 ```
 
-通常のテレオペレーション:
+通常のテレオペレーション（別端末で順に起動）:
+
+```bash
+roslaunch dracomancer bringup.launch
+```
 
 ```bash
 roslaunch dracomancer teleoperation.launch
@@ -632,7 +651,6 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | `enable_joystick_serial` | `false` | rosserial の joystick serial node を起動する |
 | `js_raw_topic` | `/joystick/raw` | 操縦桿生値 |
 | `js_calibrated_topic` | `/dracomancer/joystick/calibrated` | 較正済み操縦桿 |
-| `enable_servo_to_joint_states` | `false` | サーボ状態をDracomancer関節状態へ変換する。通常はbringup.launch側が担当するため既定OFF |
 | `enable_position_control` | `false` | `/dragon/uav/nav`（操縦桿による移動）を送る。既定 OFF（落下防止のため。下記「既知の課題」参照） |
 | `enable_attitude_control` | `false` | `/dragon/final_target_baselink_rpy` を送る |
 | `enable_joint_angle_control` | `true` | `/dragon/joints_ctrl` を送る |
@@ -649,14 +667,16 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | `axis_x/y/z` | `0 / 1 / 2` | ジョイスティック軸番号 |
 | `xy_vel` | `0.3` | XY速度スケール |
 | `z_vel` | `0.2` | Z速度スケール |
-| `max_step` | `0.04` | 関節指令のレート制限 |
+| `max_step` | `0.015` | 関節指令のレート制限 |
 | `enable_wrist_roll_switching` | `true` | 飽和ロール総和に応じた手首屈曲の `joint1_pitch` / `joint1_yaw` 配分 |
 | `wrist_roll_offsets` | `[0.0, 0.0]` | `wrist_roll_joints` と同順の基準角 [rad] |
 | `enable_elbow_roll_switching` | `true` | 飽和上腕ロール角に応じた肘屈曲の `joint2_pitch` / `joint2_yaw` 配分 |
 | `elbow_roll_offset` | `0.0` | 上腕ロールの基準角 [rad] |
 | `enable_link4_anchor` | `true` | link4固定補償を有効化する |
-| `link4_anchor_mode` | `position_only` | link4固定の補償方式。既定はCOG位置だけ補償 |
+| `link4_anchor_mode` | `position_only` | link4固定の補償方式（`position_only` / `position_yaw` / `full`）。既定はCOG位置のみで補償し、yawは固定しない |
 | `enable_link4_anchor_body_safety` | `true` | link4固定ON時にbody補償後の高度・水平距離、full時は姿勢も検査 |
+| `enable_link4_anchor_tracking_safety` | `true` | link4固定ON時にCOG/yaw/roll/pitch追従遅れが大きければ形状更新を保持 |
+| `enable_link4_anchor_joint_tracking_safety` | `true` | link4固定ON時にDRAGON実関節の追従遅れが大きければ形状更新を保持 |
 
 ## 形態目標到達タスク実験（shape_task）
 
@@ -697,7 +717,7 @@ roslaunch dracomancer teleoperation.launch \
 | 項目 | 現状 |
 | --- | --- |
 | 操縦桿による移動制御 | 既定 OFF（`enable_position_control:=false`）。`control_position.py` が `POS_VEL_MODE` で `target_pos` 未設定（=0）の FlightNav を送るため、ON にすると DRAGON が原点・高度0へ指令され落下する。`VEL_MODE` 化など修正が必要 |
-| 予測フィージビリティ・ゲート | 既定 ON（`enable_feasibility_gate:=true`）。Force/Torque Volume radius に基づき危険姿勢を抑制する。予測fcは既定 `shape_feasibility_prediction_mode=controller` で最新gimbal指令・姿勢feedbackを使い、DRAGON controller側debug fcへ近づける。モデル/設定によって予測 fc が過小になり全変形を却下する場合は、`enable_feasibility_gate:=false` で一時的に無効化して予測器側を調整する |
+| 予測フィージビリティ・ゲート | 既定 ON（`enable_feasibility_gate:=true`）。Force/Torque Volume radius に基づき危険姿勢を抑制する。予測fcは既定 `shape_feasibility_prediction_mode=allocation` で候補形状の静的ホバーallocation後のgimbal rollを使い、DRAGON controller側debug fcへ近づける。モデル/設定によって予測 fc が過小になり全変形を却下する場合は、`enable_feasibility_gate:=false` で一時的に無効化して予測器側を調整する |
 | 立ち上げ時の通常形状保持 | `startup` モードで実装。DRAGON 側の preflight joint control 設定に依存 |
 | 力覚提示 | 提示トルク相当量の計算とトルク ON/OFF 出力のみ対応。XL430-W250-T では所望電流・所望トルク入力ができないため、Mk-Iでの連続的な反力・反トルク提示は Mk-II 以降の展望。既存の電流指令経路は互換サーボ向け任意機能として保持 |
 | Force/Torque Volume に基づく厳密な姿勢制限 | DRAGON の内接半径を使った形状ゲートを実装。link4アンカーON時は別途COG高度・baselink roll/pitchのbody補償ゲートも実装 |

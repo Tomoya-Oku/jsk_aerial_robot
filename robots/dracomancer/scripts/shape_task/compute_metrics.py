@@ -131,9 +131,12 @@ def _recompute_success(t, e_q, e_s, mu, params):
     """Fallback when no trial_end info: first time the hold condition completes."""
     eq_th = params.get("E_q_threshold", 0.15)
     es_th = params.get("E_s_threshold", 0.05)
+    use_es = params.get("use_shape_error", False)
     t_hold = params.get("t_hold", 1.0)
     require_mu = params.get("require_safety_margin", True)
-    ok = (e_q < eq_th) & (e_s < es_th)
+    ok = e_q < eq_th
+    if use_es:
+        ok &= e_s < es_th
     if require_mu:
         ok &= mu >= 0.0
     hold_start = None
@@ -262,11 +265,14 @@ def main():
     parser.add_argument("-o", "--out", default=None, help="metrics CSV path")
     parser.add_argument("--eq-th", type=float, default=0.15)
     parser.add_argument("--es-th", type=float, default=0.05)
+    parser.add_argument("--use-es", action="store_true",
+                        help="include E_s in the recomputed success condition")
     parser.add_argument("--t-hold", type=float, default=1.0)
     parser.add_argument("--no-mu", action="store_true",
                         help="exclude mu>=0 from the recomputed success condition")
     args = parser.parse_args()
     params = {"E_q_threshold": args.eq_th, "E_s_threshold": args.es_th,
+              "use_shape_error": args.use_es,
               "t_hold": args.t_hold, "require_safety_margin": not args.no_mu}
     metrics = compute_and_write(args.raw_csv, args.out, params=params)
     for k, v in metrics.items():

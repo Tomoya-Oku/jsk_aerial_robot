@@ -22,12 +22,13 @@ from matplotlib.ticker import FuncFormatter
 def setup_paper_style():
     matplotlib.rcParams.update({
         "font.family": "Times New Roman",
-        "font.size": 16,
-        "axes.titlesize": 18,
-        "axes.labelsize": 18,
-        "xtick.labelsize": 16,
-        "ytick.labelsize": 16,
-        "legend.fontsize": 14,
+        "font.size": 24,
+        "axes.titlesize": 28,
+        "axes.labelsize": 28,
+        "xtick.labelsize": 24,
+        "ytick.labelsize": 24,
+        "legend.fontsize": 21,
+        "mathtext.fontset": "cm",
         "svg.fonttype": "none",
     })
 
@@ -49,6 +50,48 @@ def load_rows(path):
 
 def values(rows, key):
     return [v for v in (_as_float(row.get(key)) for row in rows) if v is not None]
+
+
+def paired_values(rows, x_key, y_key):
+    pairs = []
+    for row in rows:
+        x = _as_float(row.get(x_key))
+        y = _as_float(row.get(y_key))
+        if x is not None and y is not None:
+            pairs.append((x, y))
+    return pairs
+
+
+def mean(xs):
+    return sum(xs) / float(len(xs)) if xs else None
+
+
+def pearson_r(pairs):
+    if len(pairs) < 2:
+        return None
+    xs = [x for x, _y in pairs]
+    ys = [y for _x, y in pairs]
+    x_bar = mean(xs)
+    y_bar = mean(ys)
+    cov = sum((x - x_bar) * (y - y_bar) for x, y in pairs)
+    x_var = sum((x - x_bar) ** 2 for x in xs)
+    y_var = sum((y - y_bar) ** 2 for y in ys)
+    denom = math.sqrt(x_var * y_var)
+    return cov / denom if denom > 0.0 else None
+
+
+def linear_fit(pairs):
+    if len(pairs) < 2:
+        return None
+    xs = [x for x, _y in pairs]
+    ys = [y for _x, y in pairs]
+    x_bar = mean(xs)
+    y_bar = mean(ys)
+    denom = sum((x - x_bar) ** 2 for x in xs)
+    if denom <= 0.0:
+        return None
+    slope = sum((x - x_bar) * (y - y_bar) for x, y in pairs) / denom
+    return slope, y_bar - slope * x_bar
 
 
 def percentile(xs, p):
@@ -78,28 +121,32 @@ def ensure_dir(path):
         os.makedirs(path)
 
 
-def save(fig, out_dir, base_name, formats):
+def save(fig, out_dir, base_name, formats, tight=True):
     paths = []
-    fig.tight_layout()
+    if tight:
+        fig.tight_layout()
     for fmt in formats:
         path = os.path.join(out_dir, "%s.%s" % (base_name, fmt))
-        fig.savefig(path, dpi=180)
+        fig.savefig(path, dpi=180, bbox_inches="tight", pad_inches=0.08)
         paths.append(path)
     plt.close(fig)
     return paths
 
 
-def add_threshold_lines(ax, hard_min, soft_min, label_values=False):
+def threshold_label(symbol, suffix, value, label_values=False):
+    suffix_space = r"\;" if suffix == "min" else ""
+    if label_values:
+        return r"$r_%s^{\mathrm{%s}}%s = %.3f$" % (symbol, suffix, suffix_space, value)
+    return r"$r_%s^{\mathrm{%s}}$" % (symbol, suffix)
+
+
+def add_threshold_lines(ax, hard_min, soft_min, symbol, label_values=False):
     if hard_min is not None:
-        label = "Critical threshold"
-        if label_values:
-            label += " = %.3f" % hard_min
+        label = threshold_label(symbol, "hard", hard_min, label_values)
         ax.axvline(hard_min, color="tab:red", linestyle="-", linewidth=3.0,
                    label=label)
     if soft_min is not None:
-        label = "Warning threshold"
-        if label_values:
-            label += " = %.3f" % soft_min
+        label = threshold_label(symbol, "min", soft_min, label_values)
         ax.axvline(soft_min, color="tab:green", linestyle="-", linewidth=3.0,
                    label=label)
 
@@ -112,16 +159,18 @@ def plot_histograms(rows, out_dir, thresholds, bins, formats, name_prefix, paper
     f = values(rows, "fc_f_min_mean")
     t = values(rows, "fc_t_min_mean")
     fig, axes = plt.subplots(1, 2, figsize=(12, 5.0))
-    for ax, xs, title, xlabel, th, xlim in (
-        (axes[0], f, "Force Volume", "Force volume radius [N]", thresholds["force"], (0.0, 2.5)),
-        (axes[1], t, "Torque Volume", "Torque volume radius [N m]", thresholds["torque"], (0.0, 2.5)),
+    for ax, xs, title, xlabel, th, xlim, symbol in (
+        (axes[0], f, "Force Volume", r"$r_f$ [N]", thresholds["force"], (0.0, 2.5), "f"),
+        (axes[1], t, "Torque Volume", r"$r_\tau$ [N m]", thresholds["torque"], (0.0, 2.5), r"\tau"),
     ):
         hist_kwargs = {"range": xlim} if paper_style else {}
         ax.hist(xs, bins=bins, color="0.35", edgecolor="white", **hist_kwargs)
-        add_threshold_lines(ax, th[0], th[1], label_values=paper_style)
-        ax.set_title(title)
+        add_threshold_lines(ax, th[0], th[1], symbol, label_values=paper_style)
+        if not paper_style:
+            ax.set_title(title)
         ax.set_xlabel(xlabel)
-        ax.set_ylabel("Samples")
+        if ax is axes[0]:
+            ax.set_ylabel("Samples")
         if paper_style:
             ax.set_xlim(xlim)
             ax.set_ylim(bottom=0.0)
@@ -130,7 +179,8 @@ def plot_histograms(rows, out_dir, thresholds, bins, formats, name_prefix, paper
             ax.tick_params(axis="both", which="both", length=0, top=False, right=False)
         ax.grid(True, alpha=0.25)
         ax.legend(loc="upper right", frameon=True)
-    return save(fig, out_dir, name_prefix + "_distribution", formats)
+    fig.subplots_adjust(wspace=0.22)
+    return save(fig, out_dir, name_prefix + "_distribution", formats, tight=False)
 
 
 def plot_scatter(rows, out_dir, thresholds, formats, name_prefix):
@@ -214,6 +264,42 @@ def plot_joint_relations(rows, out_dir, formats, name_prefix):
     return save(fig, out_dir, name_prefix + "_by_joint", formats)
 
 
+def plot_altitude_correlation(rows, out_dir, formats, name_prefix, paper_style=False):
+    specs = [
+        ("fc_f_min_mean", r"$r_f$", "tab:orange"),
+        ("fc_t_min_mean", r"$r_\tau$", "tab:blue"),
+    ]
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5.0), sharex=True)
+    for ax, (fc_key, ylabel, color) in zip(axes, specs):
+        pairs = paired_values(rows, "altitude_mean", fc_key)
+        if pairs:
+            xs = [x for x, _y in pairs]
+            ys = [y for _x, y in pairs]
+            ax.scatter(xs, ys, s=22 if paper_style else 18,
+                       alpha=0.65, color=color, edgecolors="none")
+            fit = linear_fit(pairs)
+            if fit is not None:
+                slope, intercept = fit
+                x_min = min(xs)
+                x_max = max(xs)
+                ax.plot([x_min, x_max],
+                        [slope * x_min + intercept, slope * x_max + intercept],
+                        color="black", linewidth=1.8, linestyle="--")
+            r = pearson_r(pairs)
+            if r is not None:
+                ax.text(
+                    0.04, 0.94, r"$r = %.3f$" % r,
+                    transform=ax.transAxes, ha="left", va="top")
+        ax.set_xlabel("altitude_mean [m]")
+        ax.set_ylabel(ylabel)
+        ax.grid(True, alpha=0.25)
+        if not paper_style:
+            ax.set_title("%s vs altitude_mean" % fc_key)
+    fig.subplots_adjust(wspace=0.28)
+    return save(fig, out_dir, name_prefix + "_altitude_correlation", formats,
+                tight=False)
+
+
 def write_summary(rows, out_dir, thresholds, name_prefix):
     f = values(rows, "fc_f_min_mean")
     t = values(rows, "fc_t_min_mean")
@@ -230,6 +316,13 @@ def write_summary(rows, out_dir, thresholds, name_prefix):
                    median(xs), percentile(xs, 75), max(xs)))
         fp.write("force_thresholds hard_min=%.6f min=%.6f\n" % thresholds["force"])
         fp.write("torque_thresholds hard_min=%.6f min=%.6f\n" % thresholds["torque"])
+        for key in ("fc_f_min_mean", "fc_t_min_mean"):
+            pairs = paired_values(rows, "altitude_mean", key)
+            r = pearson_r(pairs)
+            if r is not None:
+                fp.write(
+                    "pearson_altitude_mean_vs_%s: r=%.6f samples=%d\n"
+                    % (key, r, len(pairs)))
     return path
 
 
@@ -250,7 +343,8 @@ def main():
     parser.add_argument("--paper-style", action="store_true",
                         help="use publication-oriented labels, fonts, ticks, and axes")
     parser.add_argument("--plots", nargs="+", default=["all"],
-                        choices=["all", "distribution", "scatter", "sequence", "joint"],
+                        choices=["all", "distribution", "scatter", "sequence",
+                                 "joint", "altitude"],
                         help="which plots to write")
     args = parser.parse_args()
     if args.paper_style:
@@ -282,6 +376,10 @@ def main():
         joint_plot = plot_joint_relations(rows, out_dir, args.formats, args.name_prefix)
         if joint_plot:
             outputs.append(joint_plot)
+    if write_all or "altitude" in plots:
+        outputs.append(plot_altitude_correlation(
+            rows, out_dir, args.formats, args.name_prefix,
+            paper_style=args.paper_style))
     outputs.append(write_summary(rows, out_dir, thresholds, args.name_prefix))
 
     for output in outputs:

@@ -81,6 +81,7 @@ class TaskRecorder:
         self.metric_params = {
             "E_q_threshold": float(rospy.get_param("~E_q_threshold", 0.15)),
             "E_s_threshold": float(rospy.get_param("~E_s_threshold", 0.05)),
+            "use_shape_error": bool(rospy.get_param("~use_shape_error", False)),
             "t_hold": float(rospy.get_param("~t_hold", 1.0)),
             "require_safety_margin": bool(rospy.get_param("~require_safety_margin", True)),
             "joint_names": self.joint_names,

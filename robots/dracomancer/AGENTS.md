@@ -1,4 +1,4 @@
-# Dracomancerパッケージ
+﻿# Dracomancerパッケージ
 
 このファイルは `robots/dracomancer/` を編集する際に Codex/ClaudeなどのAIエージェント が参照する前提知識です。
 ユーザーのグローバル指示（日本語での結論先出し・小さな変更・確認の徹底など）に従うこと。
@@ -54,6 +54,7 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 ## FlightNav（aerial_robot_msgs）の要点
 
 移動指令で使う主フィールド:
+
 - `control_frame`: `WORLD_FRAME(0)` / `LOCAL_FRAME(1)`
 - `target`: `BASELINK(0)` / `COG(1)`
 - `*_nav_mode`: `POS_VEL_MODE(4)` などを使用。control_position は速度指令（`target_vel_*`）を送る。
@@ -64,6 +65,7 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 **操作者の向きに対する相対移動**に変換する。重心/ベースリンク切替も持つ。
 
 主なパラメータ:
+
 - `nav_target`: `cog`(既定) / `baselink` → FlightNav.target。
 - `direction_mode`: `none` / `yaw`(既定) / `yaw_pitch` / `full`。
 - `imu_topic`: 既定 `/dracomancer/imu`。
@@ -75,11 +77,11 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 ## control_joint_angle.py（形状制御）の設計
 
 - `startup`: `startup_pose`（既定 `[0, pi/2, 0, pi/2, 0, pi/2]`）を保持。
-- `teleoperation`: Dracomancer 腕関節を DRAGON 関節へマッピングし、**候補姿勢のフィージビリティで変形可否を判定**する（移動は `control_position.py` が同時に担当）。マッピングは `~mapping_mode` で切替（`distal`=既定: 腕関節を DRAGON 関節へ**絶対角で一致**（中立記録なし。既定対応: 手首屈曲→上腕ロール+前腕ロール角に応じてjoint1_pitch/joint1_yawへ配分、肘屈曲→上腕ロール角に応じてjoint2_pitch/joint2_yawへ配分、肩屈曲→joint3_pitch、肩内外転→joint3_yaw。`clamp(sign*scale*source + offset)`、`distal_signs` 既定 `[1,1,1,1,-1]`・`distal_offsets` 既定 `[0,0,0,0,0]`（joint3_pitch は以前の +π/2 肩屈曲オフセットを使わない）、平行リスト `distal_source_joints`/`distal_target_joints`/`distal_signs`/`distal_scales`/`distal_offsets` で設定。`enable_wrist_roll_switching` 既定ONでは上腕ロールと前腕ロールから `wrist_roll_offsets` を引いて各差分を±90°で飽和し、手首屈曲/内外転ベクトルを `cos(theta+phi):sin(theta+phi)` でjoint1_pitch/joint1_yawへ配分する。`enable_elbow_roll_switching` 既定ONでは上腕ロールから `elbow_roll_offset` を引いて±90°で飽和し、肘屈曲を `joint2_pitch:joint2_yaw = theta:(pi/2-theta)` で配分する。上腕ロール符号はjoint2_yawへ反映する。旧名 `elbow_only` は後方互換エイリアス） / `joint_pairing`: 3屈曲関節→3 yaw・pitch=0で平面保持 / `geometric`: 腕FK→面内yaw・面外pitch分解）。詳細は [README.md](README.md) の関節マッピング節。手首・肘のロール配分（`r_i`, 配分比 `rho_i`, 重み `c_i_pitch`/`c_i_yaw`）は `/dracomancer/joint_map/switch_ratio`（`Float64MultiArray`）、ゲート前の候補関節角は `/dracomancer/candidate/joint_target`（`JointState`）に毎周期publishされ、解析用（`task_recorder.py`）に記録される。
-- **予測フィージビリティ・ゲート**: 候補 DRAGON 形状を `shape_feasibility_node`（C++、`dragon/full_vectoring_robot_model` を pluginlib で読み込み、`ns=dragon` で起動）の `check_shape` サービスに渡し `fc_f_min`/`fc_t_min` を予測。force・torque 両方が下限しきい値以上なら変形（採用・記憶）、未満／サービス失敗なら直前可行姿勢で停止。**既定 ON（`enable_feasibility_gate:=true`）**。予測fcは既定 `shape_feasibility_prediction_mode=controller` で、最新 `/dragon/gimbals_ctrl` のgimbal roll指令と姿勢feedbackを使い、DRAGON controller側の `/dragon/debug/fc_*_min` に近い条件で `calcFeasibleControlFxyDists()` / `calcFeasibleControlTDists()` を再評価する。旧来の `optimized_gimbal` はDRAGONモデルのジンバル処理済み状態だけを使う。モデル/設定によって予測 fc が過小になり全変形を却下する場合は、検証用に `enable_feasibility_gate:=false` で一時無効化できる。下限しきい値は `*_volume_radius_threshold`（`[hard_min, min]` の `hard_min`）を購読、未受信時は `force_radius_threshold`/`torque_radius_threshold` パラメータ。gate前candidateの予測は `/dracomancer/candidate/fc_*_min`、最終送信targetの予測は `/dracomancer/target/fc_*_min` にpublishされる。
+- `teleoperation`: Dracomancer 腕関節を DRAGON 関節へマッピングし、**候補姿勢のフィージビリティで変形可否を判定**する（移動は `control_position.py` が同時に担当）。マッピングは `~mapping_mode` で切替（`distal`=既定: 腕関節を DRAGON 関節へ**絶対角で一致**（pitch/yaw配分に使う上腕・前腕ロールのみ、teleoperation切替・ホバー開始・`~recapture_anchor` 時の値を中立としてキャプチャし差分で扱う（`capture_roll_neutral` 既定true）。他の関節は中立記録なし。既定対応: 手首屈曲→上腕ロール+前腕ロール角に応じてjoint1_pitch/joint1_yawへ配分、肘屈曲→上腕ロール角に応じてjoint2_pitch/joint2_yawへ配分、肩屈曲→joint3_pitch、肩内外転→joint3_yaw。`clamp(sign*scale*source + offset)`、`distal_signs` 既定 `[1,-1,1,1,-1]`・`distal_offsets` 既定 `[0,0,0,0,0]`（joint3_pitch は以前の +π/2 肩屈曲オフセットを使わない）、平行リスト `distal_source_joints`/`distal_target_joints`/`distal_signs`/`distal_scales`/`distal_offsets` で設定。`enable_wrist_roll_switching` 既定ONでは上腕ロールと前腕ロールからエンゲージ時中立と `wrist_roll_offsets` を引いて各差分を±90°で飽和し、手首屈曲/内外転ベクトルを `cos(theta+phi):sin(theta+phi)` でjoint1_pitch/joint1_yawへ配分する。`enable_elbow_roll_switching` 既定ONでは上腕ロールからエンゲージ時中立と `elbow_roll_offset` を引いて±90°で飽和し（飽和後の値をr）、肘屈曲を `joint2_pitch:joint2_yaw = r:(pi/2-|r|)` で配分する。上腕ロール符号はjoint2_pitchへ反映され、joint2_yaw側は中立ロールをまたいでも連続。旧名 `elbow_only` は後方互換エイリアス） / `joint_pairing`: 3屈曲関節→3 yaw・pitch=0で平面保持 / `geometric`: 腕FK→面内yaw・面外pitch分解）。詳細は [README.md](README.md) の関節マッピング節。手首・肘のロール配分（`r_i`, 配分比 `rho_i`, 重み `c_i_pitch`/`c_i_yaw`）は `/dracomancer/joint_map/switch_ratio`（`Float64MultiArray`）、ゲート前の候補関節角は `/dracomancer/candidate/joint_target`（`JointState`）に毎周期publishされ、解析用（`task_recorder.py`）に記録される。
+- **予測フィージビリティ・ゲート**: 候補 DRAGON 形状を `shape_feasibility_node`（C++、`dragon/full_vectoring_robot_model` を pluginlib で読み込み、`ns=dragon` で起動）の `check_shape` サービスに渡し `fc_f_min`/`fc_t_min` を予測。force・torque 両方が下限しきい値以上なら変形（採用・記憶）、未満／サービス失敗なら直前可行姿勢で停止。**既定 ON（`enable_feasibility_gate:=true`）**。予測fcは既定 `shape_feasibility_prediction_mode=allocation` で、候補形状に対して静的ホバーallocationを行い、割当後のgimbal roll角と姿勢feedbackで `calcFeasibleControlFxyDists()` / `calcFeasibleControlTDists()` を再評価する。`controller` は最新 `/dragon/gimbals_ctrl` のgimbal roll指令を使う旧近似、`optimized_gimbal` はDRAGONモデルのジンバル処理済み状態だけを使う。モデル/設定によって予測 fc が過小になり全変形を却下する場合は、検証用に `enable_feasibility_gate:=false` で一時無効化できる。下限しきい値は `*_volume_radius_threshold`（`[hard_min, min]` の `hard_min`）を購読、未受信時は `force_radius_threshold`/`torque_radius_threshold` パラメータ。gate前candidateの予測は `/dracomancer/candidate/fc_*_min`、最終送信targetの予測は `/dracomancer/target/fc_*_min` にpublishされる。
 - **ライブ監視（情報提供）**: `volume_radius_monitor.py`（通常は teleoperation.launch、bringup.launch では任意）が実機現在状態の fc からライブスケールを `/dracomancer/dragon_shape_safety_scale` に publish（web UI 用、ゲートとは独立）。しきい値の所有・pub/sub もここ。
-- **link4 アンカー**（既定 ON `enable_link4_anchor`）: 関節操作中も DRAGON の link4 位置をワールドにおおよそ固定するため、ホバー開始時に link4 TF をキャプチャし、毎周期 `joints_ctrl` と同じ目標関節角から `fc→link4(q)` を最小FKで計算して `T_anchor·T_cog→link4(q)⁻¹` を逆算する。`link4_anchor_mode=position_only` が既定で、COG位置だけを `uav/nav` POS_MODE へ送る。`link4_anchor_mode=full` は baselink姿勢も補償するが、姿勢failsafeに近づきやすいため明示指定時のみ使う。移動制御（`enable_position_control`）とは `uav/nav` が競合するため併用不可。詳細は [docs/link4_anchor.md](docs/link4_anchor.md)。
-- **link4 body step scaling / safety**（既定 ON）: `max_step` 後の候補関節角から必要なCOG位置変化量を予測し、`link4_anchor_max_body_pos_rate` を超える場合は関節ステップ全体を縮小する。`full` モードでは baselink姿勢変化量も `link4_anchor_max_body_rpy_rate` で抑える。安全判定は position_only では COG高度 + ホバー開始時COGからの水平距離、full ではさらに baselink roll/pitch を検査する。TFが取得できずbody補償を計算できない周期は直前姿勢を保持する。
+- **link4 アンカー**（既定 ON `enable_link4_anchor`）: 関節操作中も DRAGON の link4 位置をワールドにおおよそ固定するため、ホバー開始時に link4 TF をキャプチャし、毎周期 `joints_ctrl` と同じ目標関節角から `fc→link4(q)` を最小FKで計算して `T_anchor·T_cog→link4(q)⁻¹` を逆算する。`link4_anchor_mode=position_only` が既定で、COG位置（`uav/nav` POS_MODE）のみを補償し、link4 yawは固定しない。`link4_anchor_mode=position_yaw` はCOG位置に加えてCOG yaw目標（`target_yaw`）でlink4 yawも固定する（roll/pitchは通常制御のまま）。`link4_anchor_mode=full` は baselink姿勢も補償するが、姿勢failsafeに近づきやすいため明示指定時のみ使う。移動制御（`enable_position_control`）とは `uav/nav` が競合するため併用不可。詳細は [docs/link4_anchor.md](docs/link4_anchor.md)。
+- **link4 body step scaling / safety**（既定 ON）: `max_step` 後の候補関節角から必要なCOG位置変化量を予測し、`link4_anchor_max_body_pos_rate` を超える場合は関節ステップ全体を縮小する。`full` モードでは baselink姿勢変化量、`position_yaw` では COG yaw変化量も `link4_anchor_max_body_rpy_rate` で抑える。安全判定は position_only / position_yaw では COG高度 + ホバー開始時COGからの水平距離、full ではさらに baselink roll/pitch を検査する。TFが取得できずbody補償を計算できない周期は直前姿勢を保持する。
 - **baselink roll マッピング**（distal 標準・既定 ON `enable_baselink_roll_mapping`）: `link4_anchor_mode=full` 時のみ、`upper_arm_external_internal_rotation_joint` と `wrist_supination_joint` の中立値からの差分和を link4 アンカーで算出した baselink roll に加算する。中立値は最初の受信、ホバー開始、link4アンカー再取得でキャプチャする。
 - 位置・姿勢・関節角操作はいずれもホバリング（`flight_state == hover_flight_state`、既定5）時のみ出力する（`publish_joints_only_when_hovering` 既定 true）。
 - DRAGON の nav は `HOVER_STATE == 5` でのみ受理される。link4アンカー補償も `hover_flight_state` 既定 5 のときだけ出すこと。`flight_state>=4` のような判定は `LAND_STATE`/`PRE_LAND_STATE` を誤って含む。
@@ -130,7 +132,7 @@ ROS ノードの起動には spinal/aerial_robot 一式が必要。
 - Wrist flexion/extension: saturated upper-arm + forearm roll deltas allocate Joint1-Pitch / Joint1-Yaw by cos(theta+phi):sin(theta+phi)
 - Wrist radial/ulnar deviation: Joint1-Yaw (rotated with wrist flexion when wrist roll switching is enabled)
 - Forearm pronation/supination + Shoulder internal/external rotation: Baselink-Roll delta in `link4_anchor_mode=full`
-- Elbow flexion/extension: saturated upper-arm roll delta allocates Joint2-Pitch / Joint2-Yaw by theta:(pi/2-theta), preserving the roll sign on yaw
+- Elbow flexion/extension: saturated upper-arm roll delta r allocates Joint2-Pitch / Joint2-Yaw by r:(pi/2-|r|), carrying the roll sign on pitch (yaw stays continuous across the neutral roll)
 - Shoulder flexion/extension: Joint3-Pitch
 - Shoulder abduction/adduction: Joint3-Yaw
 - Joint2-Pitch is used by elbow roll switching; do not treat it as unused redundancy in the current mapping.

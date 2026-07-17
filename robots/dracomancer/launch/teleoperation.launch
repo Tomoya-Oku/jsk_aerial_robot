@@ -12,13 +12,6 @@
   <arg name="js_raw_topic" default="/joystick/raw"/>
   <arg name="js_calibrated_topic" default="/$(arg device_ns)/joystick/calibrated"/>
   <arg name="device_joint_topic" default="/$(arg device_ns)/joint_states"/>
-  <arg name="servo_topic" default="/dracomancer/servo/states"/>
-  <!-- bringup.launch is the owner of /<device_ns>/joint_states in the normal
-       workflow. Keep this off by default so rm:=false fake joint_states are not
-       overwritten by a second servo converter with no servo input. Enable only
-       when running teleoperation.launch without dracomancer bringup.launch. -->
-  <arg name="enable_servo_to_joint_states" default="false"/>
-  <arg name="servo_to_joint_states_rate" default="40.0"/>
   <!-- Predictive shape-feasibility gate (teleoperation mode).
        shape_feasibility_node runs in the controlled robot's namespace so its
        robot model can read <robot_ns>/robot_description.
@@ -38,9 +31,11 @@
   <!-- shape_feasibility prediction mode:
          model            : legacy getFeasibleControlF/TMin() after updateRobotModel().
          optimized_gimbal : DRAGON full-vectoring model's gimbal-processed state.
-         controller       : default; use latest controller gimbal command and optional body
-                            attitude feedback to approximate /debug/fc_*_min. -->
-  <arg name="shape_feasibility_prediction_mode" default="controller"/>
+         controller       : use latest controller gimbal command and optional body
+                            attitude feedback to approximate /debug/fc_*_min.
+         allocation       : default; run static hover allocation for the candidate shape,
+                            then evaluate fc with the allocated gimbal roll angles. -->
+  <arg name="shape_feasibility_prediction_mode" default="allocation"/>
   <arg name="shape_feasibility_gimbal_feedback_topic" default="gimbals_ctrl"/>
   <arg name="shape_feasibility_baselink_rpy_topic" default="final_target_baselink_rpy"/>
   <arg name="shape_feasibility_baselink_odom_topic" default="uav/baselink/odom"/>
@@ -48,6 +43,9 @@
   <arg name="shape_feasibility_use_baselink_rpy_feedback" default="true"/>
   <arg name="shape_feasibility_use_baselink_odom_feedback" default="true"/>
   <arg name="shape_feasibility_feedback_timeout" default="0.25"/>
+  <arg name="shape_feasibility_allocation_refine_max_iteration" default="5"/>
+  <arg name="shape_feasibility_allocation_refine_threshold" default="0.0001"/>
+  <arg name="feasibility_rate" default="10.0"/>
   <arg name="enable_target_fc_prediction" default="true"/>
   <arg name="target_fc_prediction_rate" default="10.0"/>
   <!-- Gate fallback used only until the threshold topic arrives.
@@ -78,7 +76,7 @@
        default="$(eval '/' + arg('robot_ns') + '/debug/fc_f_min' + ('_filtered' if arg('enable_fc_min_lowpass') else ''))" />
   <arg name="monitor_torque_inradius_topic"
        default="$(eval '/' + arg('robot_ns') + '/debug/fc_t_min' + ('_filtered' if arg('enable_fc_min_lowpass') else ''))" />
-  <arg name="max_step" default="0.04"/>
+  <arg name="max_step" default="0.015"/>
   <arg name="joint_limit" default="1.57079632679"/>
   <!-- Arm->DRAGON mapping strategy (teleoperation mode):
          joint_pairing : flexion joints -> DRAGON yaw, pitch held at 0 (planar).
@@ -94,9 +92,17 @@
   <arg name="joint_pairing_reference" default="circular"/>  <!-- deprecated alias of mapping_reference -->
   <arg name="mapping_reference" default="$(arg joint_pairing_reference)"/>
   <arg name="joint_pairing_scale" default="1.0"/>
+  <!-- Allocation-roll neutral capture: at every switch into teleoperation
+       (and hover start / ~recapture_anchor), the upper-arm / forearm roll
+       angles are captured as the allocation neutral, so their assembly-defined
+       servo zeros do not pin the elbow/wrist pitch-yaw allocation at the
+       saturation edge. Every other source joint stays an absolute-angle match.
+       false uses raw absolute roll angles. -->
+  <arg name="capture_roll_neutral" default="true"/>
   <!-- Elbow-plane mapping for distal mode: saturate upper-arm roll to +/-90deg
-       from its reference and allocate elbow flexion as joint2 pitch:yaw =
-       theta:(pi/2 - theta). The roll sign is preserved on joint2_yaw. -->
+       from its reference (r) and allocate elbow flexion as joint2 pitch:yaw =
+       r:(pi/2 - |r|). The roll sign is carried on joint2_pitch, so joint2_yaw
+       stays continuous across the neutral roll. -->
   <arg name="enable_elbow_roll_switching" default="true"/>
   <arg name="elbow_roll_offset" default="0.0"/>
   <arg name="elbow_pitch_sign" default="1.0"/>
@@ -123,11 +129,16 @@
        offsets=[0,0,0,0,0], scales=1.0. -->
   <arg name="capture_neutral_on_first_msg" default="false"/>
   <!-- distal link4 anchor: helper to keep the arm-tip link (link4) ~fixed in
-       world while joints bend. Default mode anchors only link4 position by
-       commanding COG position (uav/nav POS_MODE) alongside joints_ctrl. The full
-       mode also compensates baselink attitude and is much more aggressive. -->
+       world while joints bend. The default position_only mode anchors only the
+       link4 position by commanding COG position (uav/nav POS_MODE) alongside
+       joints_ctrl. Use position_yaw to also hold link4 yaw through the COG yaw
+       target (roll/pitch untouched), or full to compensate baselink attitude. -->
   <arg name="enable_link4_anchor" default="true"/>
-  <arg name="link4_anchor_mode" default="position_only"/> <!-- position_only / full -->
+  <arg name="link4_anchor_mode" default="position_only"/> <!-- position_only / position_yaw / full -->
+  <!-- Offset of the anchored point along link4 x [m]. 0.0 = link4 frame origin
+       (joint3 side). Set to the link length (0.474) to anchor the tail tip so
+       tail-side joint inputs visibly translate the head-side links. -->
+  <arg name="link4_anchor_offset_x" default="0.0"/>
   <arg name="publish_link4_anchor_baselink_motion" default="false"/>
   <!-- Limit joint-step progress so the link4-anchor body compensation target does
        not require excessive COG position, or baselink attitude motion in full mode. -->
@@ -143,7 +154,19 @@
   <arg name="link4_anchor_max_abs_pitch" default="0.6"/>
   <arg name="link4_anchor_min_cog_z" default="0.6"/>
   <arg name="link4_anchor_max_cog_z" default="2.5"/>
-  <arg name="link4_anchor_max_cog_xy_offset" default="1.0"/>
+  <arg name="link4_anchor_max_cog_xy_offset" default="0.9"/>
+  <arg name="link4_anchor_max_abs_yaw_delta" default="2.0943951023931953"/>
+  <!-- Hold shape updates when the controlled robot is not tracking the current
+       link4-anchor body/joint targets.  In position_yaw, the yaw guard prevents
+       shape commands from running ahead of the COG yaw response. -->
+  <arg name="enable_link4_anchor_tracking_safety" default="true"/>
+  <arg name="link4_anchor_max_cog_tracking_error" default="0.2"/>
+  <arg name="link4_anchor_max_yaw_tracking_error" default="0.5235987755982988"/>
+  <arg name="link4_anchor_max_tracking_roll" default="0.2617993877991494"/>
+  <arg name="link4_anchor_max_tracking_pitch" default="0.2617993877991494"/>
+  <arg name="enable_link4_anchor_joint_tracking_safety" default="true"/>
+  <arg name="link4_anchor_max_joint_tracking_error" default="0.3"/>
+  <arg name="link4_anchor_joint_tracking_timeout" default="0.5"/>
   <!-- Baselink roll mapping: sum upper-arm roll and forearm roll deltas from the
        captured neutral pose, then add the result to the link4-anchor baselink roll. -->
   <arg name="enable_baselink_roll_mapping" default="true"/>
@@ -223,16 +246,6 @@
     <param name="yaml_path" value="$(find dracomancer)/config/joystick_calibration.yaml"/>
   </node>
 
-  <node pkg="dracomancer"
-        type="convert_servo_to_joint_states.py"
-        name="$(arg device_ns)_convert_servo_to_joint_states"
-        output="screen"
-        if="$(arg enable_servo_to_joint_states)">
-    <param name="servo_topic" value="$(arg servo_topic)"/>
-    <param name="joint_states_topic" value="$(arg device_joint_topic)"/>
-    <param name="rate" value="$(arg servo_to_joint_states_rate)"/>
-  </node>
-
   <!-- Position Control -->
   <node pkg="dracomancer"
         type="control_position.py"
@@ -303,6 +316,7 @@
     <param name="mapping_mode" value="$(arg mapping_mode)"/>
     <param name="mapping_reference" value="$(arg mapping_reference)"/>
     <param name="joint_pairing_scale" value="$(arg joint_pairing_scale)"/>
+    <param name="capture_roll_neutral" value="$(arg capture_roll_neutral)"/>
     <!-- distal mapping (absolute match of arm joints; see comment above).
          target = clamp(sign*scale*source + offset). joint3_pitch no longer uses
          the previous +pi/2 shoulder-flexion offset. -->
@@ -331,6 +345,7 @@
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
     <param name="enable_link4_anchor" value="$(arg enable_link4_anchor)"/>
     <param name="link4_anchor_mode" value="$(arg link4_anchor_mode)"/>
+    <param name="link4_anchor_offset_x" value="$(arg link4_anchor_offset_x)"/>
     <param name="publish_baselink_motion" value="$(arg publish_link4_anchor_baselink_motion)"/>
     <param name="enable_link4_anchor_body_step_scaling" value="$(arg enable_link4_anchor_body_step_scaling)"/>
     <param name="link4_anchor_max_body_pos_rate" value="$(arg link4_anchor_max_body_pos_rate)"/>
@@ -341,6 +356,15 @@
     <param name="link4_anchor_min_cog_z" value="$(arg link4_anchor_min_cog_z)"/>
     <param name="link4_anchor_max_cog_z" value="$(arg link4_anchor_max_cog_z)"/>
     <param name="link4_anchor_max_cog_xy_offset" value="$(arg link4_anchor_max_cog_xy_offset)"/>
+    <param name="link4_anchor_max_abs_yaw_delta" value="$(arg link4_anchor_max_abs_yaw_delta)"/>
+    <param name="enable_link4_anchor_tracking_safety" value="$(arg enable_link4_anchor_tracking_safety)"/>
+    <param name="link4_anchor_max_cog_tracking_error" value="$(arg link4_anchor_max_cog_tracking_error)"/>
+    <param name="link4_anchor_max_yaw_tracking_error" value="$(arg link4_anchor_max_yaw_tracking_error)"/>
+    <param name="link4_anchor_max_tracking_roll" value="$(arg link4_anchor_max_tracking_roll)"/>
+    <param name="link4_anchor_max_tracking_pitch" value="$(arg link4_anchor_max_tracking_pitch)"/>
+    <param name="enable_link4_anchor_joint_tracking_safety" value="$(arg enable_link4_anchor_joint_tracking_safety)"/>
+    <param name="link4_anchor_max_joint_tracking_error" value="$(arg link4_anchor_max_joint_tracking_error)"/>
+    <param name="link4_anchor_joint_tracking_timeout" value="$(arg link4_anchor_joint_tracking_timeout)"/>
     <param name="enable_baselink_roll_mapping" value="$(arg enable_baselink_roll_mapping)"/>
     <param name="baselink_roll_limit" value="$(arg baselink_roll_limit)"/>
     <rosparam param="baselink_roll_source_joints">["upper_arm_external_internal_rotation_joint", "wrist_supination_joint"]</rosparam>
@@ -355,6 +379,7 @@
     <param name="feasibility_min_step_fraction" value="$(arg feasibility_min_step_fraction)"/>
     <param name="feasibility_soft_min_scale" value="$(arg feasibility_soft_min_scale)"/>
     <param name="feasibility_service" value="$(arg feasibility_service)"/>
+    <param name="feasibility_rate" value="$(arg feasibility_rate)"/>
     <param name="force_radius_threshold" value="$(arg force_radius_threshold)"/>
     <param name="torque_radius_threshold" value="$(arg torque_radius_threshold)"/>
     <param name="force_radius_recover_threshold" value="$(arg force_radius_recover_threshold)"/>
@@ -417,5 +442,7 @@
     <param name="use_baselink_rpy_feedback" value="$(arg shape_feasibility_use_baselink_rpy_feedback)"/>
     <param name="use_baselink_odom_feedback" value="$(arg shape_feasibility_use_baselink_odom_feedback)"/>
     <param name="feedback_timeout" value="$(arg shape_feasibility_feedback_timeout)"/>
+    <param name="allocation_refine_max_iteration" value="$(arg shape_feasibility_allocation_refine_max_iteration)"/>
+    <param name="allocation_refine_threshold" value="$(arg shape_feasibility_allocation_refine_threshold)"/>
   </node>
 </launch>

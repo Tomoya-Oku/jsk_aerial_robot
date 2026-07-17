@@ -39,14 +39,14 @@
 
   <rect class="bg" x="0" y="0" width="1800" height="1040"/>
   <text class="title" x="70" y="70">Link4 Position Anchor Algorithm with Body Safety Gate</text>
-  <text class="subtitle" x="70" y="108">Default position_only mode fixes Link4 position with COG POS_MODE; full mode also compensates baselink attitude</text>
+  <text class="subtitle" x="70" y="108">Default position_yaw mode fixes Link4 position and yaw with COG POS_MODE + yaw target; full mode also compensates baselink attitude</text>
 
   <rect class="lane" x="60" y="145" width="1680" height="150" rx="16"/>
   <text class="lane-title" x="95" y="188">1. Activation and anchor reference</text>
 
   <rect class="box-amber" x="105" y="215" width="245" height="58" rx="10"/>
   <text class="label" x="132" y="249">Link4 anchor arg</text>
-  <text class="mono" x="132" y="269">OFF, mode=position_only</text>
+  <text class="mono" x="132" y="269">OFF, mode=position_yaw</text>
 
   <rect class="box-blue" x="440" y="215" width="245" height="58" rx="10"/>
   <text class="label" x="475" y="249">Hover detected</text>
