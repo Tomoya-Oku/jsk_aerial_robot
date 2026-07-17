@@ -4,7 +4,7 @@
 import math
 import rospy
 import numpy as np
-from std_msgs.msg import Float32MultiArray, UInt8, Empty, String
+from std_msgs.msg import Bool, Float32MultiArray, UInt8, Empty
 from geometry_msgs.msg import PoseStamped, Vector3Stamped
 from aerial_robot_msgs.msg import FlightNav
 from spinal.msg import Imu as SpinalImu
@@ -94,12 +94,8 @@ class ControlPose:
         self.rate_hz = rospy.get_param("~rate", 40.0)
         self.wait_after_hover = rospy.get_param("~wait_after_hover", 3.0)
 
-        self.valid_modes = ("startup", "teleoperation")
-        self.teleop_mode = self.normalize_mode(rospy.get_param("~teleop_mode", "startup"))
+        self.teleop_mode = self.parse_bool_param(rospy.get_param("~teleop_mode", False), False)
         self.mode_topic = rospy.get_param("~mode_topic", self.device_ns + "/teleop_mode")
-        if self.teleop_mode not in self.valid_modes:
-            rospy.logwarn("unknown teleop_mode '%s', fall back to 'startup'", self.teleop_mode)
-            self.teleop_mode = "startup"
 
         # ----- navigation target: COG or BASELINK -----
         nav_target = str(rospy.get_param("~nav_target", "cog")).lower()
@@ -181,7 +177,7 @@ class ControlPose:
         self.js_calibrated_sub = rospy.Subscriber(self.joy_topic, Float32MultiArray, self.joystick_calib_cb, queue_size=1)
         self.imu_sub = rospy.Subscriber(self.imu_topic, SpinalImu, self.imu_cb, queue_size=1)
         self.recapture_sub = rospy.Subscriber("~recapture_neutral", Empty, self.recapture_cb, queue_size=1)
-        self.mode_sub = rospy.Subscriber(self.mode_topic, String, self.mode_cb, queue_size=1)
+        self.mode_sub = rospy.Subscriber(self.mode_topic, Bool, self.mode_cb, queue_size=1)
 
         # Logger
         rospy.loginfo("robot_name: %s", self.robot_name)
@@ -193,23 +189,28 @@ class ControlPose:
         rospy.loginfo("imu_mount_rpy: %s, recapture_on_hover: %s", mount_rpy, self.recapture_on_hover)
 
     @staticmethod
-    def normalize_mode(mode):
-        # "teleop" is accepted as a shorthand alias for "teleoperation".
-        mode = str(mode).strip().lower()
-        return "teleoperation" if mode == "teleop" else mode
+    def parse_bool_param(value, default=False):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        text = str(value).strip().lower()
+        if text == "true":
+            return True
+        if text == "false":
+            return False
+        rospy.logwarn("unknown teleop_mode bool '%s', use %s", value, default)
+        return default
 
     def mode_cb(self, msg):
-        mode = self.normalize_mode(msg.data)
-        if mode not in self.valid_modes:
-            rospy.logwarn("ignore unknown teleop mode '%s'", mode)
-            return
+        mode = bool(msg.data)
         if mode != self.teleop_mode:
             old_mode = self.teleop_mode
             rospy.loginfo("teleop mode: %s -> %s", self.teleop_mode, mode)
             self.teleop_mode = mode
-            if mode == "teleoperation":
+            if mode:
                 self.want_recapture = True
-            elif old_mode == "teleoperation":
+            elif old_mode:
                 self.publish_zero_nav()
             self.latest_axes = None
 
@@ -366,7 +367,7 @@ class ControlPose:
         rate = rospy.Rate(self.rate_hz)
 
         while not rospy.is_shutdown():
-            pose_active = self.teleop_mode == "teleoperation" and self.robot_hovering and not self.robot_landing
+            pose_active = self.teleop_mode and self.robot_hovering and not self.robot_landing
             if pose_active:
                 if not self.wait_flag:
                     rospy.sleep(self.wait_after_hover)
@@ -378,7 +379,7 @@ class ControlPose:
                 if self.pose_active_prev:
                     self.publish_zero_nav()
                 self.latest_axes = None
-                if self.teleop_mode != "teleoperation":
+                if not self.teleop_mode:
                     self.wait_flag = False
             self.pose_active_prev = pose_active
 

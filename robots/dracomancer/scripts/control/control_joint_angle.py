@@ -5,7 +5,7 @@ import rospy
 import numpy as np
 import tf2_ros
 import tf.transformations as tft
-from std_msgs.msg import Float64, Float64MultiArray, UInt8, String, Empty
+from std_msgs.msg import Bool, Float64, Float64MultiArray, UInt8, Empty
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import Vector3Stamped
 from nav_msgs.msg import Odometry
@@ -26,12 +26,8 @@ class ControlJoints:
         # DRAGON outside this state, so link4 anchor must not treat LAND/PRE_LAND as
         # anchor-capable just because their numeric value is larger.
         self.hover_flight_state = int(rospy.get_param("~hover_flight_state", 5))
-        self.valid_modes = ("startup", "teleoperation")
-        self.teleop_mode = self.normalize_mode(rospy.get_param("~teleop_mode", "startup"))
+        self.teleop_mode = self.parse_bool_param(rospy.get_param("~teleop_mode", False), False)
         self.mode_topic = rospy.get_param("~mode_topic", self.device_ns + "/teleop_mode")
-        if self.teleop_mode not in self.valid_modes:
-            rospy.logwarn("unknown teleop_mode '%s', fall back to 'startup'", self.teleop_mode)
-            self.teleop_mode = "startup"
 
         self.joint_names = rospy.get_param("~dragon_joint_names", [
             "joint1_pitch",
@@ -147,7 +143,7 @@ class ControlJoints:
         if self.mapping_mode == "distal" and not self.distal_map:
             rospy.logwarn("distal: no valid source->target mapping; no joint will move")
         # Allocation rolls (upper-arm / forearm) are captured as the neutral at
-        # every switch into teleoperation, hover start and ~recapture_anchor; all
+        # every switch to teleop_mode=true, hover start and ~recapture_anchor; all
         # other source joints stay absolute. false uses raw absolute roll angles.
         self.capture_roll_neutral = rospy.get_param("~capture_roll_neutral", True)
         self.roll_neutral = {}
@@ -341,7 +337,7 @@ class ControlJoints:
 
         self.shape_error_topic = rospy.get_param("~shape_error_topic", self.device_ns + "/shape_control_error")
         # Predicted fc of the *candidate* (mapped) shape, republished from the
-        # feasibility service response (teleoperation mode only). Useful for plotting
+        # feasibility service response (teleop_mode=true only). Useful for plotting
         # / recording; distinct from the controlled robot's measured fc.
         self.candidate_force_radius_topic = rospy.get_param(
             "~candidate_force_radius_topic", self.device_ns + "/candidate/fc_f_min")
@@ -369,7 +365,7 @@ class ControlJoints:
         self.switch_diag_topic = rospy.get_param(
             "~switch_diag_topic", self.device_ns + "/joint_map/switch_ratio")
 
-        # Predictive shape-feasibility gate (teleoperation mode):
+        # Predictive shape-feasibility gate (teleop_mode=true):
         #   candidate shape -> shape_feasibility service -> fc_f_min / fc_t_min.
         #   Deform only when BOTH radii are at or above their hard thresholds.
         #   In hold mode, a failed candidate enters a hysteresis hold and resumes
@@ -450,7 +446,7 @@ class ControlJoints:
         self.device_joint_sub = rospy.Subscriber(self.device_joint_topic, JointState, self.device_joint_cb, queue_size=1)
         self.robot_joint_sub = rospy.Subscriber(self.robot_joint_state_topic, JointState, self.robot_joint_cb, queue_size=1)
         self.robot_flight_state_sub = rospy.Subscriber('/' + self.robot_name + '/flight_state', UInt8, self.robot_flight_state_cb, queue_size=1)
-        self.mode_sub = rospy.Subscriber(self.mode_topic, String, self.mode_cb, queue_size=1)
+        self.mode_sub = rospy.Subscriber(self.mode_topic, Bool, self.mode_cb, queue_size=1)
         self.force_threshold_sub = rospy.Subscriber(self.force_threshold_topic, Float64MultiArray, self.force_threshold_cb, queue_size=1)
         self.torque_threshold_sub = rospy.Subscriber(self.torque_threshold_topic, Float64MultiArray, self.torque_threshold_cb, queue_size=1)
         self.recapture_anchor_sub = rospy.Subscriber("~recapture_anchor", Empty, self.recapture_anchor_cb, queue_size=1)
@@ -540,20 +536,25 @@ class ControlJoints:
             return False
 
     @staticmethod
-    def normalize_mode(mode):
-        # "teleop" is accepted as a shorthand alias for "teleoperation".
-        mode = str(mode).strip().lower()
-        return "teleoperation" if mode == "teleop" else mode
+    def parse_bool_param(value, default=False):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        text = str(value).strip().lower()
+        if text == "true":
+            return True
+        if text == "false":
+            return False
+        rospy.logwarn("unknown teleop_mode bool '%s', use %s", value, default)
+        return default
 
     def mode_cb(self, msg):
-        mode = self.normalize_mode(msg.data)
-        if mode not in self.valid_modes:
-            rospy.logwarn("ignore unknown teleop mode '%s'", mode)
-            return
+        mode = bool(msg.data)
         if mode != self.teleop_mode:
             rospy.loginfo("teleop mode: %s -> %s", self.teleop_mode, mode)
             self.teleop_mode = mode
-            if mode == "teleoperation":
+            if mode:
                 # Re-capture the allocation-roll neutral at every engage.
                 self.want_capture_roll_neutral = True
 
@@ -1036,7 +1037,7 @@ class ControlJoints:
     def maybe_publish_target_fc(self, target):
         if (not self.enable_target_fc_prediction or
                 not self.enable_feasibility_gate or
-                self.teleop_mode != "teleoperation"):
+                not self.teleop_mode):
             return
         now = rospy.Time.now()
         if self.target_fc_prediction_rate > 0.0 and \
@@ -1141,7 +1142,7 @@ class ControlJoints:
         return list(self.last_feasible_target)
 
     def desired_target(self):
-        if self.teleop_mode == "startup":
+        if not self.teleop_mode:
             self.feasibility_hysteresis_holding = False
             self.last_feasible_target = list(self.startup_pose)
             return list(self.startup_pose)
@@ -1159,7 +1160,7 @@ class ControlJoints:
             return target
         if not self.enable_link4_anchor or self.mapping_mode != "distal":
             return target
-        if not self.robot_hovering or self.teleop_mode != "teleoperation":
+        if not self.robot_hovering or not self.teleop_mode:
             return target
         if self.anchor_mat is None or self.cog_fc_mat is None:
             return list(self.current_target)
@@ -1314,7 +1315,7 @@ class ControlJoints:
     def link4_body_safety_gate(self, target):
         if not self.enable_link4_anchor or self.mapping_mode != "distal":
             return target
-        if not self.robot_hovering or self.teleop_mode != "teleoperation":
+        if not self.robot_hovering or not self.teleop_mode:
             return target
         if self.anchor_mat is None or self.cog_fc_mat is None:
             return list(self.current_target)
@@ -1344,7 +1345,7 @@ class ControlJoints:
     def make_joint_msg(self):
         target = self.desired_target()
         # desired (raw mapping) vs target (feasible-gated) error, for haptic feedback.
-        desired = self.mapped_target() if self.teleop_mode == "teleoperation" else target
+        desired = self.mapped_target() if self.teleop_mode else target
         self.current_target = self.link4_body_safety_gate(self.rate_limit(target))
         self.maybe_publish_target_fc(self.current_target)
         self.publish_shape_error(desired, self.current_target)
@@ -1359,7 +1360,7 @@ class ControlJoints:
     def can_publish_joint_command(self):
         if self.publish_only_when_hovering and not self.robot_hovering:
             return False
-        if self.teleop_mode == "teleoperation" and not self.publish_before_device_ready and not self.latest_device_joints:
+        if self.teleop_mode and not self.publish_before_device_ready and not self.latest_device_joints:
             return False
         return True
 
@@ -1506,7 +1507,7 @@ class ControlJoints:
             self.clear_link4_anchor_state()  # re-capture on next hover
             return
         # only steer the body while the operator is actively shaping
-        if self.teleop_mode != "teleoperation":
+        if not self.teleop_mode:
             return
         if target_joints is None:
             return

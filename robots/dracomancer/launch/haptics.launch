@@ -4,7 +4,7 @@
   <arg name="device_joint_topic" default="/$(arg device_ns)/joint_states"/>
   <arg name="shape_error_topic" default="/$(arg device_ns)/shape_control_error"/>
   <arg name="mode_topic" default="/$(arg device_ns)/teleop_mode"/>
-  <arg name="teleop_mode" default="startup"/>
+  <arg name="teleop_mode" default="false"/>
   <arg name="rate" default="40.0"/>
 
   <!-- Default hardware output is torque on/off for XL430-W250-T. Current output remains available for compatible servos. -->

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import rospy
-from std_msgs.msg import Float32MultiArray, String, UInt8
+from std_msgs.msg import Bool, Float32MultiArray, UInt8
 from geometry_msgs.msg import Vector3Stamped
 
 
@@ -15,8 +15,7 @@ class AttitudeControl:
         self.joy_topic = rospy.get_param("~joy_topic", self.device_ns + "/joystick/calibrated")
         self.output_topic = rospy.get_param("~output_topic", "/" + self.robot_name + "/final_target_baselink_rpy")
         self.mode_topic = rospy.get_param("~mode_topic", self.device_ns + "/teleop_mode")
-        self.teleop_mode = self.normalize_mode(rospy.get_param("~teleop_mode", "startup"))
-        self.active_mode = self.normalize_mode(rospy.get_param("~active_mode", "teleoperation"))
+        self.teleop_mode = self.parse_bool_param(rospy.get_param("~teleop_mode", False), False)
         self.rate_hz = rospy.get_param("~rate", 40.0)
 
         self.axis_roll = rospy.get_param("~axis_roll", -1)
@@ -34,7 +33,7 @@ class AttitudeControl:
 
         self.att_pub = rospy.Publisher(self.output_topic, Vector3Stamped, queue_size=1)
         rospy.Subscriber(self.joy_topic, Float32MultiArray, self.joystick_cb, queue_size=1)
-        rospy.Subscriber(self.mode_topic, String, self.mode_cb, queue_size=1)
+        rospy.Subscriber(self.mode_topic, Bool, self.mode_cb, queue_size=1)
         rospy.Subscriber("/" + self.robot_name + "/flight_state", UInt8, self.robot_flight_state_cb, queue_size=1)
 
         rospy.loginfo("joy_topic: %s", self.joy_topic)
@@ -46,13 +45,21 @@ class AttitudeControl:
         self.latest_axes = list(msg.data)
 
     @staticmethod
-    def normalize_mode(mode):
-        # "teleop" is accepted as a shorthand alias for "teleoperation".
-        mode = str(mode).strip().lower()
-        return "teleoperation" if mode == "teleop" else mode
+    def parse_bool_param(value, default=False):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        text = str(value).strip().lower()
+        if text == "true":
+            return True
+        if text == "false":
+            return False
+        rospy.logwarn("unknown teleop_mode bool '%s', use %s", value, default)
+        return default
 
     def mode_cb(self, msg):
-        self.teleop_mode = self.normalize_mode(msg.data)
+        self.teleop_mode = bool(msg.data)
         self.latest_axes = None
 
     def robot_flight_state_cb(self, msg):
@@ -83,7 +90,7 @@ class AttitudeControl:
     def main(self):
         rate = rospy.Rate(self.rate_hz)
         while not rospy.is_shutdown():
-            active = self.teleop_mode == self.active_mode
+            active = self.teleop_mode
             if self.publish_only_when_hovering:
                 active = active and self.robot_hovering
 

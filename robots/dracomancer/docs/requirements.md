@@ -47,7 +47,7 @@ flowchart LR
 | DRAGON / HYDRUS | 操縦対象とする多関節飛行ロボット |
 | 多関節飛行ロボット | 複数リンクが関節で連結された空中ロボットの総称（本研究の対象） |
 | Force/Torque Volume | 機体が発揮可能な力・トルクの集合。その内接半径 `fc_f_min` / `fc_t_min` を安全指標に使う |
-| teleop_mode | 操作モード。`startup` / `teleoperation` |
+| teleop_mode | 操作モード。`false` / `true` |
 
 ## 2. ステークホルダーと利用者
 
@@ -73,14 +73,16 @@ flowchart LR
 
 操作モードと研究の三本柱（広域移動・精密動作・力覚提示）に沿って定義する。`実装`列は現状の達成度（実装済 / 部分 / 未）を示す。
 
-操作モードは `startup` と `teleoperation` の2つ。**広域移動（操縦桿移動）と精密動作（腕形状写像）は別モードではなく、`teleoperation` モード内で同時に有効な機能**とする。すなわち操縦者は teleoperation モードで、操縦桿による機体移動と腕形状による機体変形を並行して行える。
+操作モードは `false` と `true` の2つ。**広域移動（操縦桿移動）と精密動作（腕形状写像）は別モードではなく、`teleop_mode=true` の中で同時に有効な機能**とする。すなわち操縦者は `teleop_mode=true` で、操縦桿による機体移動と腕形状による機体変形を並行して行える。
 
 ```mermaid
 stateDiagram-v2
-    [*] --> startup
-    startup --> teleoperation: 操作開始
-    teleoperation --> startup: 安全姿勢へ復帰
-    note right of teleoperation
+    state "false" as off
+    state "true" as on
+    [*] --> off
+    off --> on: 操作開始
+    on --> off: 安全姿勢へ復帰
+    note right of on
       移動（操縦桿+IMU）と
       形状（腕写像）を同時に提供
     end note
@@ -90,11 +92,11 @@ stateDiagram-v2
 
 | ID | 要件 | 受け入れ基準（案） | 実装 |
 | --- | --- | --- | --- |
-| FR-1 | `startup` / `teleoperation` の2モードを持つ | 各モードに遷移でき、teleoperation では移動と形状制御が同時に有効 | 実装済 |
-| FR-2 | 実行中にモードを切り替えられる | `/<device>/teleop_mode`(`String`) で `startup`/`teleoperation`(`teleop`)を切替 | 実装済 |
-| FR-3 | 離陸時は人体形状写像を切り離した安全姿勢を保持する | `startup` で `startup_pose` を保持し落下しない | 実装済 |
+| FR-1 | `false` / `true` の2モードを持つ | 各モードに遷移でき、`true` では移動と形状制御が同時に有効 | 実装済 |
+| FR-2 | 実行中にモードを切り替えられる | `/<device>/teleop_mode`(`Bool`) で `false`/`true` を切替 | 実装済 |
+| FR-3 | 離陸時は人体形状写像を切り離した安全姿勢を保持する | `teleop_mode=false` で `startup_pose` を保持し落下しない | 実装済 |
 
-### 4.2 広域移動機能（teleoperation モードで有効）
+### 4.2 広域移動機能（`teleop_mode=true` で有効）
 
 | ID | 要件 | 受け入れ基準（案） | 実装 |
 | --- | --- | --- | --- |
@@ -104,7 +106,7 @@ stateDiagram-v2
 | FR-7 | 作業領域外への移動を抑制する | 境界外へ向かう速度成分を0にする | 実装済 |
 | FR-8 | （発展）腕動作から移動意図を推定する | TBD（機械学習の要否含め未定） | 未 |
 
-### 4.3 精密動作機能（teleoperation モードで有効）
+### 4.3 精密動作機能（`teleop_mode=true` で有効）
 
 | ID | 要件 | 受け入れ基準（案） | 実装 |
 | --- | --- | --- | --- |
@@ -192,8 +194,8 @@ stateDiagram-v2
 | 項目 | 状態 | メモ |
 | --- | --- | --- |
 | 立ち上げ時のマッピング方式 | 未定 | 円形姿勢への安全な遷移方法 |
-| 移動と形状の同時操作 | 設計確定（cog 基準） | teleoperation で操縦桿移動と腕形状写像が同時に働く。移動基準は `FlightNav.target=COG`（既定）。形状変化に伴う COG 移動は DRAGON の飛行制御が吸収する前提。実機での過渡挙動は要検証 |
-| `wide`/`precision` 廃止に伴う実装更新 | 実装済 | launch 既定値・`control_*.py` のモード分岐・`set_teleop_mode.py`・README/AGENTS を `teleoperation` 統合に合わせ済み（`teleop` 別名対応） |
+| 移動と形状の同時操作 | 設計確定（cog 基準） | `teleop_mode=true` で操縦桿移動と腕形状写像が同時に働く。移動基準は `FlightNav.target=COG`（既定）。形状変化に伴う COG 移動は DRAGON の飛行制御が吸収する前提。実機での過渡挙動は要検証 |
+| `wide`/`precision` 廃止に伴う実装更新 | 実装済 | launch 既定値・`control_*.py` のモード分岐・`set_teleop_mode.py`・README/AGENTS を `false`/`true` に統一済み |
 | 力覚提示の達成自由度 | 未定 | 数学的定式化が必要（研究上重要） |
 | 通信遅延・帯域の目標値 | TBD | 親機-子機間 |
 | 装着重量・連続装着時間の上限 | TBD | NFR-2 の定量化 |

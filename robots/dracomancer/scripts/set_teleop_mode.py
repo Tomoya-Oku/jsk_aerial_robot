@@ -5,15 +5,10 @@ import sys
 import time
 
 import rospy
-from std_msgs.msg import String
+from std_msgs.msg import Bool
 
 
-# "teleop" is accepted as a shorthand alias for "teleoperation".
-VALID_MODES = ("startup", "teleoperation", "teleop")
-
-
-def normalize_mode(mode):
-    return "teleoperation" if mode == "teleop" else mode
+VALID_MODES = ("false", "true")
 
 
 def parse_args():
@@ -23,7 +18,7 @@ def parse_args():
     parser.add_argument(
         "mode",
         choices=VALID_MODES,
-        help="teleoperation mode to publish (startup / teleoperation; 'teleop' is an alias)",
+        help="teleoperation mode to publish (false / true)",
     )
     parser.add_argument(
         "--topic",
@@ -43,16 +38,16 @@ def main():
     args = parse_args()
     rospy.init_node("dracomancer_set_teleop_mode", anonymous=True)
 
-    pub = rospy.Publisher(args.topic, String, queue_size=1, latch=True)
+    pub = rospy.Publisher(args.topic, Bool, queue_size=1, latch=True)
     deadline = time.monotonic() + args.wait_timeout
     rate = rospy.Rate(20)
     while pub.get_num_connections() == 0 and time.monotonic() < deadline and not rospy.is_shutdown():
         rate.sleep()
 
-    mode = normalize_mode(args.mode)
-    pub.publish(String(data=mode))
+    mode = args.mode == "true"
+    pub.publish(Bool(data=mode))
     rospy.sleep(0.2)
-    rospy.loginfo("published teleop mode '%s' to %s", mode, args.topic)
+    rospy.loginfo("published teleop mode '%s' to %s", str(mode).lower(), args.topic)
 
 
 if __name__ == "__main__":

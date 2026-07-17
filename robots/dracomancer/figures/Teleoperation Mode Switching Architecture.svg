@@ -57,7 +57,7 @@
 
   <rect class="state" x="505" y="730" width="490" height="72" rx="16"/>
   <text class="small" x="540" y="760">Runtime command topic</text>
-  <text class="mono" x="540" y="788">/dracomancer/teleop_mode  std_msgs/String</text>
+  <text class="mono" x="540" y="788">/dracomancer/teleop_mode  std_msgs/Bool</text>
 
   <line class="thin" x1="750" y1="730" x2="750" y2="690"/>
   <path class="arrow" d="M 750 730 C 710 690, 585 625, 530 600"/>

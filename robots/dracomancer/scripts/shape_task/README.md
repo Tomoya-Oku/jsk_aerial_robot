@@ -37,8 +37,8 @@ roslaunch dracomancer teleoperation.launch
 roslaunch dracomancer shape_task.launch
 
 # 離陸（rostopic pub /dragon/teleop_command/takeoff など既存手順）後、
-# teleoperation モードへ切替
-rostopic pub -1 /dracomancer/teleop_mode std_msgs/String "data: 'teleoperation'"
+# teleop_mode=true へ切替
+rostopic pub -1 /dracomancer/teleop_mode std_msgs/Bool "data: true"
 
 # 試行開始
 rosservice call /shape_task_manager/start

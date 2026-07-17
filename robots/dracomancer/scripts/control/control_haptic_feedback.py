@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import rospy
-from std_msgs.msg import Float64MultiArray, String
+from std_msgs.msg import Bool, Float64MultiArray
 from sensor_msgs.msg import JointState
 from spinal.msg import ServoControlCmd, ServoTorqueCmd
 
@@ -53,7 +53,7 @@ class HapticFeedback:
             name: i for i, name in enumerate(self.haptic_device_joint_names)
         }
 
-        self.teleop_mode = self.normalize_mode(rospy.get_param("~teleop_mode", "startup"))
+        self.teleop_mode = self.parse_bool_param(rospy.get_param("~teleop_mode", False), False)
         self.shape_error = [0.0] * len(self.source_joint_names)
         self.last_shape_error_stamp = rospy.Time(0)
         self.latest_device_joints = {}
@@ -75,7 +75,7 @@ class HapticFeedback:
 
         rospy.Subscriber(self.device_joint_topic, JointState, self.device_joint_cb, queue_size=1)
         rospy.Subscriber(self.shape_error_topic, Float64MultiArray, self.shape_error_cb, queue_size=1)
-        rospy.Subscriber(self.mode_topic, String, self.mode_cb, queue_size=1)
+        rospy.Subscriber(self.mode_topic, Bool, self.mode_cb, queue_size=1)
 
         rospy.loginfo("device_joint_topic: %s", self.device_joint_topic)
         rospy.loginfo("shape_error_topic: %s", self.shape_error_topic)
@@ -86,13 +86,21 @@ class HapticFeedback:
                       self.enable_haptic_current_command, self.haptic_current_topic)
 
     @staticmethod
-    def normalize_mode(mode):
-        # "teleop" is accepted as a shorthand alias for "teleoperation".
-        mode = str(mode).strip().lower()
-        return "teleoperation" if mode == "teleop" else mode
+    def parse_bool_param(value, default=False):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        text = str(value).strip().lower()
+        if text == "true":
+            return True
+        if text == "false":
+            return False
+        rospy.logwarn("unknown teleop_mode bool '%s', use %s", value, default)
+        return default
 
     def mode_cb(self, msg):
-        self.teleop_mode = self.normalize_mode(msg.data)
+        self.teleop_mode = bool(msg.data)
 
     def shape_error_cb(self, msg):
         self.shape_error = self.fit_list(msg.data, len(self.source_joint_names), 0.0)
@@ -125,7 +133,7 @@ class HapticFeedback:
 
     def haptic_torque(self):
         size = len(self.haptic_device_joint_names)
-        if self.teleop_mode != "teleoperation" or not self.shape_error_ready():
+        if not self.teleop_mode or not self.shape_error_ready():
             return [0.0] * size
 
         stiffness = self.fit_list(self.haptic_stiffness, len(self.source_joint_names), 0.0)

@@ -12,11 +12,11 @@
   <arg name="js_raw_topic" default="/joystick/raw"/>
   <arg name="js_calibrated_topic" default="/$(arg device_ns)/joystick/calibrated"/>
   <arg name="device_joint_topic" default="/$(arg device_ns)/joint_states"/>
-  <!-- Predictive shape-feasibility gate (teleoperation mode).
+  <!-- Predictive shape-feasibility gate (teleop_mode=true).
        shape_feasibility_node runs in the controlled robot's namespace so its
        robot model can read <robot_ns>/robot_description.
        Default ON: force/torque volume radius is used as the dangerous-shape
-       gate in teleoperation. If the predictor is too conservative for a DRAGON
+       gate when teleop_mode=true. If the predictor is too conservative for a DRAGON
        model/config and freezes deformation, pass enable_feasibility_gate:=false
        for fallback operation. -->
   <arg name="enable_feasibility_gate" default="true"/>
@@ -78,7 +78,7 @@
        default="$(eval '/' + arg('robot_ns') + '/debug/fc_t_min' + ('_filtered' if arg('enable_fc_min_lowpass') else ''))" />
   <arg name="max_step" default="0.015"/>
   <arg name="joint_limit" default="1.57079632679"/>
-  <!-- Arm->DRAGON mapping strategy (teleoperation mode):
+  <!-- Arm->DRAGON mapping strategy (teleop_mode=true):
          joint_pairing : flexion joints -> DRAGON yaw, pitch held at 0 (planar).
          geometric     : arm FK -> link directions -> yaw/pitch decomposition.
          distal        : absolute match of distal arm joints (wrist + elbow) to
@@ -92,7 +92,7 @@
   <arg name="joint_pairing_reference" default="circular"/>  <!-- deprecated alias of mapping_reference -->
   <arg name="mapping_reference" default="$(arg joint_pairing_reference)"/>
   <arg name="joint_pairing_scale" default="1.0"/>
-  <!-- Allocation-roll neutral capture: at every switch into teleoperation
+  <!-- Allocation-roll neutral capture: at every switch to teleop_mode=true
        (and hover start / ~recapture_anchor), the upper-arm / forearm roll
        angles are captured as the allocation neutral, so their assembly-defined
        servo zeros do not pin the elbow/wrist pitch-yaw allocation at the
@@ -177,11 +177,10 @@
   <arg name="enable_position_control" default="false"/>
   <arg name="enable_attitude_control" default="false"/>
   <arg name="enable_joint_angle_control" default="true"/>
-  <!-- teleop_mode: startup / teleoperation ('teleop' alias accepted).
-       Startup mode keeps the default safe shape until the operator switches to
-       teleoperation; joystick movement still depends on enable_position_control.
-       Runtime switch: rostopic pub -1 /dracomancer/teleop_mode std_msgs/String "data: 'teleoperation'" -->
-  <arg name="teleop_mode" default="startup"/>
+  <!-- teleop_mode: false holds startup_pose; true maps Dracomancer arm to DRAGON.
+       Joystick movement still depends on enable_position_control.
+       Runtime switch: rostopic pub -1 /dracomancer/teleop_mode std_msgs/Bool "data: true" -->
+  <arg name="teleop_mode" default="false"/>
   <arg name="mode_topic" default="/$(arg device_ns)/teleop_mode"/>
 
   <!-- pose (movement) control settings -->
