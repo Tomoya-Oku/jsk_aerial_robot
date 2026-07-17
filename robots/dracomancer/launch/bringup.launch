@@ -14,6 +14,9 @@
   -->
   <arg name="rm"  default="True"  />
   <arg name="sim" default="False" />
+  <!-- true: also start teleoperation.launch and enter teleoperation mode.
+       false: keep bringup-only behavior. -->
+  <arg name="teleop_mode" default="False" />
   <!-- expose the same names used by shared launch files -->
   <arg name="real_machine" value="$(arg rm)"  />
   <arg name="simulation"   value="$(arg sim)" />
@@ -159,6 +162,13 @@
     <param name="robot_name"  value="$(arg controlled_robot_ns)" />
     <param name="cutoff_hz"   value="$(arg fc_min_lowpass_cutoff_hz)" />
   </node>
+
+  ###########  Optional teleoperation stack  ###########
+  <include file="$(find dracomancer)/launch/teleoperation.launch" if="$(arg teleop_mode)">
+    <arg name="device_ns" value="$(arg robot_ns)" />
+    <arg name="robot_ns" value="$(arg controlled_robot_ns)" />
+    <arg name="teleop_mode" value="teleoperation" />
+  </include>
 
   ###########  Mobile Web Console  ###########
   <include file="$(find aerial_robot_web)/launch/web_console.launch" if="$(arg launch_web_console)">

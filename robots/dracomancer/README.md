@@ -592,7 +592,13 @@ roslaunch dracomancer bringup.launch
 roslaunch dracomancer teleoperation.launch
 ```
 
-起動直後は `startup` モードです。ホバリング後、遠隔操作（移動＋腕形状）へ切り替える例:
+bringup とテレオペレーションを同じ launch から起動する場合:
+
+```bash
+roslaunch dracomancer bringup.launch teleop_mode:=true
+```
+
+`teleoperation.launch` を単体で起動した場合、起動直後は `startup` モードです。ホバリング後、遠隔操作（移動＋腕形状）へ切り替える例:
 
 ```bash
 rosrun dracomancer set_teleop_mode.py teleoperation   # 'teleop' でも可
@@ -627,6 +633,7 @@ roslaunch dracomancer teleoperation.launch nav_target:=baselink direction_mode:=
 | --- | --- | --- | --- |
 | モード | `rm` | `True` | 実機サーボ / Spinal FC を使う |
 | モード | `sim` | `False` | RViz表示の既定値に使う |
+| モード | `teleop_mode` | `False` | trueなら `teleoperation.launch` も起動し、初期モードを `teleoperation` にする |
 | 表示 | `headless` | `True` | モデル表示を隠す |
 | 表示 | `launch_rviz` | `$(arg sim)` | RVizを起動する |
 | 表示 | `rviz.launch` | - | 親機PCなどGUI環境でRVizだけを起動する |

@@ -29,7 +29,7 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 | `scripts/visualization/servo_labels.py` | `/dracomancer/servo/states` のサーボtickから基準差分角度、および `/dracomancer/joint_map/switch_ratio` の関節スイッチング配分比をRVizテキスト表示 |
 | `scripts/experiments/` | fc しきい値較正の実験ツール（収集/外乱/解析、[docs/fc_threshold_calibration.md](docs/fc_threshold_calibration.md)） |
 | `scripts/shape_task/` | 形態目標到達タスク実験（試行管理/シャドウ表示/記録/評価/キーボード比較、[scripts/shape_task/README.md](scripts/shape_task/README.md)。設定は `config/shape_task/`、起動は `launch/shape_task.launch`、図生成は `figures/plot_task.py`） |
-| `launch/bringup.launch` | デバイス本体（URDF/TF/サーボ橋渡し/FC/安全半径モニタ） |
+| `launch/bringup.launch` | デバイス本体（URDF/TF/サーボ橋渡し/FC/安全半径モニタ）。`teleop_mode:=true` で teleoperation.launch も同時起動 |
 | `launch/teleoperation.launch` | 位置・姿勢・関節角制御ノード群 |
 | `launch/haptics.launch` | 力覚提示ノード |
 | `launch/rviz.launch` | GUI PCでRVizだけを起動 |
@@ -49,7 +49,7 @@ Dracomancer は **DRAGON を遠隔操作する上肢外骨格（エクソスケ�
 - **spinal.msg** は `convert_servo_to_joint_states.py` / `control_position.py` / `control_haptic_feedback.py` で使用。`package.xml` に `spinal` run_depend を宣言済み。
 - **rm / sim** が通常の起動引数。`real_machine` / `simulation` は旧互換エイリアス。
 - Khadas など表示なし環境を想定し、RViz は既定で起動しない（`headless` 既定 True）。
-- `teleop_mode` は `startup` / `teleoperation`（`teleop` は別名、launch 既定は `startup`）。`teleoperation` では形状（腕写像）が有効。移動（操縦桿）は既定 OFF（`enable_position_control:=false`。`control_position.py` の FlightNav が `POS_VEL_MODE`＋`target_pos` 未設定で落下するため。README「既知の課題」参照）。実行中は `/dracomancer/teleop_mode` (`std_msgs/String`) で切り替える。
+- `teleoperation.launch` の `teleop_mode` は `startup` / `teleoperation`（`teleop` は別名、既定は `startup`）。`bringup.launch` の `teleop_mode` は boolean で、`true` のとき teleoperation.launch も同時起動し、初期モードを `teleoperation` にする。`teleoperation` では形状（腕写像）が有効。移動（操縦桿）は既定 OFF（`enable_position_control:=false`。`control_position.py` の FlightNav が `POS_VEL_MODE`＋`target_pos` 未設定で落下するため。README「既知の課題」参照）。実行中は `/dracomancer/teleop_mode` (`std_msgs/String`) で切り替える。
 
 ## FlightNav（aerial_robot_msgs）の要点
 
