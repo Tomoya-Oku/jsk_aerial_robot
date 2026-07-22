@@ -1,5 +1,7 @@
 #include <aerial_robot_model/model/aerial_robot_model.h>
 
+#include <limits>
+
 namespace aerial_robot_model {
 
   RobotModel::RobotModel(bool init_with_rosparam, bool verbose, bool fixed_model, double fc_f_min_thre, double fc_t_min_thre, double epsilon):
@@ -543,6 +545,7 @@ namespace aerial_robot_model {
   {
     const int rotor_num = getRotorNum();
     const double thrust_max = getThrustUpperLimit();
+    const double invalid_distance = std::numeric_limits<double>::infinity();
 
     const auto& u = getRotorsNormalFromCog<Eigen::Vector3d>();
     Eigen::Vector3d gravity_force = getMass() * gravity_3d_;
@@ -564,21 +567,24 @@ namespace aerial_robot_model {
 
         Eigen::Vector3d uixuj = u_i.cross(u_j);
         if (uixuj.norm() < 1e-5) {
-          fc_f_dists_(index) = 0;
+          // A parallel pair does not define a facet, so exclude it from the minimum.
+          fc_f_dists_(index) = invalid_distance;
         } else {
-          fc_f_dists_(index) = fabs(dist_ij - (uixuj.dot(gravity_force) / uixuj.norm()));
+          fc_f_dists_(index) = dist_ij - (uixuj.dot(gravity_force) / uixuj.norm());
         }
 
         index++;
       }
     }
     fc_f_min_ = fc_f_dists_.minCoeff();
+    if (fc_f_min_ == invalid_distance) fc_f_min_ = 0.0;
   }
 
   void RobotModel::calcFeasibleControlTDists()
   {
     const int rotor_num = getRotorNum();
     const double thrust_max = getThrustUpperLimit();
+    const double invalid_distance = std::numeric_limits<double>::infinity();
 
     const auto v = calcV();
     int index = 0;
@@ -595,12 +601,19 @@ namespace aerial_robot_model {
           double v_triple_product = calcTripleProduct(v_i, v_j, v_k);
           dist_ij += std::max(0.0, v_triple_product * thrust_max);
         }
-        fc_t_dists_(index) = dist_ij;
+
+        if (v_i.cross(v_j).norm() < 1e-5) {
+          // A parallel pair does not define a facet, so exclude it from the minimum.
+          fc_t_dists_(index) = invalid_distance;
+        } else {
+          fc_t_dists_(index) = dist_ij;
+        }
         index++;
       }
     }
 
     fc_t_min_ = fc_t_dists_.minCoeff();
+    if (fc_t_min_ == invalid_distance) fc_t_min_ = 0.0;
   }
 
   TiXmlDocument RobotModel::getRobotModelXml(const std::string param, ros::NodeHandle nh)
@@ -655,4 +668,3 @@ namespace aerial_robot_model {
   }
 
 } //namespace aerial_robot_model
-
