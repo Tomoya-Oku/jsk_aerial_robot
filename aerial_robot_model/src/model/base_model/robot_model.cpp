@@ -1,5 +1,12 @@
 #include <aerial_robot_model/model/aerial_robot_model.h>
 
+#include <algorithm>
+#include <limits>
+
+namespace {
+  constexpr double kParallelVectorSinThreshold = 1e-10;
+}
+
 namespace aerial_robot_model {
 
   RobotModel::RobotModel(bool init_with_rosparam, bool verbose, bool fixed_model, double fc_f_min_thre, double fc_t_min_thre, double epsilon):
@@ -519,10 +526,68 @@ namespace aerial_robot_model {
   double RobotModel::calcTripleProduct(const Eigen::Vector3d& ui, const Eigen::Vector3d& uj, const Eigen::Vector3d& uk)
   {
     Eigen::Vector3d uixuj = ui.cross(uj);
-    if (uixuj.norm() < 1e-5) {
+    if (!isValidFeasibleControlPlane(ui, uj)) {
       return 0.0;
     }
     return uixuj.dot(uk) / uixuj.norm();
+  }
+
+  bool RobotModel::isValidFeasibleControlPlane(const Eigen::Vector3d& vector_i,
+                                                const Eigen::Vector3d& vector_j)
+  {
+    const double norm_product = vector_i.norm() * vector_j.norm();
+    if (norm_product == 0.0) return false;
+
+    // Use the sine of the angle so that the parallel check is independent of vector units and scale.
+    return vector_i.cross(vector_j).norm() > kParallelVectorSinThreshold * norm_product;
+  }
+
+  Eigen::VectorXd RobotModel::calcFeasibleControlDists(const std::vector<Eigen::Vector3d>& generators,
+                                                       double thrust_upper_limit,
+                                                       const Eigen::Vector3d& center)
+  {
+    const int generator_num = static_cast<int>(generators.size());
+    Eigen::VectorXd distances(generator_num * (generator_num - 1));
+    distances.setConstant(std::numeric_limits<double>::infinity());
+
+    int index = 0;
+    for (int i = 0; i < generator_num; ++i) {
+      const Eigen::Vector3d& generator_i = generators.at(i);
+      for (int j = 0; j < generator_num; ++j) {
+        if (i == j) continue;
+        const Eigen::Vector3d& generator_j = generators.at(j);
+
+        if (!isValidFeasibleControlPlane(generator_i, generator_j)) {
+          // Preserve the pair-indexed vector layout while excluding this non-facet from the minimum.
+          ++index;
+          continue;
+        }
+
+        const Eigen::Vector3d normal = generator_i.cross(generator_j).normalized();
+        double distance = -normal.dot(center);
+        for (int k = 0; k < generator_num; ++k) {
+          if (i == k || j == k) continue;
+          distance += std::max(0.0, normal.dot(generators.at(k)) * thrust_upper_limit);
+        }
+        distances(index) = distance;
+        ++index;
+      }
+    }
+
+    return distances;
+  }
+
+  double RobotModel::calcFeasibleControlMin(const Eigen::VectorXd& distances)
+  {
+    const double invalid_distance = std::numeric_limits<double>::infinity();
+    double min_distance = invalid_distance;
+    for (int i = 0; i < distances.size(); ++i) {
+      if (std::isnan(distances(i))) return distances(i);
+      if (distances(i) != invalid_distance) min_distance = std::min(min_distance, distances(i));
+    }
+
+    // With no numerically valid plane, conservatively treat the 3-D inradius as zero.
+    return min_distance == invalid_distance ? 0.0 : min_distance;
   }
 
   std::vector<Eigen::Vector3d> RobotModel::calcV()
@@ -541,66 +606,17 @@ namespace aerial_robot_model {
 
   void RobotModel::calcFeasibleControlFDists()
   {
-    const int rotor_num = getRotorNum();
-    const double thrust_max = getThrustUpperLimit();
-
     const auto& u = getRotorsNormalFromCog<Eigen::Vector3d>();
-    Eigen::Vector3d gravity_force = getMass() * gravity_3d_;
-
-    int index = 0;
-    for (int i = 0; i < rotor_num; ++i) {
-      const Eigen::Vector3d& u_i = u.at(i);
-      for (int j = 0; j < rotor_num; ++j) {
-        if (i == j) continue;
-        const Eigen::Vector3d& u_j = u.at(j);
-
-        double dist_ij = 0.0;
-        for (int k = 0; k < rotor_num; ++k) {
-          if (i == k || j == k) continue;
-          const Eigen::Vector3d& u_k = u.at(k);
-          double u_triple_product = calcTripleProduct(u_i, u_j, u_k);
-          dist_ij += std::max(0.0, u_triple_product * thrust_max);
-        }
-
-        Eigen::Vector3d uixuj = u_i.cross(u_j);
-        if (uixuj.norm() < 1e-5) {
-          fc_f_dists_(index) = 0;
-        } else {
-          fc_f_dists_(index) = fabs(dist_ij - (uixuj.dot(gravity_force) / uixuj.norm()));
-        }
-
-        index++;
-      }
-    }
-    fc_f_min_ = fc_f_dists_.minCoeff();
+    const Eigen::Vector3d gravity_force = getMass() * gravity_3d_;
+    fc_f_dists_ = calcFeasibleControlDists(u, getThrustUpperLimit(), gravity_force);
+    fc_f_min_ = calcFeasibleControlMin(fc_f_dists_);
   }
 
   void RobotModel::calcFeasibleControlTDists()
   {
-    const int rotor_num = getRotorNum();
-    const double thrust_max = getThrustUpperLimit();
-
     const auto v = calcV();
-    int index = 0;
-
-    for (int i = 0; i < rotor_num; ++i) {
-      const Eigen::Vector3d& v_i = v.at(i);
-      for (int j = 0; j < rotor_num; ++j) {
-        if (i == j) continue;
-        const Eigen::Vector3d& v_j = v.at(j);
-        double dist_ij = 0.0;
-        for (int k = 0; k < rotor_num; ++k) {
-          if (i == k || j == k) continue;
-          const Eigen::Vector3d& v_k = v.at(k);
-          double v_triple_product = calcTripleProduct(v_i, v_j, v_k);
-          dist_ij += std::max(0.0, v_triple_product * thrust_max);
-        }
-        fc_t_dists_(index) = dist_ij;
-        index++;
-      }
-    }
-
-    fc_t_min_ = fc_t_dists_.minCoeff();
+    fc_t_dists_ = calcFeasibleControlDists(v, getThrustUpperLimit(), Eigen::Vector3d::Zero());
+    fc_t_min_ = calcFeasibleControlMin(fc_t_dists_);
   }
 
   TiXmlDocument RobotModel::getRobotModelXml(const std::string param, ros::NodeHandle nh)
@@ -655,4 +671,3 @@ namespace aerial_robot_model {
   }
 
 } //namespace aerial_robot_model
-

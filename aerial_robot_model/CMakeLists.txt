@@ -107,6 +107,13 @@ target_link_libraries(interactive_marker_tf_broadcaster ${catkin_LIBRARIES})
 add_library(numerical_jacobians test/aerial_robot_model/numerical_jacobians.cpp)
 target_link_libraries(numerical_jacobians aerial_robot_model ${catkin_LIBRARIES})
 
+if(CATKIN_ENABLE_TESTING)
+  catkin_add_gtest(fc_margin_test test/fc_margin.cpp)
+  if(TARGET fc_margin_test)
+    target_link_libraries(fc_margin_test aerial_robot_model ${catkin_LIBRARIES})
+  endif()
+endif()
+
 
 install(DIRECTORY include/${PROJECT_NAME}/ test/${PROJECT_NAME}/
   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})

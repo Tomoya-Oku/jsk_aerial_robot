@@ -154,9 +154,11 @@ namespace aerial_robot_model {
     double calcTripleProduct(const Eigen::Vector3d& ui, const Eigen::Vector3d& uj, const Eigen::Vector3d& uk);
     std::vector<Eigen::Vector3d> calcV();
     const double getEpsilon() const {return epsilon_;}
+    // Pair-indexed signed margins; parallel or numerically degenerate pairs are +infinity.
     const Eigen::VectorXd& getFeasibleControlFDists() const {return fc_f_dists_;}
     const double& getFeasibleControlFMin()  const {return fc_f_min_;}
     const double& getFeasibleControlFMinThre()  const {return fc_f_min_thre_;}
+    // Pair-indexed distances; parallel or numerically degenerate pairs are +infinity.
     const Eigen::VectorXd& getFeasibleControlTDists() const {return fc_t_dists_;}
     const double& getFeasibleControlTMin()  const {return fc_t_min_;}
     const double& getFeasibleControlTMinThre()  const {return fc_t_min_thre_;}
@@ -214,7 +216,7 @@ namespace aerial_robot_model {
 
     // control stability
     double epsilon_;
-    Eigen::VectorXd fc_f_dists_; // distances to the plane of feasible control force convex
+    Eigen::VectorXd fc_f_dists_; // signed margins to the planes of feasible control force convex
     Eigen::VectorXd fc_t_dists_; // distances to the plane of feasible control torque convex
     double fc_f_min_;
     double fc_t_min_;
@@ -247,6 +249,13 @@ namespace aerial_robot_model {
 
   protected:
     virtual void updateRobotModelImpl(const KDL::JntArray& joint_positions);
+
+    static bool isValidFeasibleControlPlane(const Eigen::Vector3d& vector_i,
+                                            const Eigen::Vector3d& vector_j);
+    static Eigen::VectorXd calcFeasibleControlDists(const std::vector<Eigen::Vector3d>& generators,
+                                                    double thrust_upper_limit,
+                                                    const Eigen::Vector3d& center);
+    static double calcFeasibleControlMin(const Eigen::VectorXd& distances);
 
     void setCog(const KDL::Frame cog)
     {

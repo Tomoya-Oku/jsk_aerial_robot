@@ -1,5 +1,7 @@
 #include <aerial_robot_model/model/transformable_aerial_robot_model.h>
 
+#include <limits>
+
 using namespace aerial_robot_model::transformable;
 
 void RobotModel::calcFeasibleControlJacobian()
@@ -31,9 +33,9 @@ void RobotModel::calcFeasibleControlJacobian()
 
       if (i == j) continue;
 
-      approx_fc_f_dists_(index) = 0;
+      approx_fc_f_dists_(index) = std::numeric_limits<double>::infinity();
       fc_f_dists_jacobian_.row(index) = Eigen::MatrixXd::Zero(1, ndof);
-      approx_fc_t_dists_(index) = 0;
+      approx_fc_t_dists_(index) = std::numeric_limits<double>::infinity();
       fc_t_dists_jacobian_.row(index) = Eigen::MatrixXd::Zero(1, ndof);
 
 
@@ -44,6 +46,7 @@ void RobotModel::calcFeasibleControlJacobian()
 
       const Eigen::Vector3d& u_i = u.at(i);
       const Eigen::Vector3d& u_j = u.at(j);
+      const bool valid_f_plane = isValidFeasibleControlPlane(u_i, u_j);
       const Eigen::Vector3d uixuj = u_i.cross(u_j);
       const Eigen::MatrixXd& d_u_i = u_jacobians_.at(i);
       const Eigen::MatrixXd& d_u_j = u_jacobians_.at(j);
@@ -51,6 +54,7 @@ void RobotModel::calcFeasibleControlJacobian()
 
       const Eigen::Vector3d& v_i = v.at(i);
       const Eigen::Vector3d& v_j = v.at(j);
+      const bool valid_t_plane = isValidFeasibleControlPlane(v_i, v_j);
       const Eigen::Vector3d vixvj = v_i.cross(v_j);
       const Eigen::MatrixXd& d_v_i = v_jacobians.at(i);
       const Eigen::MatrixXd& d_v_j = v_jacobians.at(j);
@@ -60,33 +64,35 @@ void RobotModel::calcFeasibleControlJacobian()
 
         if (i == k || j == k) continue;
 
-        // u
-        const Eigen::Vector3d& u_k = u.at(k);
-        const double u_triple_product = calcTripleProduct(u_i, u_j, u_k);
-        const Eigen::MatrixXd& d_u_k = u_jacobians_.at(k);
-        Eigen::MatrixXd d_u_triple_product = (uixuj / uixuj.norm()).transpose() * d_u_k + u_k.transpose() * (d_uixuj / uixuj.norm() - uixuj / (uixuj.norm() * uixuj.squaredNorm()) * uixuj.transpose() * d_uixuj);
-        d_f_min += sigmoid(u_triple_product * thrust_max, epsilon) * d_u_triple_product * thrust_max;
-        approx_f_dist += reluApprox(u_triple_product * thrust_max, epsilon);
+        if (valid_f_plane) {
+          const Eigen::Vector3d& u_k = u.at(k);
+          const double u_triple_product = calcTripleProduct(u_i, u_j, u_k);
+          const Eigen::MatrixXd& d_u_k = u_jacobians_.at(k);
+          Eigen::MatrixXd d_u_triple_product = (uixuj / uixuj.norm()).transpose() * d_u_k + u_k.transpose() * (d_uixuj / uixuj.norm() - uixuj / (uixuj.norm() * uixuj.squaredNorm()) * uixuj.transpose() * d_uixuj);
+          d_f_min += sigmoid(u_triple_product * thrust_max, epsilon) * d_u_triple_product * thrust_max;
+          approx_f_dist += reluApprox(u_triple_product * thrust_max, epsilon);
+        }
 
-        // v
-        const Eigen::Vector3d& v_k = v.at(k);
-        const double v_triple_product = calcTripleProduct(v_i, v_j, v_k);
-        const Eigen::MatrixXd& d_v_k = v_jacobians.at(k);
-        Eigen::MatrixXd d_v_triple_product = (vixvj / vixvj.norm()).transpose() * d_v_k + v_k.transpose() * (d_vixvj / vixvj.norm() - vixvj / (vixvj.norm() * vixvj.squaredNorm()) * vixvj.transpose() * d_vixvj);
-        d_t_min += sigmoid(v_triple_product * thrust_max, epsilon) * d_v_triple_product * thrust_max;
-        approx_t_dist += reluApprox(v_triple_product * thrust_max, epsilon);
+        if (valid_t_plane) {
+          const Eigen::Vector3d& v_k = v.at(k);
+          const double v_triple_product = calcTripleProduct(v_i, v_j, v_k);
+          const Eigen::MatrixXd& d_v_k = v_jacobians.at(k);
+          Eigen::MatrixXd d_v_triple_product = (vixvj / vixvj.norm()).transpose() * d_v_k + v_k.transpose() * (d_vixvj / vixvj.norm() - vixvj / (vixvj.norm() * vixvj.squaredNorm()) * vixvj.transpose() * d_vixvj);
+          d_t_min += sigmoid(v_triple_product * thrust_max, epsilon) * d_v_triple_product * thrust_max;
+          approx_t_dist += reluApprox(v_triple_product * thrust_max, epsilon);
+        }
       }
 
-      if (uixuj.norm() > 10e-5) {
+      if (valid_f_plane) {
         double uixuj_fg = uixuj.dot(fg)/uixuj.norm();
         Eigen::MatrixXd d_uixuj_fg = Eigen::MatrixXd::Zero(1, ndof);
         d_uixuj_fg = fg.transpose() * (d_uixuj / uixuj.norm() - uixuj / (uixuj.norm() * uixuj.squaredNorm()) * uixuj.transpose() * d_uixuj);
 
-        approx_fc_f_dists_(index) = absApprox(approx_f_dist - uixuj_fg, epsilon);
-        fc_f_dists_jacobian_.row(index) = tanh(approx_f_dist - uixuj_fg, epsilon) * (d_f_min - d_uixuj_fg);
+        approx_fc_f_dists_(index) = approx_f_dist - uixuj_fg;
+        fc_f_dists_jacobian_.row(index) = d_f_min - d_uixuj_fg;
       }
 
-      if (vixvj.norm() > 10e-5) {
+      if (valid_t_plane) {
         approx_fc_t_dists_(index) = approx_t_dist;
         fc_t_dists_jacobian_.row(index) = d_t_min;
       }
