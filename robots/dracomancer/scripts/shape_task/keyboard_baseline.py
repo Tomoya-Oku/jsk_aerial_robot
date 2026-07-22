@@ -9,10 +9,11 @@ the 6 DRAGON internal joint angles with the keyboard, while everything else
 metrics) stays identical to the device condition.
 
 To keep the comparison fair without touching control_joint_angle.py, this node
-re-implements the SAME hold-type feasibility gate (predicted fc of the
-candidate shape via /<robot>/shape_feasibility/check_shape, hard/recover
-thresholds from the [hard_min, min] threshold topics, hysteresis hold) and the
-same max_step rate limit and hover gating, and publishes to the same topics:
+re-implements the SAME hold-type feasibility gate (predicted fc and coupled
+hover-wrench feasibility via /<robot>/shape_feasibility/check_shape,
+hard/recover thresholds from the [hard_min, min] threshold topics, hysteresis
+hold) and the same max_step rate limit and hover gating, and publishes to the
+same topics:
 
   /<robot>/joints_ctrl                 gated joint command (q_target)
   <device_ns>/shape_control_error      candidate - command   (q_candidate reconstruction)
@@ -189,7 +190,7 @@ class KeyboardBaseline:
 
     def evaluate(self, candidate):
         if self.feasibility_srv is None and not self.connect_service():
-            return None, None, None
+            return None, None, None, None
         from dracomancer.srv import ShapeFeasibilityRequest
         req = ShapeFeasibilityRequest()
         req.name = list(self.joint_names)
@@ -199,12 +200,14 @@ class KeyboardBaseline:
         except (rospy.ServiceException, TypeError):
             rospy.logwarn_throttle(5.0, "feasibility call failed; reconnecting")
             self.feasibility_srv = None
-            return None, None, None
+            return None, None, None, None
         if not res.valid:
-            return None, res.fc_f_min, res.fc_t_min
-        ok = (res.fc_f_min >= self.force_radius_threshold and
+            return None, res.fc_f_min, res.fc_t_min, None
+        stability_ok = bool(res.stability_ok)
+        ok = (stability_ok and
+              res.fc_f_min >= self.force_radius_threshold and
               res.fc_t_min >= self.torque_radius_threshold)
-        return ok, res.fc_f_min, res.fc_t_min
+        return ok, res.fc_f_min, res.fc_t_min, stability_ok
 
     def gate(self, candidate):
         """Hold gate with hysteresis, mirroring control_joint_angle.py."""
@@ -217,7 +220,7 @@ class KeyboardBaseline:
             return list(self.last_feasible)
         self.last_eval_t = now
 
-        feasible, fc_f, fc_t = self.evaluate(candidate)
+        feasible, fc_f, fc_t, stability_ok = self.evaluate(candidate)
         if fc_f is not None:
             self.cand_f_pub.publish(Float64(fc_f))
         if fc_t is not None:
@@ -226,7 +229,8 @@ class KeyboardBaseline:
         if feasible is None:  # service failure: hold conservatively
             return list(self.last_feasible)
         if self.holding:
-            if (fc_f >= self.force_radius_recover_threshold and
+            if (stability_ok and
+                    fc_f >= self.force_radius_recover_threshold and
                     fc_t >= self.torque_radius_recover_threshold):
                 self.holding = False
                 self.last_feasible = list(candidate)
@@ -235,7 +239,9 @@ class KeyboardBaseline:
             self.last_feasible = list(candidate)
         else:
             self.holding = True
-            rospy.logwarn_throttle(1.0, "gate hold: fc_f=%.4f fc_t=%.4f", fc_f, fc_t)
+            rospy.logwarn_throttle(
+                1.0, "gate hold: fc_f=%.4f fc_t=%.4f stability_ok=%s",
+                fc_f, fc_t, stability_ok)
         return list(self.last_feasible)
 
     # ------------------------------------------------------------- main loop

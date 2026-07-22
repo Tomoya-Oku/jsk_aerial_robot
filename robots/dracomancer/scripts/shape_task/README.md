@@ -77,7 +77,8 @@ rosrun dracomancer keyboard_baseline.py
 キー操作: `1`-`6` 関節選択 / `+` `-` 増減 / `[` `]` ステップ半減・倍増 / `r` 現在形態にリセット / `h` ヘルプ。
 
 keyboard 条件は Dracomancer 条件と同一の hold 型フィージビリティゲート
-（`/dragon/shape_feasibility/check_shape`、[hard_min, min] しきい値トピック、ヒステリシス）、
+（`/dragon/shape_feasibility/check_shape` の半径と `stability_ok`、[hard_min, min]
+しきい値トピック、ヒステリシス）、
 同一の `max_step` レート制限、同一のホバリングゲートを `keyboard_baseline.py` 内に再実装しており、
 出力トピック（`/dragon/joints_ctrl`、`/dracomancer/shape_control_error`、
 `/dracomancer/candidate/fc_*`）も同じため、記録・評価・可視化は完全に共通である。
@@ -162,8 +163,8 @@ q_candidate_0..5, q_exo_0..6, r_f, r_tau, mu, gate_rejected, E_q, E_s` +
 - `q_candidate` はトピックとして存在しないため `q_target + shape_control_error` から再構成している
   （`control_joint_angle.py` は同一周期で両者を publish するため近似は正確）。
 - `gate_rejected` は候補予測 fc (`/dracomancer/candidate/fc_*`) と hard しきい値から導出しており、
-  `control_joint_angle.py` 内部のヒステリシス保持状態そのものではない（保持解除は recover しきい値なので、
-  境界付近では内部状態と数サンプルずれうる）。
+  `stability_ok=false` による拒否と `control_joint_angle.py` 内部のヒステリシス保持状態そのものは
+  記録していない（保持解除は recover しきい値なので、境界付近でも内部状態と数サンプルずれうる）。
 - 実測 `r_f`/`r_tau` は `/dragon/debug/fc_f_min_filtered` / `fc_t_min_filtered`
   （`fc_min_lowpass.py` 有効時）。低域通過を使わない構成では experiment.yaml で `_filtered` なしに変更する。
 - dry-run では `q_exo`・fc 系トピックが存在せず NaN で記録される

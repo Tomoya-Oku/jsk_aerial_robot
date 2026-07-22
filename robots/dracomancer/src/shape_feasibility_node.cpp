@@ -2,8 +2,9 @@
  * shape_feasibility_node
  *
  * Predicts the feasible-control force/torque volume inradius (fc_f_min /
- * fc_t_min) of a *candidate* articulated-aerial-robot shape, before the shape
- * command is actually sent. It loads the controlled robot's model (e.g.
+ * fc_t_min) and coupled static-wrench feasibility of a *candidate*
+ * articulated-aerial-robot shape, before the shape command is actually sent.
+ * It loads the controlled robot's model (e.g.
  * DRAGON) through pluginlib and evaluates getFeasibleControlF/TMin() for the
  * requested link joint angles. In legacy modes, gimbal joints are filled by the
  * model with its nominal (hovering) angles, so the result is an approximate
@@ -150,6 +151,7 @@ private:
       {
         ROS_WARN_THROTTLE(1.0, "shape_feasibility: name/position size mismatch (%zu vs %zu)",
                           req.name.size(), req.position.size());
+        res.stability_ok = false;
         res.valid = false;
         return true;
       }
@@ -165,32 +167,53 @@ private:
         robot_model_->updateRobotModel(js);
         if (prediction_mode_ == "allocation")
           {
-            evaluateAllocationFc(res.fc_f_min, res.fc_t_min);
+            res.stability_ok = evaluateAllocationFc(res.fc_f_min, res.fc_t_min);
           }
         else if (prediction_mode_ == "controller")
           {
-            evaluateControllerFeedbackFc(res.fc_f_min, res.fc_t_min);
+            res.stability_ok = evaluateControllerFeedbackFc(res.fc_f_min, res.fc_t_min);
           }
         else if (prediction_mode_ == "optimized_gimbal")
           {
-            evaluateOptimizedGimbalFc(res.fc_f_min, res.fc_t_min);
+            res.stability_ok = evaluateOptimizedGimbalFc(res.fc_f_min, res.fc_t_min);
           }
         else
           {
-            res.fc_f_min = robot_model_->getFeasibleControlFMin();
-            res.fc_t_min = robot_model_->getFeasibleControlTMin();
+            res.stability_ok = evaluateModelFc(res.fc_f_min, res.fc_t_min);
           }
         res.valid = true;
       }
     catch (std::exception& e)
       {
         ROS_WARN_THROTTLE(1.0, "shape_feasibility: model evaluation failed: %s", e.what());
+        res.stability_ok = false;
         res.valid = false;
       }
     return true;
   }
 
-  void evaluateOptimizedGimbalFc(double& fc_f_min, double& fc_t_min)
+  bool evaluateModelFc(double& fc_f_min, double& fc_t_min)
+  {
+    Dragon::FullVectoringRobotModel* dragon_model =
+      dynamic_cast<Dragon::FullVectoringRobotModel*>(robot_model_.get());
+    if (!dragon_model)
+      {
+        fc_f_min = robot_model_->getFeasibleControlFMin();
+        fc_t_min = robot_model_->getFeasibleControlTMin();
+        return robot_model_->aerial_robot_model::RobotModel::stabilityCheck(false);
+      }
+
+    const KDL::JntArray processed_joint =
+      dragon_model->getGimbalProcessedJoint<KDL::JntArray>();
+    const Eigen::Matrix3d cog_rot =
+      dragon_model->getCogDesireOrientation<Eigen::Matrix3d>();
+    const auto plan_model = preparePlanModel(*dragon_model, processed_joint, cog_rot);
+    fc_f_min = plan_model->getFeasibleControlFMin();
+    fc_t_min = plan_model->getFeasibleControlTMin();
+    return plan_model->stabilityCheck(false);
+  }
+
+  bool evaluateOptimizedGimbalFc(double& fc_f_min, double& fc_t_min)
   {
     Dragon::FullVectoringRobotModel* dragon_model =
       dynamic_cast<Dragon::FullVectoringRobotModel*>(robot_model_.get());
@@ -199,21 +222,20 @@ private:
         ROS_WARN_THROTTLE(5.0,
                           "shape_feasibility: optimized_gimbal mode requires Dragon::FullVectoringRobotModel; "
                           "falling back to model fc");
-        fc_f_min = robot_model_->getFeasibleControlFMin();
-        fc_t_min = robot_model_->getFeasibleControlTMin();
-        return;
+        return evaluateModelFc(fc_f_min, fc_t_min);
       }
 
     const int rotor_num = dragon_model->getRotorNum();
     const std::vector<int> roll_locked_gimbal = dragon_model->getRollLockedGimbal();
-    const std::vector<Eigen::Matrix3d> link_rot =
-      dragon_model->getLinksRotationFromCog<Eigen::Matrix3d>();
+    const KDL::JntArray processed_joint = dragon_model->getGimbalProcessedJoint<KDL::JntArray>();
+    const Eigen::Matrix3d cog_rot =
+      dragon_model->getCogDesireOrientation<Eigen::Matrix3d>();
+    const auto plan_model = preparePlanModel(*dragon_model, processed_joint, cog_rot);
+    const std::vector<Eigen::Matrix3d> link_rot = linksRotationFromCog(*plan_model);
     const std::vector<Eigen::Vector3d> rotor_pos =
-      dragon_model->getRotorsOriginFromCog<Eigen::Vector3d>();
-    const Eigen::Matrix3d cog_rot = dragon_model->getCogDesireOrientation<Eigen::Matrix3d>();
+      plan_model->getRotorsOriginFromCog<Eigen::Vector3d>();
 
     std::vector<double> locked_roll_angles;
-    const KDL::JntArray processed_joint = dragon_model->getGimbalProcessedJoint<KDL::JntArray>();
     const auto& joint_index_map = dragon_model->getJointIndexMap();
     for (int i = 0; i < rotor_num; ++i)
       {
@@ -238,9 +260,10 @@ private:
                                               rotor_num, rotor_pos, link_rot, cog_rot);
     fc_f_min = f_min_list.minCoeff();
     fc_t_min = t_min_list.minCoeff();
+    return plan_model->stabilityCheck(false);
   }
 
-  void evaluateControllerFeedbackFc(double& fc_f_min, double& fc_t_min)
+  bool evaluateControllerFeedbackFc(double& fc_f_min, double& fc_t_min)
   {
     Dragon::FullVectoringRobotModel* dragon_model =
       dynamic_cast<Dragon::FullVectoringRobotModel*>(robot_model_.get());
@@ -249,32 +272,30 @@ private:
         ROS_WARN_THROTTLE(5.0,
                           "shape_feasibility: controller mode requires Dragon::FullVectoringRobotModel; "
                           "falling back to model fc");
-        fc_f_min = robot_model_->getFeasibleControlFMin();
-        fc_t_min = robot_model_->getFeasibleControlTMin();
-        return;
+        return evaluateModelFc(fc_f_min, fc_t_min);
       }
 
     const int rotor_num = dragon_model->getRotorNum();
+    KDL::JntArray feedback_joint = dragon_model->getGimbalProcessedJoint<KDL::JntArray>();
     std::vector<double> locked_roll_angles;
-    if (!latestGimbalRolls(rotor_num, locked_roll_angles))
+    if (!latestGimbalState(*dragon_model, feedback_joint, locked_roll_angles))
       {
         ROS_WARN_THROTTLE(2.0,
-                          "shape_feasibility: controller mode has no fresh gimbal feedback; "
+                          "shape_feasibility: controller mode has no fresh roll/pitch gimbal feedback; "
                           "falling back to optimized_gimbal");
-        evaluateOptimizedGimbalFc(fc_f_min, fc_t_min);
-        return;
+        return evaluateOptimizedGimbalFc(fc_f_min, fc_t_min);
       }
 
-    const std::vector<Eigen::Matrix3d> link_rot =
-      dragon_model->getLinksRotationFromCog<Eigen::Matrix3d>();
-    const std::vector<Eigen::Vector3d> rotor_pos =
-      dragon_model->getRotorsOriginFromCog<Eigen::Vector3d>();
     Eigen::Matrix3d cog_rot = dragon_model->getCogDesireOrientation<Eigen::Matrix3d>();
     const auto feedback_rot = latestBaselinkRotation();
     if (feedback_rot.first)
       {
         cog_rot = feedback_rot.second;
       }
+    const auto plan_model = preparePlanModel(*dragon_model, feedback_joint, cog_rot);
+    const std::vector<Eigen::Matrix3d> link_rot = linksRotationFromCog(*plan_model);
+    const std::vector<Eigen::Vector3d> rotor_pos =
+      plan_model->getRotorsOriginFromCog<Eigen::Vector3d>();
 
     // Mirror the controller-side fc check that evaluates all gimbal rolls as
     // locked at the current target roll angles. This is closer to
@@ -288,9 +309,10 @@ private:
                                               rotor_num, rotor_pos, link_rot, cog_rot);
     fc_f_min = f_min_list.minCoeff();
     fc_t_min = t_min_list.minCoeff();
+    return plan_model->stabilityCheck(false);
   }
 
-  void evaluateAllocationFc(double& fc_f_min, double& fc_t_min)
+  bool evaluateAllocationFc(double& fc_f_min, double& fc_t_min)
   {
     Dragon::FullVectoringRobotModel* dragon_model =
       dynamic_cast<Dragon::FullVectoringRobotModel*>(robot_model_.get());
@@ -299,8 +321,7 @@ private:
         ROS_WARN_THROTTLE(5.0,
                           "shape_feasibility: allocation mode requires Dragon::FullVectoringRobotModel; "
                           "falling back to controller fc");
-        evaluateControllerFeedbackFc(fc_f_min, fc_t_min);
-        return;
+        return evaluateControllerFeedbackFc(fc_f_min, fc_t_min);
       }
 
     const int rotor_num = dragon_model->getRotorNum();
@@ -315,8 +336,14 @@ private:
       }
 
     KDL::JntArray gimbal_processed_joint = dragon_model->getGimbalProcessedJoint<KDL::JntArray>();
-    const std::vector<Eigen::Matrix3d> link_rot =
-      dragon_model->getLinksRotationFromCog<Eigen::Matrix3d>();
+    Eigen::Matrix3d cog_rot = dragon_model->getCogDesireOrientation<Eigen::Matrix3d>();
+    const auto feedback_rot = latestBaselinkRotation();
+    if (feedback_rot.first)
+      {
+        cog_rot = feedback_rot.second;
+      }
+    const auto plan_model = preparePlanModel(*dragon_model, gimbal_processed_joint, cog_rot);
+    const std::vector<Eigen::Matrix3d> link_rot = linksRotationFromCog(*plan_model);
     const int gimbal_lock_num =
       std::accumulate(roll_locked_gimbal.begin(), roll_locked_gimbal.end(), 0);
     Eigen::VectorXd vectoring_forces =
@@ -324,7 +351,7 @@ private:
 
     const Eigen::VectorXd target_acc = allocationTargetAcc(*dragon_model);
     const bool allocation_ok =
-      staticHoverAllocation(*dragon_model, target_acc, roll_locked_gimbal,
+      staticHoverAllocation(*dragon_model, *plan_model, target_acc, roll_locked_gimbal,
                             gimbal_nominal_angles, link_rot, gimbal_processed_joint,
                             thrust_forces, gimbal_angles, vectoring_forces);
     if (!allocation_ok)
@@ -342,22 +369,18 @@ private:
 
     const std::vector<int> all_roll_locked(rotor_num, 1);
     const std::vector<Eigen::Vector3d> rotor_pos =
-      dragon_model->getRotorsOriginFromCog<Eigen::Vector3d>();
-    Eigen::Matrix3d cog_rot = dragon_model->getCogDesireOrientation<Eigen::Matrix3d>();
-    const auto feedback_rot = latestBaselinkRotation();
-    if (feedback_rot.first)
-      {
-        cog_rot = feedback_rot.second;
-      }
+      plan_model->getRotorsOriginFromCog<Eigen::Vector3d>();
+    const std::vector<Eigen::Matrix3d> final_link_rot = linksRotationFromCog(*plan_model);
 
     const auto f_min_list =
       dragon_model->calcFeasibleControlFxyDists(all_roll_locked, locked_roll_angles,
-                                                rotor_num, link_rot);
+                                                rotor_num, final_link_rot);
     const auto t_min_list =
       dragon_model->calcFeasibleControlTDists(all_roll_locked, locked_roll_angles,
-                                              rotor_num, rotor_pos, link_rot, cog_rot);
+                                              rotor_num, rotor_pos, final_link_rot, cog_rot);
     fc_f_min = f_min_list.minCoeff();
     fc_t_min = t_min_list.minCoeff();
+    return plan_model->stabilityCheck(false);
   }
 
   Eigen::VectorXd allocationTargetAcc(const Dragon::FullVectoringRobotModel& dragon_model) const
@@ -372,7 +395,8 @@ private:
     return target_acc;
   }
 
-  bool staticHoverAllocation(Dragon::FullVectoringRobotModel& dragon_model,
+  bool staticHoverAllocation(const Dragon::FullVectoringRobotModel& dragon_model,
+                             aerial_robot_model::RobotModel& plan_model,
                              const Eigen::VectorXd& target_acc,
                              const std::vector<int>& roll_locked_gimbal,
                              const std::vector<double>& gimbal_nominal_angles,
@@ -382,17 +406,17 @@ private:
                              std::vector<double>& gimbal_angles,
                              Eigen::VectorXd& vectoring_forces)
   {
-    const int rotor_num = dragon_model.getRotorNum();
+    const int rotor_num = plan_model.getRotorNum();
     const int gimbal_lock_num =
       std::accumulate(roll_locked_gimbal.begin(), roll_locked_gimbal.end(), 0);
     const int allocation_dim = 3 * rotor_num - gimbal_lock_num;
-    const auto& joint_index_map = dragon_model.getJointIndexMap();
+    const auto& joint_index_map = plan_model.getJointIndexMap();
     const int max_iteration = std::max(1, allocation_refine_max_iteration_);
 
     for (int j = 0; j < max_iteration; ++j)
       {
         const std::vector<Eigen::Vector3d> prev_rotors_origin_from_cog =
-          dragon_model.getRotorsOriginFromCog<Eigen::Vector3d>();
+          plan_model.getRotorsOriginFromCog<Eigen::Vector3d>();
         Eigen::MatrixXd full_q_mat = Eigen::MatrixXd::Zero(6, allocation_dim);
         Eigen::MatrixXd wrench_map = Eigen::MatrixXd::Zero(6, 3);
         wrench_map.block(0, 0, 3, 3) = Eigen::MatrixXd::Identity(3, 3);
@@ -422,9 +446,9 @@ private:
           }
 
         Eigen::VectorXd target_wrench = Eigen::VectorXd::Zero(6);
-        target_wrench.head(3) = dragon_model.getMass() * target_acc.head(3);
+        target_wrench.head(3) = plan_model.getMass() * target_acc.head(3);
         target_wrench.tail(3) =
-          dragon_model.getInertia<Eigen::Matrix3d>() * target_acc.tail(3);
+          plan_model.getInertia<Eigen::Matrix3d>() * target_acc.tail(3);
         vectoring_forces = aerial_robot_model::pseudoinverse(full_q_mat) * target_wrench;
 
         last_col = 0;
@@ -461,10 +485,13 @@ private:
             setJointPosition(joint_index_map, gimbal_processed_joint,
                              "gimbal" + suffix + "_pitch", gimbal_angles.at(2 * i + 1));
           }
-        dragon_model.updateRobotModel(gimbal_processed_joint);
+        // The plain planning model honors these exact gimbal angles. Updating
+        // FullVectoringRobotModel here would replace them with its own nominal
+        // allocation, making the returned fc and stability gate use different Q.
+        plan_model.updateRobotModel(gimbal_processed_joint);
 
         const std::vector<Eigen::Vector3d> rotors_origin_from_cog =
-          dragon_model.getRotorsOriginFromCog<Eigen::Vector3d>();
+          plan_model.getRotorsOriginFromCog<Eigen::Vector3d>();
         double max_diff = 0.0;
         for (int i = 0; i < rotor_num; ++i)
           {
@@ -508,7 +535,61 @@ private:
     joint_positions(it->second) = value;
   }
 
-  bool latestGimbalRolls(int rotor_num, std::vector<double>& rolls)
+  static KDL::Rotation matrixToKdlRotation(const Eigen::Matrix3d& rotation)
+  {
+    // KDL::Rotation stores these constructor arguments row by row.
+    return KDL::Rotation(rotation(0, 0), rotation(0, 1), rotation(0, 2),
+                         rotation(1, 0), rotation(1, 1), rotation(1, 2),
+                         rotation(2, 0), rotation(2, 1), rotation(2, 2));
+  }
+
+  boost::shared_ptr<aerial_robot_model::RobotModel>
+  preparePlanModel(Dragon::FullVectoringRobotModel& dragon_model,
+                   const KDL::JntArray& evaluated_joint,
+                   const Eigen::Matrix3d& cog_rot)
+  {
+    const auto plan_model = dragon_model.getRobotModelForPlan();
+    if (!plan_model)
+      {
+        throw std::runtime_error("full-vectoring planning model is not initialized");
+      }
+    plan_model->setExtraModuleMap(dragon_model.getExtraModuleMap());
+    plan_model->setCogDesireOrientation(matrixToKdlRotation(cog_rot));
+    plan_model->updateRobotModel(evaluated_joint);
+    return plan_model;
+  }
+
+  std::vector<Eigen::Matrix3d>
+  linksRotationFromCog(aerial_robot_model::RobotModel& model)
+  {
+    const auto segment_tf = model.getSegmentsTf();
+    const auto baselink_it = segment_tf.find(model.getBaselinkName());
+    if (baselink_it == segment_tf.end())
+      {
+        throw std::runtime_error("missing baselink transform in planning model");
+      }
+    const KDL::Rotation cog_rot =
+      baselink_it->second.M * model.getCogDesireOrientation<KDL::Rotation>().Inverse();
+
+    std::vector<Eigen::Matrix3d> link_rot;
+    link_rot.reserve(model.getRotorNum());
+    for (int i = 0; i < model.getRotorNum(); ++i)
+      {
+        const std::string link_name = "link" + std::to_string(i + 1);
+        const auto link_it = segment_tf.find(link_name);
+        if (link_it == segment_tf.end())
+          {
+            throw std::runtime_error("missing transform for " + link_name);
+          }
+        link_rot.push_back(
+          aerial_robot_model::kdlToEigen(cog_rot.Inverse() * link_it->second.M));
+      }
+    return link_rot;
+  }
+
+  bool latestGimbalState(const Dragon::FullVectoringRobotModel& dragon_model,
+                         KDL::JntArray& feedback_joint,
+                         std::vector<double>& rolls)
   {
     std::lock_guard<std::mutex> lock(feedback_mutex_);
     if (!have_gimbal_feedback_ ||
@@ -518,15 +599,25 @@ private:
       }
 
     rolls.clear();
-    for (int i = 0; i < rotor_num; ++i)
+    const auto& joint_index_map = dragon_model.getJointIndexMap();
+    for (int i = 0; i < dragon_model.getRotorNum(); ++i)
       {
-        const std::string name = "gimbal" + std::to_string(i + 1) + "_roll";
-        const auto it = latest_gimbal_positions_.find(name);
-        if (it == latest_gimbal_positions_.end())
+        const std::string prefix = "gimbal" + std::to_string(i + 1);
+        const std::string roll_name = prefix + "_roll";
+        const std::string pitch_name = prefix + "_pitch";
+        const auto roll_feedback = latest_gimbal_positions_.find(roll_name);
+        const auto pitch_feedback = latest_gimbal_positions_.find(pitch_name);
+        const auto roll_index = joint_index_map.find(roll_name);
+        const auto pitch_index = joint_index_map.find(pitch_name);
+        if (roll_feedback == latest_gimbal_positions_.end() ||
+            pitch_feedback == latest_gimbal_positions_.end() ||
+            roll_index == joint_index_map.end() || pitch_index == joint_index_map.end())
           {
             return false;
           }
-        rolls.push_back(it->second);
+        feedback_joint(roll_index->second) = roll_feedback->second;
+        feedback_joint(pitch_index->second) = pitch_feedback->second;
+        rolls.push_back(roll_feedback->second);
       }
     return true;
   }

@@ -15,8 +15,9 @@
   <!-- Predictive shape-feasibility gate (teleop_mode=true).
        shape_feasibility_node runs in the controlled robot's namespace so its
        robot model can read <robot_ns>/robot_description.
-       Default ON: force/torque volume radius is used as the dangerous-shape
-       gate when teleop_mode=true. If the predictor is too conservative for a DRAGON
+       Default ON: force/torque volume radii and the coupled static-wrench
+       feasibility result are used as the dangerous-shape gate when
+       teleop_mode=true. If the predictor is too conservative for a DRAGON
        model/config and freezes deformation, pass enable_feasibility_gate:=false
        for fallback operation. -->
   <arg name="enable_feasibility_gate" default="true"/>

@@ -11,7 +11,7 @@
 | 対象システム | Dracomancer（上肢外骨格型遠隔操作デバイス＋操作変換システム） |
 | 操縦対象 | 一般の多関節飛行ロボット（実装上の主対象は DRAGON、候補に HYDRUS） |
 | 版数 | 0.1（雛形） |
-| 最終更新 | 2026/06/27 |
+| 最終更新 | 2026/07/22 |
 | 作成者 | Tomoya Oku |
 | 関連文書 | [README.md](../README.md)（システム仕様）、[docs/ideas.md](ideas.md)（研究アイデア）、ルート/パッケージ `AGENTS.md` |
 
@@ -160,7 +160,7 @@ stateDiagram-v2
 | IF-3 | 操縦者IMU | `spinal/Imu`（quat `[x,y,z,w]`） | `/<dev>/imu` |
 | IF-4 | 移動指令 | `aerial_robot_msgs/FlightNav` | `/<robot>/uav/nav` |
 | IF-5 | 形状指令 | `sensor_msgs/JointState` | `/<robot>/joints_ctrl` |
-| IF-6 | 形状フィージビリティ予測 | service `check_shape` | `fc_f_min` / `fc_t_min` を返す |
+| IF-6 | 形状フィージビリティ予測 | service `check_shape` | `fc_f_min` / `fc_t_min` / 同一推力配分による`stability_ok`を返す |
 | IF-7 | 力覚提示出力 | `JointState` / `ServoTorqueCmd` / `ServoControlCmd` | ON/OFF 既定、電流指令は任意 |
 | IF-8 | しきい値設定 | `Float64MultiArray`（`[hard_min, min]`） | force/torque 各々 |
 

@@ -3,7 +3,7 @@
 このドキュメントは、Dracomancer の現在の実装に基づくシステム仕様をまとめたものです。
 Dracomancer は、オペレータの腕に装着する上肢外骨格型遠隔操作デバイスであり、現状では主に DRAGON の移動指令と形状指令を生成します。
 
-> 現状の実装メモ: `src/` 以下の C++ ファイルはプレースホルダで、実際の処理は `scripts/` 配下の Python ノードが担っています。力覚提示は安全スケーリングで抑制された形状入力から提示トルク相当量を計算しますが、Mk-I の XL430-W250-T では個々のサーボへ所望電流・所望トルクを入力できないため、Mk-I の既定実機出力はトルク ON/OFF です。互換サーボ向けの電流指令経路は残しています。最適化ベースの本格的な姿勢制限は未実装です。
+> 現状の実装メモ: 主な処理は `scripts/` 配下の Python ノードが担い、`src/shape_feasibility_node.cpp` は候補形状を DRAGON モデルで評価する実装済み C++ サービスです。それ以外の `src/` / `include/` の controller・model はプレースホルダです。力覚提示は安全スケーリングで抑制された形状入力から提示トルク相当量を計算しますが、Mk-I の XL430-W250-T では個々のサーボへ所望電流・所望トルクを入力できないため、Mk-I の既定実機出力はトルク ON/OFF です。互換サーボ向けの電流指令経路は残しています。
 
 ## 全体構成
 
@@ -42,7 +42,7 @@ flowchart TB
 | `control_position.py` | 操縦桿とIMUから DRAGON の速度指令を生成 | joystick, IMU, flight_state | `/dragon/uav/nav` |
 | `control_orientation.py` | 操縦桿から姿勢指令を生成 | joystick, flight_state | `/dragon/final_target_baselink_rpy` |
 | `control_joint_angle.py` | 腕関節から DRAGON の形状指令を生成（候補姿勢のフィージビリティで変形可否を判定） | joint_states, shape_feasibility, threshold, flight_state | `/dragon/joints_ctrl`, `/dracomancer/shape_control_error`, `/dracomancer/candidate/joint_target`, `/dracomancer/joint_map/switch_ratio` |
-| `shape_feasibility_node`（C++） | 候補リンク角の force/torque volume 半径を DRAGON モデルで予測するサービス | candidate joints | `~check_shape`（fc_f_min, fc_t_min） |
+| `shape_feasibility_node`（C++） | 候補リンク角の force/torque volume 半径と結合ホバーwrench可行性を DRAGON モデルで予測するサービス | candidate joints | `~check_shape`（fc_f_min, fc_t_min, stability_ok） |
 | `volume_radius_monitor.py` | しきい値 pub/sub・ライブ安全スケール算出（通常は teleoperation.launch で起動。fc 内接半径は再 pub しない） | fc inradius, threshold cmd | `*_volume_radius_threshold`, `/dracomancer/dragon_shape_safety_scale` |
 | `servo_labels.py` | サーボtickを中心値基準のdeg/radへ変換、および関節スイッチング配分比をRVizテキスト表示 | `/dracomancer/servo/states`, `/dracomancer/joint_map/switch_ratio` | `/dracomancer/servo_angle_markers` |
 | `control_haptic_feedback.py` | 抑制された形状入力から提示トルク相当量を計算し、既定でサーボのトルク ON/OFF を出力し、互換サーボ向けには電流指令も任意出力 | joint_states, shape_control_error, mode | `/dracomancer/haptic_torque`, `/servo/torque_enable`, `/servo/target_current` |
@@ -301,7 +301,7 @@ roslaunch dracomancer teleoperation.launch \
   teleop_mode:=true
 ```
 
-3方式とも出力はフィージビリティ・ゲートを通って DRAGON へ送られます。既定では `enable_feasibility_gate:=true` で、Force/Torque Volume radius の下限を満たさない候補姿勢は `feasibility_gate_mode` に従って抑制されます。予測器が過度に保守的で変形が凍結する場合は、起動時に `enable_feasibility_gate:=false` を指定して候補姿勢をそのまま送れます。
+3方式とも出力はフィージビリティ・ゲートを通って DRAGON へ送られます。既定では `enable_feasibility_gate:=true` で、Force/Torque Volume radius の下限、または同じ推力配分によるホバーforce/ゼロtorqueの同時可行性を満たさない候補姿勢は `feasibility_gate_mode` に従って抑制されます。予測器が過度に保守的で変形が凍結する場合は、起動時に `enable_feasibility_gate:=false` を指定して候補姿勢をそのまま送れます。
 
 サーボIDと Dracomancer 関節名:
 
@@ -327,28 +327,28 @@ rad = (tick - 2048) * 2*pi / 4096 + offset
 
 ### 1. 予測フィージビリティ・ゲート（`teleop_mode=true`）
 
-> **既定で有効（`enable_feasibility_gate:=true`）です。** 候補姿勢の予測 `fc_f_min` / `fc_t_min` がしきい値を下回る場合、危険姿勢回避として候補を抑制します。フルベクタリング DRAGON のモデル/設定によって予測器が過度に保守的になり変形が凍結する場合は、検証用に `enable_feasibility_gate:=false` で無効化できます。
+> **既定で有効（`enable_feasibility_gate:=true`）です。** 候補姿勢の予測 `fc_f_min` / `fc_t_min` がしきい値を下回る場合、または1つの共通推力配分でホバーforceとゼロtorqueを同時生成できない場合、危険姿勢回避として候補を抑制します。フルベクタリング DRAGON のモデル/設定によって予測器が過度に保守的になり変形が凍結する場合は、検証用に `enable_feasibility_gate:=false` で無効化できます。
 
 腕関節を DRAGON 形状にマッピングした**候補姿勢**を、実際に送る前に評価します。
 
 ```mermaid
 flowchart TD
-    A["腕関節 → 候補 DRAGON 形状"] --> B["shape_feasibility サービスで予測<br/>fc_f_min, fc_t_min（DRAGONモデル）"]
-    B --> C{"fc_f_min >= force_hard<br/>かつ fc_t_min >= torque_hard ?"}
+    A["腕関節 → 候補 DRAGON 形状"] --> B["shape_feasibility サービスで予測<br/>fc_f_min, fc_t_min, stability_ok（DRAGONモデル）"]
+    B --> C{"fc_f_min >= force_hard<br/>かつ fc_t_min >= torque_hard<br/>かつ stability_ok ?"}
     C -->|yes| D["変形可：候補を採用し記憶<br/>last_feasible_target = 候補"]
     C -->|no / サービス失敗| E{"feasibility_gate_mode"}
-    E -->|hold| H["直前の可行姿勢を保持<br/>min以上まで復帰したら再開"]
+    E -->|hold| H["直前の可行姿勢を保持<br/>min以上かつstability_okで再開"]
     E -->|step_search| I["直前可行姿勢から候補方向へ<br/>小刻みに探索"]
-    E -->|soft_scale| J["fc余裕に応じて候補方向へ<br/>一部だけ進める"]
+    E -->|soft_scale| J["fc余裕に応じて候補方向へ進める<br/>stability_ok=falseなら保持"]
     D --> F["max_step で1周期の変化量を制限して送信"]
     H --> F
     I --> F
     J --> F
 ```
 
-- **判定基準**：force・torque **両方**の予測半径が `hard_min` 以上なら変形可。`hold` モードで一度 `hard_min` 未満になった場合は、両方が `min` 以上へ復帰するまで直前の可行姿勢を保持する（ヒステリシス）。
+- **判定基準**：force・torque **両方**の予測半径が `hard_min` 以上であり、かつ `stability_ok=true`（同じ推力配分でホバーforceとゼロtorqueを生成可能）の場合だけ変形可。`hold` モードで一度不可になった場合は、両方が `min` 以上へ復帰し、結合判定も通るまで直前の可行姿勢を保持する（ヒステリシス）。
 - **NG時**：`feasibility_gate_mode` に応じて、保持・小ステップ探索・縮小移動のいずれかを行う。
-- 予測はサービス `shape_feasibility/check_shape` が `dragon/full_vectoring_robot_model` プラグインで計算します。既定の `shape_feasibility_prediction_mode=allocation` では、候補形状に対して静的ホバーallocationを行い、割当後のgimbal roll角と利用可能なbaselink姿勢feedbackを使って `calcFeasibleControlFxyDists()` / `calcFeasibleControlTDists()` を再評価します。`controller` は最新の `/dragon/gimbals_ctrl` のgimbal roll指令を使う旧近似、`optimized_gimbal` はDRAGONモデルのジンバル処理済み状態だけを使う形状中心の予測です。
+- 予測はサービス `shape_feasibility/check_shape` が `dragon/full_vectoring_robot_model` プラグインで計算します。既定の `shape_feasibility_prediction_mode=allocation` では、候補形状に対して静的ホバーallocationを行い、割当後のgimbal roll角と利用可能なbaselink姿勢feedbackを使って `calcFeasibleControlFxyDists()` / `calcFeasibleControlTDists()` を再評価します。さらに、同じgimbal・姿勢状態の評価用モデルで基底`RobotModel::stabilityCheck()`を実行し、同じ静的推力配分によるforce/torque残差と推力上下限を`stability_ok`として評価します。`controller` は最新の `/dragon/gimbals_ctrl` のgimbal roll/pitch指令を使う旧近似、`optimized_gimbal` はDRAGONモデルのジンバル処理済み状態だけを使う形状中心の予測です。
 - 最適化が毎回走るため、評価は `feasibility_rate`（既定 10Hz）にスロットルされます。CPU負荷が高い場合はlaunch引数で下げられます。
 
 > `shape_feasibility_node` は DRAGON の namespace（`ns=dragon`）で起動し、モデルが `/dragon/robot_description` と機体パラメータを読みます。**DRAGON が起動している必要があります。**
@@ -360,7 +360,7 @@ flowchart TD
 | 候補DRAGON関節角 | `model` / `optimized_gimbal` / `controller` / `allocation` | `control_joint_angle.py` から `check_shape` serviceへ渡す `name[]` / `position[]` | link姿勢・ロータ位置・基本的なFC余裕を決める主入力 |
 | DRAGONモデル・機体パラメータ | 全モード | `/dragon/robot_description`、rotor rosparam、`dragon/full_vectoring_robot_model` | 質量、リンク、ロータ配置、gimbal制約を読む |
 | モデル内gimbal処理状態 | `optimized_gimbal` | `updateRobotModel()` 後の `getGimbalProcessedJoint()` / `getRollLockedGimbal()` | 候補形状だけからgimbal lockとroll角を推定する従来予測 |
-| 最新gimbal roll指令 | `controller` | `/dragon/gimbals_ctrl` | controllerが実際に使うgimbal roll条件へ近づける |
+| 最新gimbal roll/pitch指令 | `controller` | `/dragon/gimbals_ctrl` | controllerが実際に使うgimbal状態へ近づける |
 | static allocation | `allocation` | 候補形状、DRAGONモデル、ホバー重力補償レンチ | 候補形状に応じたgimbal rollを予測する |
 | baselink姿勢feedback | `controller` / `allocation` | `/dragon/final_target_baselink_rpy`、または `/dragon/uav/baselink/odom` | torque fc計算の `cog_rot` 条件へ反映する |
 | しきい値 | gate判定 | `/dracomancer/force_volume_radius_threshold`、`/dracomancer/torque_volume_radius_threshold` | 予測fcを採用/保持へ変換する判定基準 |
@@ -368,11 +368,11 @@ flowchart TD
 
 | `feasibility_gate_mode` | 挙動 | 用途 |
 | --- | --- | --- |
-| `hold`（既定） | 候補が `hard_min` 未満なら `last_feasible_target` を保持し、`min` 以上まで回復してから候補採用を再開 | 境界付近で採用/拒否が振動しにくい保守的な挙動 |
+| `hold`（既定） | 候補が `hard_min` 未満、または `stability_ok=false` なら `last_feasible_target` を保持し、両半径が `min` 以上かつ `stability_ok=true` へ回復してから再開 | 境界付近で採用/拒否が振動しにくい保守的な挙動 |
 | `step_search` | `last_feasible_target` から候補方向へ `feasibility_step_fraction` だけ進めた姿勢を評価し、不可なら半分にして再試行 | 安全ゲートを残して少しずつ変形させる試験 |
-| `soft_scale` | 候補の fc と閾値の比から移動倍率を決め、不可行候補でも一部だけ進める | 力覚提示と組み合わせた「硬くなる」挙動の検討 |
+| `soft_scale` | 候補の fc と閾値の比から移動倍率を決める。`stability_ok=false`の場合は倍率0として直前可行姿勢を保持 | 力覚提示と組み合わせた「硬くなる」挙動の検討 |
 
-`step_search` は `feasibility_min_step_fraction` 未満になるまで探索します。`soft_scale` の倍率は `min(fc_f/force_thr, fc_t/torque_thr, 1)` を基本とし、`feasibility_soft_min_scale` で下限を設定できます。
+`step_search` は `feasibility_min_step_fraction` 未満になるまで探索します。`soft_scale` の倍率は `min(fc_f/force_thr, fc_t/torque_thr, 1)` を基本とし、`feasibility_soft_min_scale` で下限を設定できます。ただし、結合判定が不可の場合は下限設定にかかわらず倍率0です。
 
 ### 2. ライブ監視（`volume_radius_monitor.py`、teleoperation.launch）
 
@@ -449,14 +449,14 @@ flowchart TD
 | `baselink_roll_limit` | `π/2` | baselink roll へ加算する差分の絶対値上限 [rad] |
 | `hover_flight_state` | `5` | DRAGON の HOVER_STATE。`/dragon/uav/nav` はHOVER以外では無視されるため、link4アンカーもこの状態でのみ有効 |
 | `capture_neutral_on_first_msg` | `false` | 最初の Dracomancer 関節角を中立姿勢として記憶（`distal` では不使用。distal は配分ロールのみエンゲージ時キャプチャ） |
-| `enable_feasibility_gate` | `true` | 予測ゲートの有効化。true でForce/Torque Volume radiusに基づく危険姿勢回避を行う。false で候補をそのまま採用 |
+| `enable_feasibility_gate` | `true` | 予測ゲートの有効化。true でForce/Torque Volume radiusと結合ホバーwrench可行性に基づく危険姿勢回避を行う。false で候補をそのまま採用 |
 | `feasibility_gate_mode` | `hold` | 不可行候補への対処。`hold` / `step_search` / `soft_scale` |
 | `feasibility_step_fraction` | `0.25` | `step_search` の初期探索ステップ |
 | `feasibility_min_step_fraction` | `0.03` | `step_search` の最小探索ステップ |
 | `feasibility_soft_min_scale` | `0.0` | `soft_scale` の移動倍率下限 |
 | `feasibility_service` | `/dragon/shape_feasibility/check_shape` | 予測サービス名 |
 | `feasibility_rate` | `10.0` | 候補評価のスロットル周波数 [Hz] |
-| `shape_feasibility_prediction_mode` | `allocation` | 予測fcの計算方法。`allocation` は候補形状に対して静的ホバーallocationを行い、割当後のgimbal rollでfcを再評価する。`controller` は最新gimbal指令・姿勢feedbackを使う旧近似、`optimized_gimbal` は従来の形状中心予測、`model` は `updateRobotModel()` 後の標準fc |
+| `shape_feasibility_prediction_mode` | `allocation` | 予測fcの計算方法。`allocation` は候補形状に対して静的ホバーallocationを行い、割当後のgimbal rollでfcを再評価する。`controller` は最新gimbal roll/pitch指令・姿勢feedbackを使う旧近似、`optimized_gimbal` は従来の形状中心予測、`model` は `updateRobotModel()` 後の標準fc |
 | `enable_target_fc_prediction` | `true` | gate/rate-limit/link4 safety後に実際へ送る最終targetの予測fcを `/dracomancer/target/fc_*_min` にpublish |
 | `target_fc_prediction_rate` | `10.0` | 最終target予測fcの評価周波数 [Hz] |
 | `force_radius_threshold` | `0.108990` | 力の下限しきい値（topic 未受信時のフォールバック） |
@@ -726,10 +726,10 @@ roslaunch dracomancer teleoperation.launch \
 | 項目 | 現状 |
 | --- | --- |
 | 操縦桿による移動制御 | 既定 OFF（`enable_position_control:=false`）。`control_position.py` が `POS_VEL_MODE` で `target_pos` 未設定（=0）の FlightNav を送るため、ON にすると DRAGON が原点・高度0へ指令され落下する。`VEL_MODE` 化など修正が必要 |
-| 予測フィージビリティ・ゲート | 既定 ON（`enable_feasibility_gate:=true`）。Force/Torque Volume radius に基づき危険姿勢を抑制する。予測fcは既定 `shape_feasibility_prediction_mode=allocation` で候補形状の静的ホバーallocation後のgimbal rollを使い、DRAGON controller側debug fcへ近づける。モデル/設定によって予測 fc が過小になり全変形を却下する場合は、`enable_feasibility_gate:=false` で一時的に無効化して予測器側を調整する |
+| 予測フィージビリティ・ゲート | 既定 ON（`enable_feasibility_gate:=true`）。Force/Torque Volume radiusと、同一静的推力配分によるホバーforce・ゼロtorqueの結合可行性に基づき危険姿勢を抑制する。予測fcは既定 `shape_feasibility_prediction_mode=allocation` で候補形状の静的ホバーallocation後のgimbal rollを使い、DRAGON controller側debug fcへ近づける。モデル/設定によって予測 fc が過小になり全変形を却下する場合は、`enable_feasibility_gate:=false` で一時的に無効化して予測器側を調整する |
 | 立ち上げ時の通常形状保持 | `teleop_mode=false` で実装。DRAGON 側の preflight joint control 設定に依存 |
 | 力覚提示 | 提示トルク相当量の計算とトルク ON/OFF 出力のみ対応。XL430-W250-T では所望電流・所望トルク入力ができないため、Mk-Iでの連続的な反力・反トルク提示は Mk-II 以降の展望。既存の電流指令経路は互換サーボ向け任意機能として保持 |
-| Force/Torque Volume に基づく厳密な姿勢制限 | DRAGON の内接半径を使った形状ゲートを実装。link4アンカーON時は別途COG高度・baselink roll/pitchのbody補償ゲートも実装 |
+| Force/Torque Volume に基づく厳密な姿勢制限 | DRAGON の内接半径と結合ホバーwrench可行性を使った形状ゲートを実装。link4アンカーON時は別途COG高度・baselink roll/pitchのbody補償ゲートも実装 |
 | C++ controller/model/optimizer | 空のプレースホルダ |
 | ジョイスティックZ軸 | `control_position.py` は対応。launch の既定較正は2軸のため、3軸目がなければ0 |
 | 位置リミット | `/dragon/mocap/pose` を使い、境界外へ向かう速度成分を0にする形で実装 |
