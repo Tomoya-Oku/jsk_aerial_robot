@@ -2,6 +2,11 @@
 
 #include <limits>
 
+namespace {
+  constexpr double kStaticForceResidualThreshold = 1e-3;  // N
+  constexpr double kStaticTorqueResidualThreshold = 1e-3;  // N m
+}
+
 namespace aerial_robot_model {
 
   RobotModel::RobotModel(bool init_with_rosparam, bool verbose, bool fixed_model, double fc_f_min_thre, double fc_t_min_thre, double epsilon):
@@ -505,6 +510,22 @@ namespace aerial_robot_model {
       {
         if(verbose)
           ROS_ERROR_STREAM("the min distance to the plane of feasible control torque convex " << fc_t_min_ << " is lower than the threshold " <<  fc_t_min_thre_);
+        return false;
+      }
+
+    // Use one common thrust allocation to verify force and torque simultaneously.
+    const Eigen::VectorXd static_wrench_residual =
+      calcWrenchMatrixOnCoG() * static_thrust_ - getMass() * gravity_;
+    const double static_force_residual = static_wrench_residual.head(3).norm();
+    const double static_torque_residual = static_wrench_residual.tail(3).norm();
+    if(!static_wrench_residual.allFinite() ||
+       static_force_residual > kStaticForceResidualThreshold ||
+       static_torque_residual > kStaticTorqueResidualThreshold)
+      {
+        if(verbose)
+          ROS_ERROR("Invalid coupled static wrench, force residual: %f / %f, torque residual: %f / %f",
+                    static_force_residual, kStaticForceResidualThreshold,
+                    static_torque_residual, kStaticTorqueResidualThreshold);
         return false;
       }
 
