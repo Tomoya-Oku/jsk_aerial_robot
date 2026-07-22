@@ -46,16 +46,16 @@ void RobotModel::calcFeasibleControlJacobian()
 
       const Eigen::Vector3d& u_i = u.at(i);
       const Eigen::Vector3d& u_j = u.at(j);
-      const bool valid_f_plane = isValidFeasibleControlPlane(u_i, u_j);
       const Eigen::Vector3d uixuj = u_i.cross(u_j);
+      const bool valid_f_plane = uixuj.norm() >= 1e-5;
       const Eigen::MatrixXd& d_u_i = u_jacobians_.at(i);
       const Eigen::MatrixXd& d_u_j = u_jacobians_.at(j);
       const Eigen::MatrixXd d_uixuj = -skew(u_j) * d_u_i  + skew(u_i) * d_u_j;
 
       const Eigen::Vector3d& v_i = v.at(i);
       const Eigen::Vector3d& v_j = v.at(j);
-      const bool valid_t_plane = isValidFeasibleControlPlane(v_i, v_j);
       const Eigen::Vector3d vixvj = v_i.cross(v_j);
+      const bool valid_t_plane = vixvj.norm() >= 1e-5;
       const Eigen::MatrixXd& d_v_i = v_jacobians.at(i);
       const Eigen::MatrixXd& d_v_j = v_jacobians.at(j);
       const Eigen::MatrixXd d_vixvj = -skew(v_j) * d_v_i  + skew(v_i) * d_v_j;

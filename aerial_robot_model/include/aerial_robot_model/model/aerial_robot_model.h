@@ -250,13 +250,6 @@ namespace aerial_robot_model {
   protected:
     virtual void updateRobotModelImpl(const KDL::JntArray& joint_positions);
 
-    static bool isValidFeasibleControlPlane(const Eigen::Vector3d& vector_i,
-                                            const Eigen::Vector3d& vector_j);
-    static Eigen::VectorXd calcFeasibleControlDists(const std::vector<Eigen::Vector3d>& generators,
-                                                    double thrust_upper_limit,
-                                                    const Eigen::Vector3d& center);
-    static double calcFeasibleControlMin(const Eigen::VectorXd& distances);
-
     void setCog(const KDL::Frame cog)
     {
       std::lock_guard<std::mutex> lock(mutex_cog_);
