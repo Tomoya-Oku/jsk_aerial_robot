@@ -1,0 +1,7 @@
+samples: 4096
+fc_f_min: min=-33.957113 p5=-0.667459 p25=-0.231730 median=0.034458 p75=0.374787 max=4.561579
+fc_t_min: min=0.000000 p5=0.017600 p25=0.128506 median=0.358444 p75=0.715692 max=2.383140
+force_thresholds hard_min=0.000000 min=0.027566
+torque_thresholds hard_min=0.017600 min=0.286756
+pearson_altitude_mean_vs_fc_f_min_mean: r=0.545192 samples=4096
+pearson_altitude_mean_vs_fc_t_min_mean: r=0.025267 samples=4096

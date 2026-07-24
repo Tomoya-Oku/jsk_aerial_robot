@@ -143,11 +143,11 @@ def threshold_label(symbol, suffix, value, label_values=False):
 def add_threshold_lines(ax, hard_min, soft_min, symbol, label_values=False):
     if hard_min is not None:
         label = threshold_label(symbol, "hard", hard_min, label_values)
-        ax.axvline(hard_min, color="tab:red", linestyle="-", linewidth=3.0,
+        ax.axvline(hard_min, color="tab:red", linestyle="--", linewidth=2.5,
                    label=label)
     if soft_min is not None:
         label = threshold_label(symbol, "min", soft_min, label_values)
-        ax.axvline(soft_min, color="tab:green", linestyle="-", linewidth=3.0,
+        ax.axvline(soft_min, color="tab:green", linestyle="-", linewidth=2.5,
                    label=label)
 
 
@@ -155,24 +155,36 @@ def hide_zero_tick(value, pos):
     return "" if abs(value) < 1e-12 else "%g" % value
 
 
-def plot_histograms(rows, out_dir, thresholds, bins, formats, name_prefix, paper_style=False):
+def plot_histograms(rows, out_dir, thresholds, bins, formats, name_prefix,
+                    paper_style=False, force_range=None, torque_range=None,
+                    label_threshold_values=False):
     f = values(rows, "fc_f_min_mean")
     t = values(rows, "fc_t_min_mean")
     fig, axes = plt.subplots(1, 2, figsize=(12, 5.0))
-    for ax, xs, title, xlabel, th, xlim, symbol in (
-        (axes[0], f, "Force Volume", r"$r_f$ [N]", thresholds["force"], (0.0, 2.5), "f"),
-        (axes[1], t, "Torque Volume", r"$r_\tau$ [N m]", thresholds["torque"], (0.0, 2.5), r"\tau"),
+    for ax, xs, title, xlabel, th, requested_range, symbol in (
+        (axes[0], f, "Force Volume", r"$r_f$ [N]", thresholds["force"], force_range, "f"),
+        (axes[1], t, "Torque Volume", r"$r_\tau$ [N m]", thresholds["torque"], torque_range, r"\tau"),
     ):
-        hist_kwargs = {"range": xlim} if paper_style else {}
+        xlim = requested_range or ((0.0, 2.5) if paper_style else None)
+        hist_kwargs = {"range": xlim} if xlim is not None else {}
         ax.hist(xs, bins=bins, color="0.35", edgecolor="white", **hist_kwargs)
-        add_threshold_lines(ax, th[0], th[1], symbol, label_values=paper_style)
+        add_threshold_lines(
+            ax, th[0], th[1], symbol,
+            label_values=paper_style or label_threshold_values)
+        if requested_range is not None:
+            outside_count = sum(x < xlim[0] or x > xlim[1] for x in xs)
+            if outside_count:
+                ax.text(
+                    0.02, 0.96, "%d samples outside range" % outside_count,
+                    transform=ax.transAxes, ha="left", va="top")
         if not paper_style:
             ax.set_title(title)
         ax.set_xlabel(xlabel)
         if ax is axes[0]:
             ax.set_ylabel("Samples")
-        if paper_style:
+        if xlim is not None:
             ax.set_xlim(xlim)
+        if paper_style:
             ax.set_ylim(bottom=0.0)
             ax.set_xticks([0.5 * k for k in range(int(xlim[1] / 0.5) + 1)])
             ax.yaxis.set_major_formatter(FuncFormatter(hide_zero_tick))
@@ -181,6 +193,94 @@ def plot_histograms(rows, out_dir, thresholds, bins, formats, name_prefix, paper
         ax.legend(loc="upper right", frameon=True)
     fig.subplots_adjust(wspace=0.22)
     return save(fig, out_dir, name_prefix + "_distribution", formats, tight=False)
+
+
+def color_signed_histogram(edges, patches):
+    """Color negative-margin bins separately from non-negative bins."""
+    for left, right, patch in zip(edges[:-1], edges[1:], patches):
+        center = 0.5 * (left + right)
+        patch.set_facecolor("tab:red" if center < 0.0 else "tab:blue")
+        patch.set_alpha(0.78)
+
+
+def plot_force_distribution(rows, out_dir, thresholds, bins, formats,
+                            name_prefix, force_range=None):
+    """Plot signed force margins without letting a few long-tail values dominate."""
+    force = values(rows, "fc_f_min_mean")
+    if not force:
+        return None
+
+    hard_min, soft_min = thresholds["force"]
+    xlim = tuple(force_range) if force_range is not None else (
+        percentile(force, 0.5), percentile(force, 99.5))
+    shown_count = sum(xlim[0] <= x <= xlim[1] for x in force)
+    negative_count = sum(x < 0.0 for x in force)
+
+    fig, ax = plt.subplots(figsize=(10.5, 6.0))
+    _counts, edges, patches = ax.hist(
+        force, bins=bins, range=xlim, edgecolor="white", linewidth=0.8)
+    color_signed_histogram(edges, patches)
+    if xlim[0] < 0.0:
+        ax.axvspan(xlim[0], min(0.0, xlim[1]), color="tab:red",
+                   alpha=0.06, zorder=0)
+    add_threshold_lines(
+        ax, hard_min, soft_min, "f", label_values=True)
+
+    ax.set_title("Signed force-volume margin distribution")
+    ax.set_xlabel(r"$r_f$ [N]")
+    ax.set_ylabel("Samples")
+    ax.set_xlim(xlim)
+    ax.set_ylim(bottom=0.0)
+    ax.grid(True, alpha=0.22)
+    ax.legend(loc="lower right", frameon=True)
+
+    annotation = (
+        r"$r_f < 0$: %d / %d (%.1f%%)" "\n"
+        "central view: %d / %d samples\n"
+        "full range: %.3f to %.3f N"
+        % (negative_count, len(force), 100.0 * negative_count / len(force),
+           shown_count, len(force), min(force), max(force)))
+    ax.text(
+        0.02, 0.97, annotation, transform=ax.transAxes,
+        ha="left", va="top",
+        bbox={"facecolor": "white", "edgecolor": "0.75", "alpha": 0.92})
+
+    # The two force thresholds are only about 0.03 N apart.  A local inset
+    # makes both lines distinguishable without hiding the full central shape.
+    threshold_span = max(0.05, 2.0 * abs(soft_min - hard_min))
+    inset_xlim = (hard_min - threshold_span,
+                  soft_min + threshold_span)
+    inset = ax.inset_axes([0.60, 0.50, 0.37, 0.42])
+    _inset_counts, inset_edges, inset_patches = inset.hist(
+        force, bins=28, range=inset_xlim,
+        edgecolor="white", linewidth=0.6)
+    color_signed_histogram(inset_edges, inset_patches)
+    if inset_xlim[0] < 0.0:
+        inset.axvspan(inset_xlim[0], 0.0, color="tab:red",
+                      alpha=0.06, zorder=0)
+    inset.axvline(
+        hard_min, color="tab:red", linestyle="--", linewidth=1.8)
+    inset.axvline(
+        soft_min, color="tab:green", linestyle="-", linewidth=1.8)
+    inset.set_xlim(inset_xlim)
+    inset.set_ylim(bottom=0.0)
+    inset.set_title("Threshold detail", fontsize=12)
+    inset.set_xlabel(r"$r_f$ [N]", fontsize=11)
+    inset.set_ylabel("Samples", fontsize=11)
+    inset.tick_params(axis="both", labelsize=9)
+    inset.grid(True, alpha=0.20)
+    inset.text(
+        0.03, 0.95, "hard = %.3f" % hard_min,
+        transform=inset.transAxes, color="tab:red",
+        ha="left", va="top", fontsize=10)
+    inset.text(
+        0.97, 0.95, "min = %.3f" % soft_min,
+        transform=inset.transAxes, color="tab:green",
+        ha="right", va="top", fontsize=10)
+
+    return save(
+        fig, out_dir, name_prefix + "_force_distribution", formats,
+        tight=False)
 
 
 def plot_scatter(rows, out_dir, thresholds, formats, name_prefix):
@@ -342,11 +442,20 @@ def main():
                         help="prefix for output figure and summary file names")
     parser.add_argument("--paper-style", action="store_true",
                         help="use publication-oriented labels, fonts, ticks, and axes")
+    parser.add_argument("--label-threshold-values", action="store_true",
+                        help="include numeric threshold values in distribution legends")
+    parser.add_argument("--force-range", nargs=2, type=float, metavar=("MIN", "MAX"),
+                        help="force-histogram x range; out-of-range sample count is annotated")
+    parser.add_argument("--torque-range", nargs=2, type=float, metavar=("MIN", "MAX"),
+                        help="torque-histogram x range; out-of-range sample count is annotated")
     parser.add_argument("--plots", nargs="+", default=["all"],
                         choices=["all", "distribution", "scatter", "sequence",
-                                 "joint", "altitude"],
+                                 "joint", "altitude", "force"],
                         help="which plots to write")
     args = parser.parse_args()
+    for name, value_range in (("force", args.force_range), ("torque", args.torque_range)):
+        if value_range is not None and value_range[0] >= value_range[1]:
+            parser.error("--%s-range requires MIN < MAX" % name)
     if args.paper_style:
         setup_paper_style()
 
@@ -367,7 +476,16 @@ def main():
     if write_all or "distribution" in plots:
         outputs.append(plot_histograms(
             rows, out_dir, thresholds, args.bins, args.formats, args.name_prefix,
-            paper_style=args.paper_style))
+            paper_style=args.paper_style,
+            force_range=args.force_range,
+            torque_range=args.torque_range,
+            label_threshold_values=args.label_threshold_values))
+    if write_all or "force" in plots:
+        force_plot = plot_force_distribution(
+            rows, out_dir, thresholds, args.bins, args.formats,
+            args.name_prefix, force_range=args.force_range)
+        if force_plot:
+            outputs.append(force_plot)
     if write_all or "scatter" in plots:
         outputs.append(plot_scatter(rows, out_dir, thresholds, args.formats, args.name_prefix))
     if write_all or "sequence" in plots:
