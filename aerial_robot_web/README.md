@@ -4,7 +4,8 @@
 bringup launches. It serves a static React single-page application from a ROS node and talks
 to the robot through `rosbridge_server`, so a phone, tablet, or laptop browser can inspect
 the ROS graph, watch the robot model move, record rosbags, and send teleop commands —
-**no app install, no pip, just `roslaunch` and a QR code**.
+it can also replay ROS 1 bags and export selected motion as standard media files.
+**No client app install is required; use `roslaunch` and a browser.**
 
 ![Web console overview](docs/web_console.png)
 
@@ -76,6 +77,25 @@ URLs and a QR code — scan it from a phone on the robot network:
   Control flows over `/aerial_robot_web/rosbag/{start,stop,status}`; the latched status
   topic restores the recording state after a page reload.
 
+### Log replay and media export
+
+The **Log Replay** tab imports a ROS 1 `.bag`, extracts bounded browser-oriented samples,
+and synchronizes the following views on one playback clock:
+
+- robot base pose and joint motion in the Three.js URDF viewer;
+- numeric time-series selected from recorded topics;
+- flight-state, failsafe, gate-rejection, and explicit event transitions.
+
+Use the **IN/OUT** controls or the Start/End fields to select an interval. **Export video**
+downloads that interval as MP4 when the browser advertises MP4 `MediaRecorder` support, or
+as GIF through the browser-side `gifenc` encoder. **PNG** and **JPEG** save the currently
+displayed 3D frame. Exported files are generated in the browser and downloaded to the
+operator's device; the console does not create a share URL or upload exported media.
+
+Converted playback JSON is stored locally under `log_dir`. By default the uploaded source
+bag is deleted as soon as conversion finishes; set `log_keep_bag:=true` only when retaining
+another copy is intentional. Imported logs can be removed with **Delete local data**.
+
 ### Live robot model & flight control
 
 The **Live Robot Model (URDF + Odometry)** panel renders the robot URDF with Three.js,
@@ -112,6 +132,10 @@ safe-area-aware padding.
 | `auto_install_qr_dependency` | `true` | Try `sudo -n apt-get install python3-qrcode`, then `pip --user`, when QR support is missing (never waits for a sudo password; QR is optional either way) |
 | `banner_delay` | `8.0` | Seconds to delay the URL/QR banner so it lands near the end of the launch output |
 | `rosbag_dir` | `$(optenv HOME /tmp)/rosbags` | Where browser-triggered rosbags are saved |
+| `log_dir` | `$(optenv HOME /tmp)/.aerial_robot_web/logs` | Local directory for converted playback data |
+| `log_max_upload_gb` | `5.0` | Maximum accepted ROS bag size in GiB |
+| `log_max_samples_per_topic` | `2000` | Per-topic sample bound used during conversion |
+| `log_keep_bag` | `false` | Retain the imported source bag after conversion |
 
 ## Architecture
 
@@ -122,11 +146,13 @@ flowchart LR
     end
     subgraph Robot["Robot PC (roslaunch)"]
         HTTP["aerial_robot_web_server.py<br/>static files + /pkg meshes + QR banner"]
+        LOG["log_store.py<br/>bag conversion + local playback JSON"]
         RB["rosbridge_websocket + rosapi"]
         BAG["rosbag record (subprocess)"]
         ROS[("ROS graph")]
     end
     UI -- "HTTP :8080" --> HTTP
+    UI -- "/api/logs" --> LOG
     UI -- "WebSocket :9090" --> RB
     RB --- ROS
     HTTP -- "/aerial_robot_web/rosbag/*" --> BAG
@@ -137,5 +163,9 @@ flowchart LR
 - React, roslib, and Three.js are loaded from a CDN, so the **browser** needs internet
   access at least once to cache them (the robot itself does not). On a fully offline robot
   LAN the console shows a static notice instead of the interface.
+- GIF export loads [`gifenc`](https://github.com/mattdesl/gifenc) from a pinned CDN URL when first used. MP4 availability depends
+  on the browser's native `MediaRecorder` MP4 support; unsupported browsers show an error
+  and can still use GIF or PNG/JPEG export.
+- GIF export is limited to 60 seconds per file to bound browser memory and CPU use.
 - The terminal QR code needs `python3-qrcode`; without it the console still works and only
   the QR is skipped.

@@ -20,6 +20,8 @@ import rospy
 import rospkg
 from std_msgs.msg import Empty as EmptyMsg, String as StringMsg
 
+from log_store import LogError, LogStore
+
 
 ROSPACK = rospkg.RosPack()
 
@@ -45,12 +47,99 @@ def resolve_package_resource(url_path):
 class ConsoleHandler(SimpleHTTPRequestHandler):
     """Static file handler with SPA fallback and package:// mesh serving."""
 
+    log_store = None
+
     def end_headers(self):
         if self.path.startswith("/pkg/"):
             self.send_header("Cache-Control", "max-age=3600")
         else:
             self.send_header("Cache-Control", "no-store")
         super().end_headers()
+
+    def send_json(self, status, payload):
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def api_error(self, error):
+        status = getattr(error, "status", 500)
+        if status >= 500:
+            rospy.logerr("[aerial_robot_web] log API error: %s", error)
+        self.send_json(status, {"error": str(error)})
+
+    def log_route(self):
+        path = urlparse(self.path).path
+        if path == "/api/logs":
+            return []
+        prefix = "/api/logs/"
+        if not path.startswith(prefix):
+            return None
+        return [unquote(part) for part in path[len(prefix):].split("/") if part]
+
+    def do_GET(self):
+        route = self.log_route()
+        if route is None:
+            return super().do_GET()
+        if self.log_store is None:
+            return self.send_json(503, {"error": "log storage is unavailable"})
+        try:
+            if not route:
+                return self.send_json(200, {"logs": self.log_store.list()})
+            if len(route) == 1:
+                return self.send_json(200, self.log_store.get(route[0]))
+            if len(route) == 2 and route[1] == "data":
+                return self.send_json(200, self.log_store.get_data(route[0]))
+            self.send_json(404, {"error": "log endpoint not found"})
+        except LogError as error:
+            self.api_error(error)
+        except Exception as error:
+            self.api_error(error)
+
+    def do_POST(self):
+        route = self.log_route()
+        if route is None:
+            return self.send_json(404, {"error": "endpoint not found"})
+        if self.log_store is None:
+            return self.send_json(503, {"error": "log storage is unavailable"})
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+            if not route:
+                filename = unquote(self.headers.get("X-Log-Filename", "log.bag"))
+                metadata = self.log_store.create(self.rfile, content_length, filename)
+                return self.send_json(202, metadata)
+            if len(route) == 2 and route[1] == "config":
+                if content_length <= 0 or content_length > 6 * 1024 * 1024:
+                    raise LogError("invalid configuration body size", 413)
+                try:
+                    payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                except (UnicodeDecodeError, ValueError) as error:
+                    raise LogError("configuration must be valid UTF-8 JSON") from error
+                return self.send_json(200, self.log_store.configure(route[0], payload))
+            self.send_json(404, {"error": "log endpoint not found"})
+        except (TypeError, ValueError) as error:
+            self.api_error(LogError("invalid request: {}".format(error)))
+        except LogError as error:
+            self.api_error(error)
+        except Exception as error:
+            self.api_error(error)
+
+    def do_DELETE(self):
+        route = self.log_route()
+        if route is None or len(route) != 1:
+            return self.send_json(404, {"error": "log endpoint not found"})
+        if self.log_store is None:
+            return self.send_json(503, {"error": "log storage is unavailable"})
+        try:
+            self.log_store.delete(route[0])
+            self.send_json(200, {"deleted": True})
+        except LogError as error:
+            self.api_error(error)
+        except Exception as error:
+            self.api_error(error)
 
     def log_message(self, fmt, *args):
         rospy.logdebug("web console: " + fmt, *args)
@@ -344,13 +433,26 @@ def main():
     package_path = ROSPACK.get_path("aerial_robot_web")
     web_root = rospy.get_param("~web_root", os.path.join(package_path, "www"))
     rosbag_dir = rospy.get_param("~rosbag_dir", os.path.expanduser("~/rosbags"))
+    log_dir = rospy.get_param(
+        "~log_dir", os.path.join(os.path.expanduser("~"), ".aerial_robot_web", "logs"))
+    log_max_upload_gb = float(rospy.get_param("~log_max_upload_gb", 5.0))
+    log_max_samples = int(rospy.get_param("~log_max_samples_per_topic", 2000))
+    log_keep_bag = get_bool_param("~log_keep_bag", False)
 
     rospy.loginfo("[aerial_robot_web] Starting web console")
     rospy.loginfo("[aerial_robot_web] robot_type=%s robot_ns=%s", robot_type, robot_ns or "/")
     rospy.loginfo("[aerial_robot_web] odometry pose topic=%s", pose_topic)
     rospy.loginfo("[aerial_robot_web] HTTP port=%s rosbridge_port=%s", port, rosbridge_port)
+    rospy.loginfo("[aerial_robot_web] local log storage=%s", log_dir)
 
     recorder = RosbagRecorder(rosbag_dir)
+    log_store = LogStore(
+        log_dir,
+        max_upload_bytes=max(1, int(log_max_upload_gb * 1024 ** 3)),
+        max_samples_per_topic=log_max_samples,
+        keep_source=log_keep_bag,
+    )
+    ConsoleHandler.log_store = log_store
 
     handler = partial(ConsoleHandler, directory=web_root)
     bind_host = "" if host in ("0.0.0.0", "::") else host

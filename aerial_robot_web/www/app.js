@@ -317,14 +317,20 @@
         ),
         e('button', { onClick: refresh, disabled: !connected }, 'Refresh'),
       ),
-      isDracomancer && e('div', { className: 'tab-bar' },
+      e('div', { className: 'tab-bar', role: 'tablist', 'aria-label': 'Console sections' },
         e('button', { className: `tab-btn${tab === 'console' ? ' active' : ''}`, onClick: () => setTab('console') }, 'Overview'),
-        e('button', { className: `tab-btn${tab === 'dracomancer' ? ' active' : ''}`, onClick: () => setTab('dracomancer') }, 'Dracomancer'),
-        e('button', { className: `tab-btn${tab === 'servo' ? ' active' : ''}`, onClick: () => setTab('servo') }, 'Servo Monitor'),
+        e('button', { className: `tab-btn${tab === 'replay' ? ' active' : ''}`, onClick: () => setTab('replay') }, 'Log Replay'),
+        isDracomancer && e('button', { className: `tab-btn${tab === 'dracomancer' ? ' active' : ''}`, onClick: () => setTab('dracomancer') }, 'Dracomancer'),
+        isDracomancer && e('button', { className: `tab-btn${tab === 'servo' ? ' active' : ''}`, onClick: () => setTab('servo') }, 'Servo Monitor'),
       ),
-      isDracomancer && tab === 'dracomancer'
-        ? e(DracomancerPanel, { ros, connected, robotNs, urdf, basePose, poseTopic, poseStamp })
-        : isDracomancer && tab === 'servo'
+      tab === 'replay'
+        ? e(ReplayPanel, {
+          urdf, robotNs, poseTopic,
+          jointTopic: nsJoin(robotNs, 'joint_states'),
+        })
+        : isDracomancer && tab === 'dracomancer'
+          ? e(DracomancerPanel, { ros, connected, robotNs, urdf, basePose, poseTopic, poseStamp })
+          : isDracomancer && tab === 'servo'
           ? e(ServoMonitorTab, { ros, connected, robotNs })
           : e(React.Fragment, null,
             e('section', { className: 'cards' },
@@ -346,6 +352,616 @@
 
   function InfoPill({ label, value, tone }) {
     return e('div', { className: 'pill' }, e('span', { className: 'label' }, label), e('span', { className: `value ${tone || ''}` }, value));
+  }
+
+  // ---- Local log playback and media export ----
+
+  const GIFENC_MODULE_URL = 'https://cdn.jsdelivr.net/npm/gifenc@1.0.3/+esm';
+  const GIF_FPS = 10;
+  const GIF_MAX_FRAMES = 600;
+  const EXPORT_FPS = 30;
+
+  function clamp(value, minimum, maximum) {
+    return Math.min(maximum, Math.max(minimum, value));
+  }
+
+  function formatLogTime(value) {
+    const seconds = Math.max(0, Number(value) || 0);
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const rest = (seconds % 60).toFixed(3).padStart(6, '0');
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${rest}`;
+  }
+
+  function formatBytes(value) {
+    let size = Math.max(0, Number(value) || 0);
+    const units = ['B', 'KiB', 'MiB', 'GiB'];
+    let unit = 0;
+    while (size >= 1024 && unit < units.length - 1) {
+      size /= 1024;
+      unit += 1;
+    }
+    return `${size.toFixed(unit ? 1 : 0)} ${units[unit]}`;
+  }
+
+  async function fetchJson(url, options) {
+    const response = await window.fetch(url, options);
+    let payload = {};
+    try {
+      payload = await response.json();
+    } catch (ignore) {
+      // The status text below is more useful than a secondary JSON parse error.
+    }
+    if (!response.ok) throw new Error(payload.error || `${response.status} ${response.statusText}`);
+    return payload;
+  }
+
+  function frameAt(frames, time) {
+    if (!frames?.length) return null;
+    let low = 0;
+    let high = frames.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (Number(frames[middle].t) <= time) low = middle + 1;
+      else high = middle;
+    }
+    return frames[Math.max(0, low - 1)];
+  }
+
+  function applyLogFrame(viewer, data, poseTopic, jointTopic, time) {
+    if (!viewer || !data) return;
+    const pose = frameAt(data.poses?.[poseTopic], time);
+    if (pose) {
+      viewer.setBasePose({
+        position: { x: pose.p?.[0], y: pose.p?.[1], z: pose.p?.[2] },
+        orientation: { x: pose.q?.[0], y: pose.q?.[1], z: pose.q?.[2], w: pose.q?.[3] },
+      });
+    }
+    const joints = frameAt(data.joints?.[jointTopic], time);
+    if (joints) {
+      const values = {};
+      (joints.n || []).forEach((name, index) => { values[name] = joints.p?.[index] ?? 0; });
+      viewer.setJointValues(values);
+    }
+    viewer.renderNow?.();
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function downloadBase(metadata) {
+    const stem = String(metadata?.filename || 'aerial_robot_log').replace(/\.bag$/i, '');
+    return stem.replace(/[^A-Za-z0-9_.-]+/g, '_').slice(0, 100) || 'aerial_robot_log';
+  }
+
+  function LogViewer({ urdf, viewerApiRef, onReady }) {
+    const hostRef = React.useRef(null);
+    const [message, setMessage] = React.useState('Import a bag containing robot_description, or connect once to load the live URDF.');
+    React.useEffect(() => {
+      if (!urdf || !hostRef.current) {
+        viewerApiRef.current = null;
+        return undefined;
+      }
+      if (!window.AerialRobotUrdfViewer) {
+        setMessage('URDF viewer module is still loading.');
+        return undefined;
+      }
+      let cancelled = false;
+      setMessage('Loading robot model...');
+      window.AerialRobotUrdfViewer(hostRef.current, urdf).then((viewer) => {
+        if (cancelled) {
+          viewer.dispose();
+          return;
+        }
+        viewerApiRef.current = viewer;
+        setMessage('');
+        onReady?.();
+      }).catch((error) => setMessage(`3D viewer unavailable: ${describeError(error, 'load failed')}`));
+      return () => {
+        cancelled = true;
+        viewerApiRef.current?.dispose();
+        viewerApiRef.current = null;
+      };
+    }, [urdf, viewerApiRef, onReady]);
+    return e('div', { className: 'replay-viewer viewer' },
+      e('div', { className: 'viewer-host', ref: hostRef }),
+      message && e('div', { className: 'viewer-message' }, e('div', { className: 'empty' }, message)),
+    );
+  }
+
+  function SeriesChart({ series, selectedIds, duration, time }) {
+    const selected = (series || []).filter((entry) => selectedIds.has(entry.id)).slice(0, 6);
+    if (!selected.length) return e('div', { className: 'empty' }, 'Select one or more numeric series.');
+    const values = selected.flatMap((entry) => (entry.points || []).map((point) => Number(point[1])).filter(Number.isFinite));
+    let minimum = Math.min(...values);
+    let maximum = Math.max(...values);
+    if (!Number.isFinite(minimum) || !Number.isFinite(maximum)) return e('div', { className: 'empty' }, 'No finite samples.');
+    if (minimum === maximum) {
+      minimum -= 1;
+      maximum += 1;
+    }
+    const width = 720;
+    const height = 220;
+    const pad = 28;
+    const span = Math.max(0.001, duration || 0);
+    const colors = ['#111111', '#1a7f37', '#c01c28', '#0969da', '#9a6700', '#8250df'];
+    const x = (value) => pad + (clamp(Number(value) || 0, 0, span) / span) * (width - pad * 2);
+    const y = (value) => height - pad - ((Number(value) - minimum) / (maximum - minimum)) * (height - pad * 2);
+    return e('div', { className: 'series-chart-wrap' },
+      e('svg', { className: 'series-chart', viewBox: `0 0 ${width} ${height}`, role: 'img', 'aria-label': 'Synchronized time series' },
+        [0, 0.25, 0.5, 0.75, 1].map((ratio) => e('line', {
+          key: `grid-${ratio}`, x1: pad, x2: width - pad,
+          y1: pad + ratio * (height - pad * 2), y2: pad + ratio * (height - pad * 2),
+          className: 'chart-grid',
+        })),
+        selected.map((entry, index) => e('polyline', {
+          key: entry.id,
+          points: (entry.points || []).map((point) => `${x(point[0]).toFixed(1)},${y(point[1]).toFixed(1)}`).join(' '),
+          fill: 'none', stroke: colors[index], strokeWidth: 1.8, vectorEffect: 'non-scaling-stroke',
+        })),
+        e('line', { x1: x(time), x2: x(time), y1: pad, y2: height - pad, className: 'chart-cursor' }),
+        e('text', { x: 4, y: pad + 4, className: 'chart-label' }, maximum.toFixed(2)),
+        e('text', { x: 4, y: height - pad, className: 'chart-label' }, minimum.toFixed(2)),
+        e('text', { x: pad, y: height - 6, className: 'chart-label' }, '0:00'),
+        e('text', { x: width - pad, y: height - 6, textAnchor: 'end', className: 'chart-label' }, formatLogTime(span)),
+      ),
+      e('div', { className: 'chart-legend' }, selected.map((entry, index) => e('span', { key: entry.id },
+        e('i', { style: { background: colors[index] } }), `${entry.topic}:${entry.field}`,
+      ))),
+    );
+  }
+
+  function ReplayPanel({ urdf: liveUrdf, poseTopic: livePoseTopic, jointTopic: liveJointTopic }) {
+    const [logs, setLogs] = React.useState([]);
+    const [logId, setLogId] = React.useState('');
+    const [metadata, setMetadata] = React.useState(null);
+    const [data, setData] = React.useState(null);
+    const [upload, setUpload] = React.useState(null);
+    const [topicFilter, setTopicFilter] = React.useState('');
+    const [poseTopic, setPoseTopic] = React.useState('');
+    const [jointTopic, setJointTopic] = React.useState('');
+    const [selectedSeries, setSelectedSeries] = React.useState(new Set());
+    const [time, setTime] = React.useState(0);
+    const [playing, setPlaying] = React.useState(false);
+    const [speed, setSpeed] = React.useState(1);
+    const [rangeStart, setRangeStart] = React.useState(0);
+    const [rangeEnd, setRangeEnd] = React.useState(0);
+    const [exportFormat, setExportFormat] = React.useState('mp4');
+    const [exportStatus, setExportStatus] = React.useState(null);
+    const [exporting, setExporting] = React.useState(false);
+    const viewerApiRef = React.useRef(null);
+    const timeRef = React.useRef(0);
+    const fileRef = React.useRef(null);
+    const duration = Math.max(0, Number(metadata?.duration) || 0);
+    const activeUrdf = metadata?.urdf || liveUrdf;
+
+    React.useEffect(() => { timeRef.current = time; }, [time]);
+
+    const refreshLogs = React.useCallback(async () => {
+      const payload = await fetchJson('/api/logs');
+      setLogs(payload.logs || []);
+      return payload.logs || [];
+    }, []);
+
+    const loadLog = React.useCallback(async (id) => {
+      if (!id) {
+        setLogId('');
+        setMetadata(null);
+        setData(null);
+        return;
+      }
+      setPlaying(false);
+      setLogId(id);
+      setData(null);
+      const meta = await fetchJson(`/api/logs/${encodeURIComponent(id)}`);
+      setMetadata(meta);
+      if (meta.status === 'ready') setData(await fetchJson(`/api/logs/${encodeURIComponent(id)}/data`));
+    }, []);
+
+    React.useEffect(() => {
+      let alive = true;
+      refreshLogs().then((items) => {
+        if (alive && items.length) loadLog(items[0].id).catch((error) => setUpload({ tone: 'bad', text: error.message }));
+      }).catch((error) => alive && setUpload({ tone: 'bad', text: error.message }));
+      return () => { alive = false; };
+    }, [refreshLogs, loadLog]);
+
+    React.useEffect(() => {
+      if (!logId || metadata?.status !== 'converting') return undefined;
+      let alive = true;
+      const poll = async () => {
+        try {
+          const meta = await fetchJson(`/api/logs/${encodeURIComponent(logId)}`);
+          if (!alive) return;
+          setMetadata(meta);
+          if (meta.status === 'ready') {
+            setData(await fetchJson(`/api/logs/${encodeURIComponent(logId)}/data`));
+            setUpload({ tone: 'ok', text: 'Conversion complete. Ready for playback and export.' });
+            refreshLogs().catch(() => undefined);
+          } else if (meta.status === 'error') {
+            setUpload({ tone: 'bad', text: meta.error || 'Log conversion failed.' });
+          }
+        } catch (error) {
+          if (alive) setUpload({ tone: 'bad', text: error.message });
+        }
+      };
+      const timer = window.setInterval(poll, 1000);
+      poll();
+      return () => {
+        alive = false;
+        window.clearInterval(timer);
+      };
+    }, [logId, metadata?.status, refreshLogs]);
+
+    React.useEffect(() => {
+      if (!data) return;
+      const poses = Object.keys(data.poses || {});
+      const joints = Object.keys(data.joints || {});
+      const nextPose = poses.includes(metadata?.pose_topic) ? metadata.pose_topic
+        : poses.includes(livePoseTopic) ? livePoseTopic : (poses[0] || '');
+      const nextJoint = joints.includes(metadata?.joint_topic) ? metadata.joint_topic
+        : joints.includes(liveJointTopic) ? liveJointTopic : (joints[0] || '');
+      setPoseTopic(nextPose);
+      setJointTopic(nextJoint);
+      setSelectedSeries(new Set((data.series || []).slice(0, 4).map((entry) => entry.id)));
+      setTime(0);
+      setRangeStart(0);
+      setRangeEnd(Math.max(0, Number(metadata?.duration) || 0));
+    }, [data, metadata?.duration, metadata?.pose_topic, metadata?.joint_topic, livePoseTopic, liveJointTopic]);
+
+    const renderAt = React.useCallback((value) => {
+      applyLogFrame(viewerApiRef.current, data, poseTopic, jointTopic, value);
+    }, [data, poseTopic, jointTopic]);
+    const handleViewerReady = React.useCallback(() => renderAt(timeRef.current), [renderAt]);
+
+    React.useEffect(() => { renderAt(time); }, [renderAt, time, activeUrdf]);
+
+    React.useEffect(() => {
+      if (!playing || !data || exporting) return undefined;
+      let frameId = 0;
+      let previous = performance.now();
+      const tick = (now) => {
+        const delta = Math.min(0.25, (now - previous) / 1000) * speed;
+        previous = now;
+        setTime((current) => {
+          const next = current + delta;
+          if (next >= duration) {
+            setPlaying(false);
+            return duration;
+          }
+          return next;
+        });
+        frameId = window.requestAnimationFrame(tick);
+      };
+      frameId = window.requestAnimationFrame(tick);
+      return () => window.cancelAnimationFrame(frameId);
+    }, [playing, data, duration, speed, exporting]);
+
+    const uploadLog = (file) => {
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith('.bag')) {
+        setUpload({ tone: 'bad', text: 'Select a ROS 1 .bag file.' });
+        return;
+      }
+      setPlaying(false);
+      setUpload({ tone: 'warn', text: 'Uploading...', progress: 0 });
+      const request = new XMLHttpRequest();
+      request.open('POST', '/api/logs');
+      request.setRequestHeader('Content-Type', 'application/octet-stream');
+      request.setRequestHeader('X-Log-Filename', encodeURIComponent(file.name));
+      request.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const progress = Math.round(event.loaded / event.total * 100);
+          setUpload({ tone: 'warn', text: `Uploading ${progress}%`, progress });
+        }
+      };
+      request.onerror = () => setUpload({ tone: 'bad', text: 'Upload failed: network error.' });
+      request.onload = () => {
+        let payload = {};
+        try { payload = JSON.parse(request.responseText || '{}'); } catch (ignore) { /* handled below */ }
+        if (request.status < 200 || request.status >= 300) {
+          setUpload({ tone: 'bad', text: payload.error || `Upload failed (${request.status}).` });
+          return;
+        }
+        setUpload({ tone: 'warn', text: 'Converting ROS messages...', progress: 100 });
+        setMetadata(payload);
+        setLogId(payload.id);
+        setData(null);
+        refreshLogs().catch(() => undefined);
+      };
+      request.send(file);
+    };
+
+    const deleteLog = async () => {
+      if (!logId || !window.confirm(`Delete the local converted data for ${metadata?.filename || 'this log'}?`)) return;
+      try {
+        await fetchJson(`/api/logs/${encodeURIComponent(logId)}`, { method: 'DELETE' });
+        const remaining = await refreshLogs();
+        if (remaining.length) await loadLog(remaining[0].id);
+        else await loadLog('');
+        setUpload({ tone: 'ok', text: 'Local converted data deleted.' });
+      } catch (error) {
+        setUpload({ tone: 'bad', text: error.message });
+      }
+    };
+
+    const saveFrame = async (format) => {
+      const viewer = viewerApiRef.current;
+      if (!viewer) {
+        setExportStatus({ tone: 'bad', text: 'Load a robot model before exporting a frame.' });
+        return;
+      }
+      try {
+        renderAt(timeRef.current);
+        const mime = format === 'jpg' ? 'image/jpeg' : 'image/png';
+        const blob = await viewer.captureBlob(mime, format === 'jpg' ? 0.92 : undefined);
+        const stamp = timeRef.current.toFixed(3).replace('.', '_');
+        downloadBlob(blob, `${downloadBase(metadata)}_${stamp}s.${format}`);
+        setExportStatus({ tone: 'ok', text: `${format.toUpperCase()} frame saved.` });
+      } catch (error) {
+        setExportStatus({ tone: 'bad', text: describeError(error, 'frame export failed') });
+      }
+    };
+
+    const exportMp4 = async (start, end) => {
+      const viewer = viewerApiRef.current;
+      const canvas = viewer?.getCanvas?.();
+      if (!canvas?.captureStream || !window.MediaRecorder) {
+        throw new Error('This browser does not support canvas video recording.');
+      }
+      const mimeCandidates = ['video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=h264', 'video/mp4'];
+      const mimeType = mimeCandidates.find((value) => MediaRecorder.isTypeSupported(value));
+      if (!mimeType) {
+        throw new Error('MP4 recording is not supported by this browser. Use a current Safari/Edge build or export GIF.');
+      }
+      const stream = canvas.captureStream(EXPORT_FPS);
+      const chunks = [];
+      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 6_000_000 });
+      recorder.ondataavailable = (event) => event.data.size && chunks.push(event.data);
+      const stopped = new Promise((resolve, reject) => {
+        recorder.onstop = resolve;
+        recorder.onerror = () => reject(recorder.error || new Error('MP4 recording failed.'));
+      });
+      recorder.start(500);
+      const wallStart = performance.now();
+      await new Promise((resolve) => {
+        const step = (now) => {
+          const elapsed = (now - wallStart) / 1000;
+          const current = Math.min(end, start + elapsed);
+          renderAt(current);
+          setTime(current);
+          setExportStatus({ tone: 'warn', text: `Recording MP4 ${Math.round((current - start) / (end - start) * 100)}%` });
+          if (current >= end) resolve();
+          else window.requestAnimationFrame(step);
+        };
+        window.requestAnimationFrame(step);
+      });
+      recorder.stop();
+      await stopped;
+      stream.getTracks().forEach((track) => track.stop());
+      downloadBlob(new Blob(chunks, { type: mimeType }), `${downloadBase(metadata)}_${start.toFixed(2)}-${end.toFixed(2)}s.mp4`);
+    };
+
+    const exportGif = async (start, end) => {
+      const viewer = viewerApiRef.current;
+      const source = viewer?.getCanvas?.();
+      if (!source) throw new Error('Load a robot model before exporting GIF.');
+      const frameCount = Math.max(1, Math.ceil((end - start) * GIF_FPS));
+      if (frameCount > GIF_MAX_FRAMES) {
+        throw new Error(`GIF export is limited to ${GIF_MAX_FRAMES / GIF_FPS} seconds per file.`);
+      }
+      const { GIFEncoder, quantize, applyPalette } = await import(GIFENC_MODULE_URL);
+      const scale = Math.min(1, 720 / source.width);
+      const width = Math.max(2, Math.round(source.width * scale));
+      const height = Math.max(2, Math.round(source.height * scale));
+      const output = document.createElement('canvas');
+      output.width = width;
+      output.height = height;
+      const context = output.getContext('2d', { willReadFrequently: true });
+      const encoder = GIFEncoder();
+      for (let index = 0; index < frameCount; index += 1) {
+        const current = Math.min(end, start + index / GIF_FPS);
+        renderAt(current);
+        setTime(current);
+        await new Promise((resolve) => window.requestAnimationFrame(resolve));
+        context.drawImage(source, 0, 0, width, height);
+        const rgba = context.getImageData(0, 0, width, height).data;
+        const palette = quantize(rgba, 128);
+        const indexed = applyPalette(rgba, palette);
+        encoder.writeFrame(indexed, width, height, {
+          palette,
+          delay: Math.round(1000 / GIF_FPS),
+          repeat: index === 0 ? 0 : undefined,
+        });
+        setExportStatus({ tone: 'warn', text: `Encoding GIF ${Math.round((index + 1) / frameCount * 100)}%` });
+      }
+      encoder.finish();
+      downloadBlob(new Blob([encoder.bytes()], { type: 'image/gif' }), `${downloadBase(metadata)}_${start.toFixed(2)}-${end.toFixed(2)}s.gif`);
+    };
+
+    const exportVideo = async () => {
+      const start = clamp(Number(rangeStart) || 0, 0, duration);
+      const end = clamp(Number(rangeEnd) || 0, 0, duration);
+      if (!data || !viewerApiRef.current) {
+        setExportStatus({ tone: 'bad', text: 'Load a converted log and robot model first.' });
+        return;
+      }
+      if (end <= start) {
+        setExportStatus({ tone: 'bad', text: 'End time must be later than start time.' });
+        return;
+      }
+      const previous = timeRef.current;
+      setPlaying(false);
+      setExporting(true);
+      setExportStatus({ tone: 'warn', text: `Preparing ${exportFormat.toUpperCase()}...` });
+      try {
+        if (exportFormat === 'gif') await exportGif(start, end);
+        else await exportMp4(start, end);
+        setExportStatus({ tone: 'ok', text: `${exportFormat.toUpperCase()} saved to Downloads.` });
+      } catch (error) {
+        setExportStatus({ tone: 'bad', text: describeError(error, 'media export failed') });
+      } finally {
+        setExporting(false);
+        setTime(previous);
+        renderAt(previous);
+      }
+    };
+
+    const toggleSeries = (id) => setSelectedSeries((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else if (next.size < 6) next.add(id);
+      return next;
+    });
+
+    const filteredTopics = (data?.topics || []).filter((topic) => topic.name.toLowerCase().includes(topicFilter.trim().toLowerCase()));
+    const rangeStyle = duration ? {
+      '--range-start': `${rangeStart / duration * 100}%`,
+      '--range-end': `${rangeEnd / duration * 100}%`,
+    } : {};
+
+    return e('div', { className: 'replay-panel' },
+      e('section', { className: 'replay-import-grid' },
+        e('article', { className: 'card replay-import-card' },
+          e('h2', null, 'Import ROS bag'),
+          e('div', {
+            className: 'bag-drop',
+            onDragOver: (event) => { event.preventDefault(); event.currentTarget.classList.add('dragging'); },
+            onDragLeave: (event) => event.currentTarget.classList.remove('dragging'),
+            onDrop: (event) => {
+              event.preventDefault();
+              event.currentTarget.classList.remove('dragging');
+              uploadLog(event.dataTransfer.files?.[0]);
+            },
+          },
+          e('p', null, 'Drag & drop a ROS 1 bag file here'),
+          e('span', { className: 'meta' }, 'or'),
+          e('button', { className: 'secondary', onClick: () => fileRef.current?.click(), disabled: exporting }, 'Choose file'),
+          e('input', { ref: fileRef, type: 'file', accept: '.bag', hidden: true, onChange: (event) => uploadLog(event.target.files?.[0]) }),
+          ),
+          upload && e('div', { className: 'import-status' },
+            upload.progress != null && e('progress', { max: 100, value: upload.progress }),
+            e('span', { className: `value ${upload.tone || ''}` }, upload.text),
+          ),
+          e('label', { className: 'field local-log-field' },
+            e('span', { className: 'label' }, 'Local converted logs'),
+            e('select', { value: logId, onChange: (event) => loadLog(event.target.value).catch((error) => setUpload({ tone: 'bad', text: error.message })) },
+              e('option', { value: '' }, logs.length ? 'Select a log' : 'No imported logs'),
+              logs.map((item) => e('option', { value: item.id, key: item.id }, `${item.filename} (${item.status})`)),
+            ),
+          ),
+        ),
+        e('article', { className: 'card replay-metadata' },
+          e('div', { className: 'card-head' },
+            e('h2', null, 'Log metadata'),
+            e('button', { className: 'secondary compact-btn', onClick: deleteLog, disabled: !logId || exporting }, 'Delete local data'),
+          ),
+          metadata ? e('dl', { className: 'metadata-grid' },
+            e('dt', null, 'File'), e('dd', null, metadata.filename),
+            e('dt', null, 'Size'), e('dd', null, formatBytes(metadata.size)),
+            e('dt', null, 'Duration'), e('dd', null, formatLogTime(duration)),
+            e('dt', null, 'Topics'), e('dd', null, metadata.topic_count ?? '—'),
+            e('dt', null, 'Events'), e('dd', null, metadata.event_count ?? '—'),
+            e('dt', null, 'Status'), e('dd', { className: metadata.status === 'error' ? 'bad' : '' }, metadata.error || metadata.status),
+          ) : e('div', { className: 'empty' }, 'Import or select a local log.'),
+        ),
+        e('article', { className: 'card replay-export-card' },
+          e('h2', null, 'Export'),
+          e('div', { className: 'export-fields' },
+            e('label', { className: 'field' }, e('span', { className: 'label' }, 'Start (s)'),
+              e('input', { type: 'number', min: 0, max: duration, step: 0.01, value: Number(rangeStart).toFixed(2), onChange: (event) => setRangeStart(clamp(Number(event.target.value), 0, rangeEnd)) })),
+            e('label', { className: 'field' }, e('span', { className: 'label' }, 'End (s)'),
+              e('input', { type: 'number', min: 0, max: duration, step: 0.01, value: Number(rangeEnd).toFixed(2), onChange: (event) => setRangeEnd(clamp(Number(event.target.value), rangeStart, duration)) })),
+            e('label', { className: 'field' }, e('span', { className: 'label' }, 'Format'),
+              e('select', { value: exportFormat, onChange: (event) => setExportFormat(event.target.value) },
+                e('option', { value: 'mp4' }, 'MP4'), e('option', { value: 'gif' }, 'GIF'))),
+          ),
+          e('button', { onClick: exportVideo, disabled: exporting || !data }, exporting ? 'Exporting...' : 'Export video'),
+          exportStatus && e('p', { className: `value export-message ${exportStatus.tone || ''}`, role: 'status' }, exportStatus.text),
+          e('p', { className: 'meta' }, 'Files are generated in this browser and downloaded to this device.'),
+        ),
+      ),
+      data ? e(React.Fragment, null,
+        e('section', { className: 'replay-workspace' },
+          e('aside', { className: 'card replay-topics' },
+            e('h2', null, `Topics (${data.topics?.length || 0})`),
+            e('input', { className: 'list-filter', value: topicFilter, onChange: (event) => setTopicFilter(event.target.value), placeholder: 'Filter topics...' }),
+            e('label', { className: 'field replay-select' }, e('span', { className: 'label' }, 'Pose source'),
+              e('select', { value: poseTopic, onChange: (event) => setPoseTopic(event.target.value) },
+                Object.keys(data.poses || {}).map((name) => e('option', { key: name, value: name }, name)))),
+            e('label', { className: 'field replay-select' }, e('span', { className: 'label' }, 'Joint source'),
+              e('select', { value: jointTopic, onChange: (event) => setJointTopic(event.target.value) },
+                Object.keys(data.joints || {}).map((name) => e('option', { key: name, value: name }, name)))),
+            e('div', { className: 'replay-topic-list' }, filteredTopics.map((topic) => e('div', { className: 'replay-topic-row', key: topic.name },
+              e('strong', null, topic.name),
+              e('span', null, topic.type),
+              e('span', null, `${topic.message_count} msgs`),
+            ))),
+          ),
+          e('div', { className: 'replay-center' },
+            e('article', { className: 'card replay-view-card' },
+              e('h2', null, '3D Robot Motion (synchronized)'),
+              e(LogViewer, { urdf: activeUrdf, viewerApiRef, onReady: handleViewerReady }),
+            ),
+            e('article', { className: 'card replay-chart-card' },
+              e('h2', null, 'Time Series (synchronized)'),
+              e('div', { className: 'series-picker' }, (data.series || []).slice(0, 20).map((entry) => e('label', { className: 'series-option', key: entry.id },
+                e('input', { type: 'checkbox', checked: selectedSeries.has(entry.id), onChange: () => toggleSeries(entry.id), disabled: !selectedSeries.has(entry.id) && selectedSeries.size >= 6 }),
+                e('span', null, `${entry.topic}:${entry.field}`),
+              ))),
+              e(SeriesChart, { series: data.series, selectedIds: selectedSeries, duration, time }),
+            ),
+          ),
+          e('aside', { className: 'card replay-events' },
+            e('h2', null, `Events (${data.events?.length || 0})`),
+            e('div', { className: 'event-list' }, (data.events || []).length ? data.events.map((event, index) => e('button', {
+              className: 'event-row', key: `${event.t}-${index}`, onClick: () => setTime(clamp(event.t, 0, duration)),
+            },
+            e('time', null, formatLogTime(event.t)),
+            e('i', { className: event.tone || 'warn' }),
+            e('span', null, event.label),
+            )) : e('div', { className: 'empty' }, 'No state-change events found.')),
+          ),
+        ),
+        e('section', { className: 'card replay-transport' },
+          e('div', { className: 'transport-buttons' },
+            e('button', { className: 'secondary', onClick: () => setTime(0), disabled: exporting }, 'Start'),
+            e('button', { onClick: () => setPlaying((value) => !value), disabled: exporting }, playing ? 'Pause' : 'Play'),
+            e('button', { className: 'secondary', onClick: () => setTime(duration), disabled: exporting }, 'End'),
+            e('select', { value: speed, onChange: (event) => setSpeed(Number(event.target.value)), disabled: exporting, 'aria-label': 'Playback speed' },
+              [0.25, 0.5, 1, 2, 4].map((value) => e('option', { key: value, value }, `${value}×`))),
+          ),
+          e('div', { className: 'timeline' },
+            e('div', { className: 'timeline-labels' },
+              e('span', null, formatLogTime(time)),
+              e('span', null, `/ ${formatLogTime(duration)}`),
+            ),
+            e('input', { className: 'timeline-range', style: rangeStyle, type: 'range', min: 0, max: duration || 1, step: 0.001, value: time, onChange: (event) => { setPlaying(false); setTime(Number(event.target.value)); }, disabled: exporting }),
+            e('div', { className: 'range-controls' },
+              e('label', null, 'IN', e('input', { type: 'range', min: 0, max: duration || 1, step: 0.01, value: rangeStart, onChange: (event) => setRangeStart(Math.min(Number(event.target.value), rangeEnd)) })),
+              e('label', null, 'OUT', e('input', { type: 'range', min: 0, max: duration || 1, step: 0.01, value: rangeEnd, onChange: (event) => setRangeEnd(Math.max(Number(event.target.value), rangeStart)) })),
+            ),
+          ),
+          e('div', { className: 'frame-export' },
+            e('span', { className: 'label' }, 'Current 3D frame'),
+            e('div', null,
+              e('button', { className: 'secondary compact-btn', onClick: () => saveFrame('png'), disabled: exporting }, 'PNG'),
+              e('button', { className: 'secondary compact-btn', onClick: () => saveFrame('jpg'), disabled: exporting }, 'JPEG'),
+            ),
+          ),
+        ),
+      ) : e('section', { className: 'card replay-empty' },
+        e('div', { className: 'empty' }, metadata?.status === 'converting' ? 'Converting the selected bag...' : 'Import a ROS 1 bag to inspect and export its motion.'),
+      ),
+    );
   }
 
   function GraphList({ title, items, kind, selected, setSelected, connected, loading }) {

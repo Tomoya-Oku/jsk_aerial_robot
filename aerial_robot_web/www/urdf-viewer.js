@@ -18,7 +18,9 @@ window.AerialRobotUrdfViewer = async function renderUrdfViewer(container, urdfTe
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xf6f6f6);
   const camera = new THREE.PerspectiveCamera(45, (container.clientWidth || 320) / VIEWER_HEIGHT, 0.01, 1000);
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  // Keep the last rendered pixels available so replay frames can be exported
+  // directly from the canvas as PNG/JPEG or captured as video.
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.setSize(container.clientWidth || 320, VIEWER_HEIGHT);
   container.appendChild(renderer.domElement);
@@ -89,12 +91,15 @@ window.AerialRobotUrdfViewer = async function renderUrdfViewer(container, urdfTe
 
   let running = true;
   let followRobot = true;
-  const animate = () => {
-    if (!running) return;
-    requestAnimationFrame(animate);
+  const renderNow = () => {
     if (followRobot) controls.target.lerp(robotRoot.position, 0.12);
     controls.update();
     renderer.render(scene, camera);
+  };
+  const animate = () => {
+    if (!running) return;
+    requestAnimationFrame(animate);
+    renderNow();
   };
   animate();
 
@@ -139,6 +144,20 @@ window.AerialRobotUrdfViewer = async function renderUrdfViewer(container, urdfTe
     },
     setFollowRobot(value) {
       followRobot = Boolean(value);
+    },
+    renderNow,
+    getCanvas() {
+      return renderer.domElement;
+    },
+    captureBlob(type = 'image/png', quality) {
+      renderNow();
+      return new Promise((resolve, reject) => {
+        renderer.domElement.toBlob(
+          (blob) => blob ? resolve(blob) : reject(new Error('Canvas export returned no image data.')),
+          type,
+          quality,
+        );
+      });
     },
     dispose() {
       running = false;
