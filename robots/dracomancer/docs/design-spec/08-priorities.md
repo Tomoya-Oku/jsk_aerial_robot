@@ -14,7 +14,7 @@
 | 10 | Mk-II lightweight / adjustable hardware | 必須 |
 | 11 | Contact haptic | 第2優先 |
 | 12 | Reference-link fixed mode | 第2優先 |
-| 13 | Web browser client + ROS bag可視化・URL共有基盤 | 補助・本筋外 |
+| 13 | Web browser client + ROS bag可視化・メディア出力基盤 | 補助・本筋外 |
 | 14 | Dual-arm | 発展 |
 | 15 | Full ROS 2 migration | 発展 |
 | 16 | Autonomous planner | 対象外 |

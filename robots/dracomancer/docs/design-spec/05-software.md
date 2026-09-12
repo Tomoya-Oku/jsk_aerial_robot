@@ -409,13 +409,13 @@ web_client
     ├─ mode / clutch operation
     ├─ low-speed base operation
     ├─ experiment operation
-    └─ log playback / shared view
+    └─ log playback / media export
 
 log_platform
     ├─ ROS bag ingestion
     ├─ topic extraction / time synchronization
-    ├─ web playback data storage
-    └─ share URL / access control
+    ├─ local playback data storage
+    └─ MP4 / GIF / PNG / JPEG export
 
 haptic_controller
     ├─ contact feedback
@@ -462,7 +462,7 @@ Webクライアントは研究用アルゴリズムから分離し、ブラウ�
 - 実験の開始・停止とログ記録
 - 緊急停止要求
 
-## 5.9.1 実験ログの可視化・共有基盤
+## 5.9.1 実験ログの可視化・メディア出力基盤
 
 初期対応形式はROS 1のbagファイルとする。将来的にrosbag2やCSV等を追加できるよう、入力形式に依存する変換処理とブラウザ向け再生データを分離する。
 
@@ -476,14 +476,15 @@ ROS bag / experiment log
 Topic validation / extraction
           │
           ↓
-Time-synchronized playback data
+Local time-synchronized playback data
           │
      ┌────┴────┐
      ↓         ↓
 3D motion   Time-series plots
      └────┬────┘
           ↓
- Read-only shared URL
+Time-range MP4 / GIF
+Current-frame PNG / JPEG
 ```
 
 最低限、次のデータを再生対象とする。
@@ -496,9 +497,9 @@ Time-synchronized playback data
 
 ブラウザ表示は、URDF等から構成した3Dモデル、時系列グラフ、イベント一覧を同じ再生時刻へ同期する。再生、一時停止、任意時刻へのシーク、再生速度変更、表示topic選択を提供する。
 
-ログ変換後のデータにはschema versionと元ログのhashを記録し、同じログから同じ表示を再生成できるようにする。共有URLは閲覧専用を既定とし、公開範囲、失効日時、失効操作を設定できるようにする。非公開topic、操作者の個人情報、カメラ映像、位置情報を共有対象へ含める場合は、アップロード前または公開前に明示的な確認を要求する。
+ログ変換後のデータにはschema versionと元ログのhashを記録し、同じログから同じ表示を再生成できるようにする。動画は利用者が指定した開始・終了時刻の範囲をMP4またはGIFとして出力し、静止画は現在表示中の3DフレームをPNGまたはJPEGとして出力する。出力処理はブラウザ内で完結させ、クラウド保存、共有URL発行、公開範囲・失効管理は実装しない。非公開topic、操作者の個人情報、カメラ映像、位置情報が画面へ含まれる場合は、メディア出力前に利用者が内容を確認する。
 
-大容量bagをブラウザへ直接読み込ませることを前提とせず、サーバ側またはローカル変換ツールで必要topicを抽出・軽量化する。保存先、認証方式、URL発行方式、最大ファイルサイズ、ログ保持期間は、利用するホスティング環境を決定した後に確定する。
+大容量bagをブラウザへ直接読み込ませることを前提とせず、ROS側サーバまたはローカル変換ツールで必要topicを抽出・軽量化する。変換済み再生データはロボットPCのローカル領域へ保存し、元bagは変換後に削除することを既定とする。最大ファイルサイズ、サンプリング上限、元bag保持の要否はlaunch引数で設定できるようにする。
 
 ## 5.9.2 操作経路の安全要件
 
