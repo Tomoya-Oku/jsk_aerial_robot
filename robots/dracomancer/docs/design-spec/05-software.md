@@ -443,7 +443,7 @@ i_i^{raw}=\frac{s_i\tau_i}{K_{t,i}\times0.00269}
 
 で初期換算する。\(s_i\) は取付方向、\(K_{t,i}\) は実測で更新する関節別トルク定数である。raw currentはソフトウェア上限でclampし、サーボ側Current Limitを独立した最終上限とする。初期の0.2 Nm上限はMk-Iから引き継いだ仮値であり、Mk-IIの人体安全値として確定していない。
 
-実装は責務ごとに `scripts/haptic_feedback/` 以下へ分ける。
+実装は責務ごとに `scripts/haptics/` 以下へ分ける。
 
 - `haptic_controller.py`: ROS I/O、入力鮮度、モード、各成分の統合
 - `contact_feedback.py`: \(M^TJ_R^Tw_R\) の計算
