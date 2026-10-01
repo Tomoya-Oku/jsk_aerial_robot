@@ -51,8 +51,8 @@
   <arg name="target_fc_prediction_rate" default="10.0"/>
   <!-- Gate fallback used only until the threshold topic arrives.
        hard thresholds enter hold; recover thresholds (min) release hold.
-       Defaults match volume_radius_monitor (data-driven, see
-       docs/fc_threshold_calibration.md). -->
+       Defaults match volume_radius_monitor and are inherited from Mk-I.
+       Recalibration is required for Mk-II. -->
   <arg name="force_radius_threshold" default="0.108990"/>
   <arg name="torque_radius_threshold" default="0.015400"/>
   <arg name="force_radius_recover_threshold" default="0.249220"/>

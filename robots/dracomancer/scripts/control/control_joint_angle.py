@@ -44,7 +44,7 @@ class ControlJoints:
         # (wrist + elbow) to DRAGON joints, every unmapped joint held unchanged),
         # "joint_pairing" (medium-term), or "geometric" (long-term, FK + plane
         # projection). "elbow_only" is a backward-compatible alias of "distal".
-        # See README.md.
+        # See docs/design-spec/05-software.md.
         self.mapping_mode = str(rospy.get_param("~mapping_mode", "distal")).lower()
         if self.mapping_mode == "elbow_only":
             self.mapping_mode = "distal"  # backward-compatible alias

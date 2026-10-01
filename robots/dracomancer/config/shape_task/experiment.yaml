@@ -43,7 +43,7 @@ timeout: 60.0         # s, 制限時間
 require_safety_margin: true
 
 # --- 安全しきい値（threshold topic 未受信時のフォールバック）-----------------
-# 既定値は 4096-grid較正 (docs/fc_threshold_calibration.md) 由来。
+# 既定値はMk-Iの4096-grid較正由来。Mk-IIでは再較正が必要。
 r_f_hard: 0.108990    # [N]
 r_f_safe: 0.249220    # [N]
 r_tau_hard: 0.015400  # [N·m]

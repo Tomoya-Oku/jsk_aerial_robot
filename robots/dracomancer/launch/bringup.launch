@@ -56,8 +56,8 @@
   <arg name="enable_shape_safety"      default="true" />
   <arg name="missing_inradius_scale"   default="1.0" />
   <arg name="min_safety_scale"         default="0.0" />
-  <!-- Threshold range [hard_min, min], data-driven from the 4096-grid DRAGON
-       shape sweep (2026-06-30; see docs/fc_threshold_calibration.md). -->
+  <!-- Threshold range [hard_min, min], inherited from the Mk-I 4096-grid
+       DRAGON shape sweep. Recalibration is required for Mk-II. -->
   <arg name="force_inradius_min"       default="0.249220" />
   <arg name="torque_inradius_min"      default="0.278159" />
   <arg name="force_inradius_hard_min"  default="0.108990" />

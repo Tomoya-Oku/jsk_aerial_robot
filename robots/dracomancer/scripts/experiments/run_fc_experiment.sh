@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Orchestrates the fc threshold-calibration experiment (see
-# docs/fc_threshold_calibration.md). Assumes a DRAGON Gazebo sim is already
+# Orchestrates the Mk-I flight-feasibility threshold-calibration experiment.
+# Assumes a DRAGON Gazebo sim is already
 # hovering (flight_state == 5).
 #
 #   1. start rosbag       (fc / joints / odom / flight_state)
