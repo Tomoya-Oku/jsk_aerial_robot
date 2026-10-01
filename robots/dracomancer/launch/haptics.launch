@@ -1,37 +1,48 @@
 <launch>
   <arg name="device_ns" default="dracomancer"/>
+  <arg name="robot_ns" default="dragon"/>
 
   <arg name="device_joint_topic" default="/$(arg device_ns)/joint_states"/>
   <arg name="shape_error_topic" default="/$(arg device_ns)/shape_control_error"/>
+  <arg name="contact_wrench_topic" default="/$(arg robot_ns)/estimated_external_wrench"/>
   <arg name="mode_topic" default="/$(arg device_ns)/teleop_mode"/>
   <arg name="teleop_mode" default="false"/>
-  <arg name="rate" default="40.0"/>
+  <arg name="rate" default="100.0"/>
 
-  <!-- Default hardware output is torque on/off for XL430-W250-T. Current output remains available for compatible servos. -->
+  <!-- XM430 current output is opt-in until Operating Mode, Current Limit, signs,
+       and per-joint human-safe limits have been verified on Mk-II hardware. -->
+  <arg name="enable_contact_feedback" default="false"/>
+  <arg name="enable_safety_feedback" default="true"/>
+  <!-- Backward-compatible alias for the old current-output launch argument. -->
+  <arg name="enable_haptic_current_command" default="false"/>
+  <!-- Deprecated no-op arguments retained so existing launch invocations parse.
+       XM430 output always uses current conversion and fail-safe torque disable. -->
   <arg name="enable_haptic_torque_onoff" default="true"/>
   <arg name="haptic_torque_on_threshold" default="0.02"/>
-  <arg name="haptic_torque_enable_topic" default="/servo/torque_enable"/>
-  <arg name="enable_haptic_current_command" default="false"/>
   <arg name="haptic_current_per_nm" default="0.0"/>
-  <arg name="haptic_current_topic" default="/servo/target_current"/>
+  <arg name="enable_hardware_output" default="$(arg enable_haptic_current_command)"/>
+  <arg name="haptic_current_topic" default="/$(arg device_ns)/servo/target_current"/>
+  <arg name="haptic_torque_enable_topic" default="/$(arg device_ns)/servo/torque_enable"/>
   <arg name="haptic_debug_topic" default="/$(arg device_ns)/haptic_torque"/>
 
   <node pkg="dracomancer"
-        type="control_haptic_feedback.py"
-        name="$(arg device_ns)_control_haptic_feedback"
+        type="haptic_controller.py"
+        name="$(arg device_ns)_haptic_controller"
         output="screen">
+    <rosparam command="load" file="$(find dracomancer)/config/haptics.yaml"/>
     <param name="device_ns" value="/$(arg device_ns)"/>
+    <param name="robot_ns" value="/$(arg robot_ns)"/>
     <param name="device_joint_topic" value="$(arg device_joint_topic)"/>
     <param name="shape_error_topic" value="$(arg shape_error_topic)"/>
+    <param name="contact_wrench_topic" value="$(arg contact_wrench_topic)"/>
     <param name="mode_topic" value="$(arg mode_topic)"/>
     <param name="teleop_mode" value="$(arg teleop_mode)"/>
     <param name="rate" value="$(arg rate)"/>
-    <param name="haptic_debug_topic" value="$(arg haptic_debug_topic)"/>
-    <param name="haptic_torque_enable_topic" value="$(arg haptic_torque_enable_topic)"/>
-    <param name="enable_haptic_torque_onoff" value="$(arg enable_haptic_torque_onoff)"/>
-    <param name="haptic_torque_on_threshold" value="$(arg haptic_torque_on_threshold)"/>
-    <param name="haptic_current_topic" value="$(arg haptic_current_topic)"/>
-    <param name="enable_haptic_current_command" value="$(arg enable_haptic_current_command)"/>
-    <param name="haptic_current_per_nm" value="$(arg haptic_current_per_nm)"/>
+    <param name="haptic_torque_topic" value="$(arg haptic_debug_topic)"/>
+    <param name="enable_contact_feedback" value="$(arg enable_contact_feedback)"/>
+    <param name="enable_safety_feedback" value="$(arg enable_safety_feedback)"/>
+    <param name="enable_hardware_output" value="$(arg enable_hardware_output)"/>
+    <param name="current_topic" value="$(arg haptic_current_topic)"/>
+    <param name="torque_enable_topic" value="$(arg haptic_torque_enable_topic)"/>
   </node>
 </launch>

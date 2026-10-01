@@ -1,0 +1,69 @@
+# Dracomancer Mk-II haptic controller parameters.
+# All seven actuators are XM430-W350-R. Hardware output stays disabled until
+# Operating Mode=0, Current Limit, signs, and per-joint torque limits are
+# verified on the assembled device.
+
+rate: 100.0
+enable_contact_feedback: false
+enable_safety_feedback: true
+enable_hardware_output: false
+
+human_joint_names:
+  - shoulder_abduction_adduction_joint
+  - shoulder_flexion_extension_joint
+  - upper_arm_external_internal_rotation_joint
+  - elbow_flexion_extension_joint
+  - wrist_supination_joint
+  - wrist_flexion_extension_joint
+  - wrist_abduction_adduction_joint
+
+robot_joint_names:
+  - joint1_pitch
+  - joint1_yaw
+  - joint2_pitch
+  - joint2_yaw
+  - joint3_pitch
+  - joint3_yaw
+
+servo_ids: [0, 1, 2, 3, 4, 5, 6]
+actuator_signs: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+
+# XM430-W350-R nominal value at 12 V. The real device must be calibrated
+# because transmission friction and attachment geometry change felt torque.
+torque_constants_nm_per_amp: [1.783, 1.783, 1.783, 1.783, 1.783, 1.783, 1.783]
+current_unit_amp: 0.00269
+
+# Temporary software limits inherited from the Mk-I prototype. These are not
+# the final human-safe values; replace them after Mk-II bench measurements.
+torque_limits: [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
+torque_rate_limits: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+# An empty list derives every raw-current clamp from torque_limits, the torque
+# constant, and current_unit_amp. Explicit values must cover all joints and be
+# within the XM430 range [1, 1193].
+current_limits_raw: []
+torque_deadband: 0.01
+
+contact_gain: 1.0
+safety_gain: 1.0
+safety_stiffness: [0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
+human_damping: [0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01]
+
+contact_timeout: 0.1
+safety_timeout: 0.25
+joint_timeout: 0.25
+
+# M = dq_robot / dq_human, row-major 6x7. This fixed-link fallback matches the
+# neutral allocation of the current distal mapping. Mapping implementations
+# should publish their live Jacobian to /dracomancer/haptic/mapping_jacobian.
+mapping_jacobian:
+  - [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+  - [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+  - [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  - [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
+  - [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  - [-1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+# J_R maps robot joint velocity to the wrench-frame end-effector twist (6x6).
+# It is intentionally unset: contact output remains zero until the DRAGON model
+# publishes the Jacobian in the same frame as estimated_external_wrench.
+robot_jacobian: []
