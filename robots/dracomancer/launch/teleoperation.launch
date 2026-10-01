@@ -184,6 +184,14 @@
   <arg name="teleop_mode" default="false"/>
   <arg name="mode_topic" default="/$(arg device_ns)/teleop_mode"/>
 
+  <!-- Haptic calculation can run without driving the servos.  Hardware current
+       output and contact feedback are independently opt-in until Mk-II has been
+       calibrated and the wrench/Jacobian inputs have been validated. -->
+  <arg name="enable_haptics" default="false"/>
+  <arg name="enable_haptic_hardware" default="false"/>
+  <arg name="enable_contact_haptics" default="false"/>
+  <arg name="enable_safety_haptics" default="true"/>
+
   <!-- pose (movement) control settings -->
   <!-- nav_target: cog (重心) or baselink (ベースリンク) -->
   <arg name="nav_target" default="cog"/>
@@ -445,4 +453,14 @@
     <param name="allocation_refine_max_iteration" value="$(arg shape_feasibility_allocation_refine_max_iteration)"/>
     <param name="allocation_refine_threshold" value="$(arg shape_feasibility_allocation_refine_threshold)"/>
   </node>
+
+  <include file="$(find dracomancer)/launch/haptics.launch" if="$(arg enable_haptics)">
+    <arg name="device_ns" value="$(arg device_ns)"/>
+    <arg name="robot_ns" value="$(arg robot_ns)"/>
+    <arg name="teleop_mode" value="$(arg teleop_mode)"/>
+    <arg name="mode_topic" value="$(arg mode_topic)"/>
+    <arg name="enable_hardware_output" value="$(arg enable_haptic_hardware)"/>
+    <arg name="enable_contact_feedback" value="$(arg enable_contact_haptics)"/>
+    <arg name="enable_safety_feedback" value="$(arg enable_safety_haptics)"/>
+  </include>
 </launch>
