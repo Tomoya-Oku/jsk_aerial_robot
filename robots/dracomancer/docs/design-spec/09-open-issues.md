@@ -11,7 +11,7 @@
 7. LiDAR minimum clearance \(d_{safe}\)
 8. DRAGON安全joint velocity上限
 9. Position / attitude joystick allocation
-10. Haptic actuatorと最大提示トルク
+10. XM430-W350-R各関節の最大提示トルク、電流上限、符号、実トルク換算値
 11. External wrench estimatorを使用可能か
 12. Reference linkの標準設定
 

@@ -311,7 +311,29 @@ Clutch中：
 
 # 5.7 主要システム⑦：Haptic Feedback
 
-## 5.7.1 Contact feedback
+## 5.7.1 構成と出力条件
+
+力覚提示は、接触力覚と安全力覚を独立に計算し、最後に合成する。
+
+```text
+external wrench ─ J_R ─┐
+                       ├─ contact feedback ─┐
+mapping Jacobian M ────┘                    │
+                                            ├─ limit / slew limit ─ XM430 current
+shape control error ─ safety feedback ──────┤
+external safety torque ─────────────────────┘
+```
+
+計算ノードは、実機へ出力しない状態でも各成分と合成結果をpublishできる。実機電流出力は明示的なlaunch引数でのみ有効化し、次の条件をすべて満たす場合に限りtorque enableと電流指令を出す。
+
+- teleoperation modeが有効
+- Dracomancerの全7関節状態がtimeout内
+- 有効な接触力覚、安全力覚、または外部安全力覚の入力がtimeout内
+- 出力ベクトルとJacobianが有限値かつ規定次元
+
+条件を外れた周期では、rate limiterの残留値を保持せず、電流ゼロとtorque disableを出力する。プロセス終了時も電流ゼロとtorque disableを複数回送る。
+
+## 5.7.2 Contact feedback
 
 初期実験では接触位置を指定EEに限定する。
 
@@ -330,7 +352,7 @@ DRAGONの既存 external wrench estimator を最初に検証し、十分な
 
 ---
 
-## 5.7.2 Mapping
+## 5.7.3 Contact mapping
 
 Robot EE wrenchを
 
@@ -350,9 +372,13 @@ Human–Robot morphology mapping の局所Jacobianを \(M\) とすれば、
 
 固定対応写像Aと全体形状写像Bでは \(M\) が異なるため、同じwrench feedback frameworkを利用しつつmappingのみ交換可能な設計とする。
 
+\(J_R\) はRobot joint velocityから接触点twistへの \(6\times6\) Jacobian、\(M=\partial q_R/\partial q_H\) はHuman 7関節からRobot 6関節への局所Jacobianとする。wrenchと \(J_R\) は同一座標系で表す。固定対応写像用の初期 \(M\) は設定ファイルに持ち、非線形写像ではmapping実装が実行時の \(M\) をpublishする。
+
+external wrench estimatorと \(J_R\) の座標系・符号・遅延を検証するまでContact feedbackは既定で無効とし、\(J_R\) 未入力時は必ずゼロ出力とする。
+
 ---
 
-## 5.7.3 Safety feedback
+## 5.7.4 Safety feedback
 
 接触とは別に、
 
@@ -366,15 +392,66 @@ Human–Robot morphology mapping の局所Jacobianを \(M\) とすれば、
 
 ただし修士研究のコアはmapping + feasibilityであり、**Safety hapticの高度なnull-space設計は必須としない。**
 
-まずは、
+初期実装はdirectional resistanceとし、形態写像の生指令 \(q_R^{des}\) と安全制約通過後の指令 \(q_R^{cmd}\) の差を
 
-- spring-like torque
-- vibration
-- directional resistance
+\[
+e_R=q_R^{des}-q_R^{cmd}
+\]
 
-のいずれか簡単な方式から検証する。
+として、
+
+\[
+\tau_H^{safe}=-M^T K e_R-B\dot q_H
+\]
+
+を提示する。これにより、安全制約で拒否された形態方向へ操作者が動かすと、その方向と逆向きの抵抗を返す。初期段階では既存のfeasibility gate、joint rate limit、link4 safetyが生じさせる `shape_control_error` を使用する。joint limit、thrust saturation、obstacle proximity、self collision等の別モジュールは、Human 7関節順の外部安全トルク入力へ接続できる。
+
+各成分は
+
+\[
+\tau_H=\operatorname{clip}(\tau_H^{contact}+\tau_H^{safe}+\tau_H^{external})
+\]
+
+として合成し、deadband、関節別トルク上限、トルク変化率上限を適用する。
 
 Aerial teleoperationではhaptic feedbackによってcontactやremote stateを提示する研究が存在し [5][6]、一般teleoperationでも触覚feedbackの安全性・情報提示能力が整理されている [7]。したがって、haptic interface全体を新規理論化するのではなく、多関節形態写像への適用部分のみを研究対象とする。
+
+## 5.7.5 ROS interfaceとXM430出力
+
+主要interfaceを次に示す。
+
+| 種別 | Topic | 型 | 内容 |
+|---|---|---|---|
+| Input | `/dracomancer/joint_states` | `sensor_msgs/JointState` | Human 7関節角・速度 |
+| Input | `/dracomancer/shape_control_error` | `std_msgs/Float64MultiArray` | \(q_R^{des}-q_R^{cmd}\)、Robot 6関節順 |
+| Input | `/dragon/estimated_external_wrench` | `geometry_msgs/WrenchStamped` | 接触wrench |
+| Input | `/dracomancer/haptic/mapping_jacobian` | `std_msgs/Float64MultiArray` | \(M\)、row-major \(6\times7\) |
+| Input | `/dracomancer/haptic/robot_jacobian` | `std_msgs/Float64MultiArray` | \(J_R\)、row-major \(6\times6\) |
+| Input | `/dracomancer/haptic/safety_torque_input` | `sensor_msgs/JointState` | 他制約からのHuman関節トルク |
+| Output | `/dracomancer/haptic/contact_torque` | `sensor_msgs/JointState` | 接触力覚成分 |
+| Output | `/dracomancer/haptic/safety_torque` | `sensor_msgs/JointState` | 安全力覚と外部安全力覚の和 |
+| Output | `/dracomancer/haptic_torque` | `sensor_msgs/JointState` | 制限後の合成力覚 |
+| Output | `/dracomancer/haptic/active` | `std_msgs/Bool` | 実機出力条件の成立状態 |
+| Output | `/dracomancer/servo/target_current` | `spinal/ServoControlCmd` | XM430 raw current指令 |
+| Output | `/dracomancer/servo/torque_enable` | `spinal/ServoTorqueCmd` | XM430 torque enable |
+
+XM430-W350-Rの電流指令値は [10] に基づき、関節 \(i\) について
+
+\[
+i_i^{raw}=\frac{s_i\tau_i}{K_{t,i}\times0.00269}
+\]
+
+で初期換算する。\(s_i\) は取付方向、\(K_{t,i}\) は実測で更新する関節別トルク定数である。raw currentはソフトウェア上限でclampし、サーボ側Current Limitを独立した最終上限とする。初期の0.2 Nm上限はMk-Iから引き継いだ仮値であり、Mk-IIの人体安全値として確定していない。
+
+実装は責務ごとに `scripts/haptic_feedback/` 以下へ分ける。
+
+- `haptic_controller.py`: ROS I/O、入力鮮度、モード、各成分の統合
+- `contact_feedback.py`: \(M^TJ_R^Tw_R\) の計算
+- `safety_feedback.py`: directional resistance、合成、制限
+- `current_conversion.py`: XM430電流換算と設定値検証
+- `servo_output.py`: ROS電流・torque enableのfail-safe出力
+
+通常のteleoperation起動に `enable_haptics:=true` を加えると、実機出力なしで力覚計算とdebug topicを確認できる。実機電流は、4.6節の確認完了後に限り `enable_haptic_hardware:=true` で有効化する。Contact feedbackはwrenchと2種類のJacobianを検証後、さらに `enable_contact_haptics:=true` を指定して有効化する。
 
 ---
 
@@ -537,3 +614,6 @@ DOI: 10.1109/TASE.2026.3669051.
 “Cutaneous/Tactile Haptic Feedback in Robotic Teleoperation: Motivation, Survey, and Perspectives,”
 *IEEE Transactions on Robotics*, vol. 40, pp. 978–998, 2024.
 DOI: 10.1109/TRO.2023.3344027.
+
+[10] ROBOTIS, “XM430-W350,” *DYNAMIXEL e-Manual*.
+https://emanual.robotis.com/docs/en/dxl/x/xm430-w350/
