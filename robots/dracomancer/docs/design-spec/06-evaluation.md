@@ -252,6 +252,99 @@ Haptic experimentをmapping比較と全factorialに組み合わせない。
 
 これにより条件数と被験者実験量を抑える。
 
+### 壁押し接触シミュレーション
+
+本環境について、以下を確定条件とする。
+
+- 壁はワールドに固定する剛体とし、DRAGONに押されても移動・転倒しない。
+- 作業点はDRAGONのLink 1先端とし、壁から受ける反力・反トルクをDracomancerへ提示する。
+- 形態対応は既存の`control_joint_angle.py`を参照する。肩・肘・手首の対応に加え、ロール角によるPitch/Yaw配分を含む。
+- 実機デバイスと通信経路は[4.6 Actuator / Sensor](04-hardware.md#46-actuator--sensor)に従う。
+- シミュレータは既存のGazebo（ODE）を使用する。
+- 壁押しタスク中はLink 4位置固定を解除する。
+- 接触力の取得元と提示倍率・上限は[5.7 Haptic Feedback](05-software.md)に従う。
+- 固定解除後はJoystickによる機体移動と腕の形態操作を併用する。
+- 壁の中心はワールド座標[1.5, 0, 1.5] m、寸法は[厚さ0.1, 幅3, 高さ3] m、法線はX方向、摩擦係数は0.8とする。
+
+配置・寸法・力覚設定は`config/contact.yaml`から変更する。追加ツールは使わず、Link 1の既存先端面を接触させる。
+
+#### 起動と操作
+
+ROS Noetic / Gazebo Classic 11と、ルートREADMEの外部依存を用意する。
+`catkin build spinal dracomancer`後、新しいros_libを使用してSpinalとNeuron両方のファームウェアを再ビルド・書込みする。
+ファームウェアの書込みは本環境の起動処理には含めない。
+
+```bash
+source devel/setup.bash
+roslaunch dracomancer contact.launch fc_port:=/dev/ttyUSB0
+```
+
+起動直後は力覚OFF、teleop OFFである。`hardware:=false`を付けると実機へ接続・電流出力せず、
+Dracomancer関節角は既存の`/dracomancer/joint_cmd`から入力できる。
+既存の`haptics.launch`や、別の`bringup.launch`・`teleoperation.launch`を重複起動しない。
+既存のJoystick生入力は`/joystick/raw`を使う。保存済みの2軸校正を利用し、XY移動を行う。
+Z軸がない入力では高度速度を0にして現在高度を保持し、姿勢は既存飛行制御に任せる。
+Joystickの再配信で入力途絶が隠れないよう、生入力と移動ノード双方で100 msを監視する。
+
+別端末から既存のキーボード操作を起動し、`r`でモータ始動、`t`で離陸し、HOVERを確認する。
+
+```bash
+rosrun aerial_robot_base keyboard_command.py _robot_ns:=/dragon
+rostopic pub -1 /dracomancer/teleop_mode std_msgs/Bool 'data: true'
+# 新鮮な関節・接触・時刻データがそろってから有効化する。
+rosservice call /contact_haptics/enable 'data: true'
+```
+
+腕で先端面を壁側へ向け、Joystickで接近して押し付ける。
+Link 4固定は無効であり、形態操作ノードはアンカー用の位置指令を送らない。
+移動ノードは`VEL_MODE`を使用し、未指定の目標位置0を送らない。
+
+```bash
+# 停止・再開とも操作者の明示操作。停止後にデータが復旧しても自動再開しない。
+rosservice call /contact_haptics/enable 'data: false'
+rosservice call /contact_haptics/enable 'data: true'
+```
+
+記録対象は`/dragon/contact/wrench`、`/dracomancer/contact/torque`（±0.2 N·m制限後・電流量子化前の要求トルク）、
+`/dracomancer/contact/enabled`、`/dracomancer/mapping_state`、両機の`joint_states`、`/clock`とする。
+`/dracomancer/servo/target_current`は2.69 mA単位の指令値を`spinal/ServoControlCmd.angles`に格納する既存規約を使う。
+サーボ順は既存`Servo.yaml`のSpinal index 0～6であり、物理DYNAMIXEL IDではない。
+
+#### 再現可能な検証
+
+```bash
+python3 -B robots/dracomancer/test/test_contact.py
+python3 -B robots/dracomancer/test/test_haptics.py
+g++ -std=c++17 aerial_robot_nerve/test/current_guard.cpp -o /tmp/current_guard
+/tmp/current_guard
+# 他のGazebo/ROSセッションを起動していない隔離環境で実行する。
+bash robots/dracomancer/test/gazebo.sh
+# 上の隔離テストを終了してから統合環境を起動する（実機接続なし）。
+roslaunch dracomancer contact.launch hardware:=false headless:=true
+# 別端末で実行。模擬関節入力、離陸、形態変更、機体旋回、Joystick入力で接触させ、終了時に着陸する。
+python3 -B robots/dracomancer/test/teleop_smoke.py --push
+```
+
+Gazeboテストでは、先端面を壁へ1 Nで押す単一剛体を用い、固定関節縮約を含めた反力の座標・符号・重心オフセットのモーメントと物理停止を検証する。
+統合試験は`hardware:=false`の場合だけ動作する。先端が壁を向く形態・機体姿勢にし、他リンクが先に壁へ当たらないよう操縦する必要がある。
+先端面以外の接触は物理反力を生むが、力覚には含めない。
+
+2026-10-27、隔離したROS Noetic / Gazebo 11環境で、依存を含む16パッケージのCatkinビルド、
+数値・入力時刻・ROS停止監視の15テスト、MCU電流ガードのホストテスト、ODEの1 N接触試験が成功した。
+DRAGON統合試験ではHOVER、既存形態写像の6×7 Jacobian、Joystick経由の壁接近、先端反力から非ゼロの力覚要求、
+7軸の±0.2 N·m制限、物理停止時の無効化と明示的再有効化を確認した。
+接触瞬間には大きいODE反力が生じ得るため、要求トルクは上限制限後の値も記録する。
+
+Spinal（H7 v2）とNeuron（F4）の変更6翻訳単位は、生成したros_libとARMコンパイラで構文検査済みである。
+再実行には`arm-none-eabi-g++`を用意し、以下を使う。
+
+```bash
+python3 -B aerial_robot_nerve/test/syntax.py --ros-lib aerial_robot_nerve/spinal/mcu_project/boards/stm32H7_v2/ros_lib
+```
+
+ファームウェアのリンク・書込み、実機のモード読戻し・電流応答・通信断停止、実トルク係数、力覚を含む閉ループ安定性は未確認である。
+上記の試験成功は全形態の飛行安定性や実機出力トルクを保証するものではない。
+
 ---
 
 ## 参考文献

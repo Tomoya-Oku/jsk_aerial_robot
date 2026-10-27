@@ -328,6 +328,10 @@ DRAGONの既存 external wrench estimator を最初に検証し、十分な
 
 これにより、センサ新規開発を避ける。
 
+壁押しシミュレーションではGazebo（ODE）の接触真値を力覚提示に使用する。
+この環境の構築とexternal wrench estimatorの精度検証は分けて実施する。
+接触wrenchは環境からDRAGONに作用する向きとし、リンク座標系およびモーメントの基準点を明示して変換する。
+
 ---
 
 ## 5.7.2 Mapping
@@ -349,6 +353,38 @@ Human–Robot morphology mapping の局所Jacobianを \(M\) とすれば、
 を基本とする。
 
 固定対応写像Aと全体形状写像Bでは \(M\) が異なるため、同じwrench feedback frameworkを利用しつつmappingのみ交換可能な設計とする。
+
+壁押し実験では提示倍率を0.1、Dracomancerの7関節それぞれの提示トルク上限を±0.2 N·mとする。
+これらは実機検証済みの安全値を意味せず、調整可能な初期設定である。
+
+`teleoperation.launch publish_mapping_jacobian:=true`により、形態制御ノードは
+`/dracomancer/mapping_state`（`dracomancer/MappingState`）を出力する。
+行列の行はメッセージ中のDRAGON関節順、列はDracomancer関節順、配列は行優先とする。
+時刻は入力の関節計測時刻を保持し、7関節がそろわない場合やロール基準未取得時には出力しない。
+実機入力の`convert_servo_to_joint_states.py`も、キャッシュの再配信時には最終受信時刻を保持し、未受信・7軸未完備の場合は時刻0で示す。
+局所Jacobianは既存の形態写像をそのまま対称差分で微分し、ロール角によるPitch/Yaw配分と角度制限を含む。
+非微分点では対称差分の値を用いる。飛行可能性ゲート・速度制限の微分は含めないため、この行列だけで双方向系の受動性を保証するものではない。
+既存起動時の挙動を維持するため、この出力は既定では無効とする。
+
+壁押し時の\(J_R\)は、現在の重心位置とFC姿勢を固定して内部6関節を変化させたときのLink 1原点の空間Jacobianとする。
+URDF内の全リンク質量・慣性原点および実測ジンバル角から重心を求め、形態変化に伴う重心移動を差し引く。
+Joystickによる並進・回転は別入力であり、浮遊ベースの6自由度を腕の7関節へ直接割り当てない。
+したがって、壁反力の大きさを全7関節へ一律に返す方式ではなく、その姿勢での局所写像に応じて提示する。
+
+`wall_contact`プラグインは壁とLink 1の接触のうち、既存先端面x=0から1 mm以内の接触点だけを選ぶ。
+Gazeboの固定関節縮約でLink 1が`root`へ統合されるモデルでは、保持されたLink 1の衝突形状から元の先端座標を復元する。
+1 mmはODEの面貫通・数値誤差の許容幅であり、側面・他リンク・ロータとの接触は力覚へ混ぜない。
+ODEのbody1/body2を識別してDRAGON側のwrenchを取得し、重心回りのモーメントをLink 1原点へ移す。
+`/dragon/contact/wrench`（`geometry_msgs/WrenchStamped`）の座標系は`dragon/link1`、モーメント基準点はLink 1原点とする。
+非接触時は0を送信する。反力は既に環境→ロボットの向きなので、力覚変換時に符号を再反転しない。
+
+`contact_haptics.py`は入力・Gazeboの時刻進行をwall clockで監視する。
+Dracomancerの関節時刻にはSpinalが受信した実際のCANサーボ状態の時刻を使い、キャッシュ再配信では更新しない。
+入力が100 ms途絶、物理時刻が100 ms停止、時刻逆行、HOVER終了、teleop解除、無効な行列・関節値のいずれかで0電流を送り、電流heartbeatを停止する。
+Spinalは対象サーボへの電流指令が200 ms途絶すると0電流・Torque OFFへ移る。
+NeuronもCAN電流指令の200 ms途絶を独立に監視するため、Spinal停止時にも停止する。
+両MCUの保護は壁押し用に設定したサーボだけに適用し、従来の位置制御サーボへ自動適用しない。
+復旧後も自動再始動せず、操作者が`/contact_haptics/enable`を明示的に呼び出す。
 
 ---
 
