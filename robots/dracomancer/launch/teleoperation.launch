@@ -86,6 +86,8 @@
                          DRAGON joints; every unmapped joint held unchanged. Default.
                          ("elbow_only" is a backward-compatible alias of distal.) -->
   <arg name="mapping_mode" default="distal"/>
+  <!-- Opt-in local mapping derivative for contact haptics. -->
+  <arg name="publish_mapping_jacobian" default="false"/>
   <!-- mapping_reference: base pose the arm->DRAGON mapping deforms around
        (shared by every mapping_mode).
          straight : map around 0 rad (DRAGON straightens out).
@@ -176,6 +178,8 @@
        POS_VEL_MODE FlightNav whose target_pos is unset (=0), which commands DRAGON
        toward origin/ground (fall). Enable only once that is addressed. -->
   <arg name="enable_position_control" default="false"/>
+  <arg name="position_velocity_only" default="false"/>
+  <arg name="joy_timeout" default="0.0"/>
   <arg name="enable_attitude_control" default="false"/>
   <arg name="enable_joint_angle_control" default="true"/>
   <!-- teleop_mode: false holds startup_pose; true maps Dracomancer arm to DRAGON.
@@ -236,6 +240,7 @@
     <rosparam param="axis_indices">[0, 1]</rosparam>
     <rosparam param="invert_axes">[]</rosparam>
     <param name="rate" value="40"/>
+    <param name="raw_timeout" value="$(arg joy_timeout)"/>
     <param name="center_duration" value="2.0"/>
     <param name="range_duration" value="5.0"/>
     <param name="deadzone" value="0.05"/>
@@ -252,6 +257,8 @@
         name="$(arg device_ns)_control_position"
         output="screen"
         if="$(arg enable_position_control)">
+    <param name="velocity_only" value="$(arg position_velocity_only)"/>
+    <param name="joy_timeout" value="$(arg joy_timeout)"/>
     <param name="device_ns" value="/$(arg device_ns)"/>
     <param name="robot_name" value="$(arg robot_ns)"/>
     <param name="rate" value="40.0"/>
@@ -314,6 +321,7 @@
     <param name="teleop_mode" value="$(arg teleop_mode)"/>
     <param name="mode_topic" value="$(arg mode_topic)"/>
     <param name="mapping_mode" value="$(arg mapping_mode)"/>
+    <param name="publish_mapping_jacobian" value="$(arg publish_mapping_jacobian)"/>
     <param name="mapping_reference" value="$(arg mapping_reference)"/>
     <param name="joint_pairing_scale" value="$(arg joint_pairing_scale)"/>
     <param name="capture_roll_neutral" value="$(arg capture_roll_neutral)"/>

@@ -3,6 +3,7 @@
 
 import os
 import sys
+import time
 import yaml
 import rospy
 from std_msgs.msg import Int16MultiArray, Float32MultiArray
@@ -28,6 +29,8 @@ class JoystickCalibPublisher:
         self.yaml_path = rospy.get_param("~yaml_path", "../config/joystick_calibration.yaml")
         ## Buffers
         self.latest_raw = None
+        self.raw_timeout = float(rospy.get_param("~raw_timeout", 0.0))
+        self.last_raw_time = None
         self.center = None
         self.min_vals = None
         self.max_vals = None
@@ -38,6 +41,7 @@ class JoystickCalibPublisher:
 
     def cb_raw(self, msg):
         self.latest_raw = list(msg.data)
+        self.last_raw_time = time.monotonic()
 
     def wait_for_first_message(self, timeout_sec=5.0):
         rospy.loginfo("Waiting for joystick message on %s ...", self.js_raw_topic)
@@ -212,7 +216,9 @@ class JoystickCalibPublisher:
 
         rate = rospy.Rate(self.rate_hz)
         while not rospy.is_shutdown():
-            if self.latest_raw is None:
+            if (self.latest_raw is None or
+                    (self.raw_timeout > 0 and (self.last_raw_time is None or
+                     time.monotonic() - self.last_raw_time > self.raw_timeout))):
                 rate.sleep()
                 continue
 

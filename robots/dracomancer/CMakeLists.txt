@@ -28,8 +28,13 @@ find_package(catkin REQUIRED COMPONENTS
 
 find_package(Eigen3 REQUIRED)
 find_package(NLopt REQUIRED)
+find_package(gazebo REQUIRED)
 
-# サービス定義
+# メッセージ・サービス定義
+add_message_files(
+  FILES
+  MappingState.msg
+)
 add_service_files(
   FILES
   ShapeFeasibility.srv
@@ -56,7 +61,15 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIRS}
   ${NLOPT_INCLUDE_DIRS}
+  ${GAZEBO_INCLUDE_DIRS}
 )
+
+add_library(wall_contact SHARED src/wall_contact.cpp)
+target_link_libraries(wall_contact ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
+install(TARGETS wall_contact LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
+
+catkin_install_python(PROGRAMS scripts/control/wall.py scripts/control/contact_haptics.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
 # 依存リンク
 add_library(dracomancer_controllib src/control/dracomancer_controller.cpp src/control/dracomancer_optimizer.cpp)
@@ -81,3 +94,8 @@ install(DIRECTORY config plugins launch scripts
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
   USE_SOURCE_PERMISSIONS
 )
+
+if(CATKIN_ENABLE_TESTING)
+  catkin_add_nosetests(test/test_contact.py)
+  catkin_add_nosetests(test/test_haptics.py)
+endif()

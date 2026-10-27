@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import math
+import time
 import rospy
 import numpy as np
 from std_msgs.msg import Bool, Float32MultiArray, UInt8, Empty
@@ -93,6 +94,8 @@ class ControlPose:
         self.imu_topic = rospy.get_param("~imu_topic", "/dracomancer/imu")
         self.rate_hz = rospy.get_param("~rate", 40.0)
         self.wait_after_hover = rospy.get_param("~wait_after_hover", 3.0)
+        self.joy_timeout = float(rospy.get_param("~joy_timeout", 0.0))
+        self.last_joy_time = None
 
         self.teleop_mode = self.parse_bool_param(rospy.get_param("~teleop_mode", False), False)
         self.mode_topic = rospy.get_param("~mode_topic", self.device_ns + "/teleop_mode")
@@ -123,6 +126,14 @@ class ControlPose:
         self.flight_nav.yaw_nav_mode = FlightNav.POS_VEL_MODE
         self.flight_nav.roll_nav_mode = FlightNav.POS_VEL_MODE
         self.flight_nav.pitch_nav_mode = FlightNav.POS_VEL_MODE
+        if rospy.get_param("~velocity_only", False):
+            # VEL_MODE integrates velocity into the existing hover target in
+            # FlightNavigator. POS_VEL_MODE would overwrite position with zero.
+            self.flight_nav.pos_xy_nav_mode = FlightNav.VEL_MODE
+            self.flight_nav.pos_z_nav_mode = FlightNav.VEL_MODE
+            self.flight_nav.yaw_nav_mode = FlightNav.NO_NAVIGATION
+            self.flight_nav.roll_nav_mode = FlightNav.NO_NAVIGATION
+            self.flight_nav.pitch_nav_mode = FlightNav.NO_NAVIGATION
         self.target_att_nav = Vector3Stamped()
 
         # Robot's Pose Limitation
@@ -215,9 +226,8 @@ class ControlPose:
             self.latest_axes = None
 
     def robot_flight_state_cb(self, msg):
-        # aerial_robot commonly uses HOVER_STATE=5 and LAND_STATE=6, but keep
-        # this node permissive because enum values differ between branches.
-        self.robot_hovering = int(msg.data) >= 4
+        # Only HOVER permits joystick motion; landing must not accept motion.
+        self.robot_hovering = int(msg.data) == 5
         self.robot_landing = int(msg.data) == 6
         if not self.robot_hovering:
             self.wait_flag = False
@@ -270,6 +280,8 @@ class ControlPose:
                 self.warned_missing_z_axis = True
             return 0.0
         v = float(data[idx])
+        if not math.isfinite(v):
+            return 0.0
         if idx == 0:
             v *= self.scale_x
         elif idx == 1:
@@ -280,6 +292,7 @@ class ControlPose:
 
     def joystick_calib_cb(self, msg):
         self.latest_axes = list(msg.data)
+        self.last_joy_time = time.monotonic()
 
     def rotate_command(self, body_vec):
         """Rotate the joystick body command into the world frame using the
@@ -301,7 +314,9 @@ class ControlPose:
         return quat_rotate_vec(q_rel, body_vec)
 
     def make_nav_msg(self):
-        if self.latest_axes is None:
+        if (self.latest_axes is None or
+                (self.joy_timeout > 0 and (self.last_joy_time is None or
+                 time.monotonic() - self.last_joy_time > self.joy_timeout))):
             self.flight_nav.target_vel_x = 0.0
             self.flight_nav.target_vel_y = 0.0
             self.flight_nav.target_vel_z = 0.0

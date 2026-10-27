@@ -1,0 +1,38 @@
+<launch>
+  <!-- Real Dracomancer, simulated DRAGON. No actuator is armed at startup. -->
+  <arg name="hardware" default="true"/>
+  <arg name="headless" default="false"/>
+  <arg name="fc_port" default="/dev/ttyUSB0"/>
+  <arg name="config" default="$(find dracomancer)/config/contact.yaml"/>
+  <arg name="teleop_mode" default="false"/>
+
+  <rosparam file="$(arg config)" command="load" ns="dracomancer/contact"/>
+  <!-- Catkin library paths cover both linked devel and install workspaces. -->
+  <env name="GAZEBO_PLUGIN_PATH" value="$(optenv LD_LIBRARY_PATH):$(optenv GAZEBO_PLUGIN_PATH)"/>
+  <include file="$(find dragon)/launch/bringup.launch">
+    <arg name="real_machine" value="false"/>
+    <arg name="simulation" value="true"/>
+    <arg name="mujoco" value="false"/>
+    <arg name="headless" value="$(arg headless)"/>
+  </include>
+  <include file="$(find dracomancer)/launch/bringup.launch">
+    <arg name="rm" value="$(arg hardware)"/>
+    <arg name="sim" value="false"/>
+    <arg name="headless" value="true"/>
+    <arg name="fc_serial_port" value="$(arg fc_port)"/>
+    <arg name="teleop_mode" value="false"/>
+  </include>
+  <include file="$(find dracomancer)/launch/teleoperation.launch">
+    <arg name="teleop_mode" value="$(arg teleop_mode)"/>
+    <arg name="enable_link4_anchor" value="false"/>
+    <arg name="enable_position_control" value="true"/>
+    <arg name="position_velocity_only" value="true"/>
+    <arg name="joy_timeout" value="0.1"/>
+    <arg name="publish_mapping_jacobian" value="true"/>
+  </include>
+  <node pkg="dracomancer" type="wall.py" name="contact_wall" output="screen"/>
+  <node pkg="dracomancer" type="contact_haptics.py" name="contact_haptics" output="screen">
+    <param name="hardware" value="$(arg hardware)"/>
+    <param name="teleop_mode" value="$(arg teleop_mode)"/>
+  </node>
+</launch>
