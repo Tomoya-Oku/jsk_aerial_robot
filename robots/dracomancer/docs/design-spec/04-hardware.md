@@ -163,9 +163,11 @@ Goal Currentの単位は2.69 mAであり [9]、電流上限は提示トルク上
 初期設定の電流上限は41単位（約110.3 mA、換算上約0.196 N·m）となる。
 これはトルクセンサで測った実出力の保証値ではない。
 
-モード設定はSpinalの新規`haptic_config`サービスからNeuronへ要求し、型番1020（XM430-W350）、Operating Mode=0、Current Limitの読戻しを確認してから有効化する。
-モード変更前にTorque OFF・Goal Current=0とし、変更でGoal Currentがリセットされるため変更後にも0を書き込む。
-Current LimitとOperating ModeはEEPROM設定であり、実験終了後も残る。既に一致する値は再書込みしない。
+実機サーボは事前にOperating Mode=0とCurrent Limitを設定する。初期設定ではCurrent Limit=41を使用する。
+本ノードはサーボ設定の変更・読戻しを行わず、既存の電流指令・Torque Enableトピックを使用する。
+Operating Mode変更時はTorque OFFで設定し、Goal Current=0を確認してから有効化する [9]。
+Current LimitとOperating ModeはEEPROM設定であり、実験終了後も残る。
+Spinal / Neuronのファームウェア変更は不要であり、MCU側の追加タイムアウト機能は使用しない。
 本実装はSpinalのCAN接続先Neuron経由を対象とし、Spinalのdirect-servo経路は対象外とする。
 
 ---

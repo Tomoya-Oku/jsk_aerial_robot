@@ -379,12 +379,13 @@ ODEのbody1/body2を識別してDRAGON側のwrenchを取得し、重心回りの
 非接触時は0を送信する。反力は既に環境→ロボットの向きなので、力覚変換時に符号を再反転しない。
 
 `contact_haptics.py`は入力・Gazeboの時刻進行をwall clockで監視する。
-Dracomancerの関節時刻にはSpinalが受信した実際のCANサーボ状態の時刻を使い、キャッシュ再配信では更新しない。
-入力が100 ms途絶、物理時刻が100 ms停止、時刻逆行、HOVER終了、teleop解除、無効な行列・関節値のいずれかで0電流を送り、電流heartbeatを停止する。
-Spinalは対象サーボへの電流指令が200 ms途絶すると0電流・Torque OFFへ移る。
-NeuronもCAN電流指令の200 ms途絶を独立に監視するため、Spinal停止時にも停止する。
-両MCUの保護は壁押し用に設定したサーボだけに適用し、従来の位置制御サーボへ自動適用しない。
-復旧後も自動再始動せず、操作者が`/contact_haptics/enable`を明示的に呼び出す。
+Dracomancerの関節時刻には既存の`ServoStates.stamp`を使い、ROS側のキャッシュ再配信では更新しない。
+入力が100 ms途絶、物理時刻が100 ms停止、時刻逆行、HOVER終了、teleop解除、無効な行列・関節値のいずれかで、
+ROSノードが既存の`/dracomancer/servo/target_current`へ0電流、`/dracomancer/servo/torque_enable`へTorque OFFを送る。
+復旧後もROSノードは自動再開せず、操作者が`/contact_haptics/enable`を明示的に呼び出す。
+有効化時は0電流とTorque ONを既存トピックへ送り、Spinalへの新規設定サービスは使わない。
+2026-10-28の仕様変更により、Spinal / Neuronの追加200 msタイムアウトと設定プロトコルを削除した。
+PCプロセス停止・通信断時にMCUが最終指令を自動解除する機能、およびCAN計測時刻の追加監視は本実装に含めない。
 
 ---
 

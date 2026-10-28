@@ -271,8 +271,9 @@ Haptic experimentをmapping比較と全factorialに組み合わせない。
 #### 起動と操作
 
 ROS Noetic / Gazebo Classic 11と、ルートREADMEの外部依存を用意する。
-`catkin build spinal dracomancer`後、新しいros_libを使用してSpinalとNeuron両方のファームウェアを再ビルド・書込みする。
-ファームウェアの書込みは本環境の起動処理には含めない。
+`catkin build dracomancer`を実行する。Spinal / Neuronの再書込みとros_libの更新は不要である。
+実機使用前に、7台のサーボをCurrent Control Mode（Operating Mode=0）、Current Limit=41、Goal Current=0に設定する。
+サーボ設定の詳細は[4.6 Actuator / Sensor](04-hardware.md#46-actuator--sensor)に従う。
 
 ```bash
 source devel/setup.bash
@@ -315,8 +316,6 @@ rosservice call /contact_haptics/enable 'data: true'
 ```bash
 python3 -B robots/dracomancer/test/test_contact.py
 python3 -B robots/dracomancer/test/test_haptics.py
-g++ -std=c++17 aerial_robot_nerve/test/current_guard.cpp -o /tmp/current_guard
-/tmp/current_guard
 # 他のGazebo/ROSセッションを起動していない隔離環境で実行する。
 bash robots/dracomancer/test/gazebo.sh
 # 上の隔離テストを終了してから統合環境を起動する（実機接続なし）。
@@ -330,19 +329,19 @@ Gazeboテストでは、先端面を壁へ1 Nで押す単一剛体を用い、�
 先端面以外の接触は物理反力を生むが、力覚には含めない。
 
 2026-10-27、隔離したROS Noetic / Gazebo 11環境で、依存を含む16パッケージのCatkinビルド、
-数値・入力時刻・ROS停止監視の15テスト、MCU電流ガードのホストテスト、ODEの1 N接触試験が成功した。
+数値・入力時刻・ROS停止監視の15テスト、ODEの1 N接触試験が成功した。
 DRAGON統合試験ではHOVER、既存形態写像の6×7 Jacobian、Joystick経由の壁接近、先端反力から非ゼロの力覚要求、
 7軸の±0.2 N·m制限、物理停止時の無効化と明示的再有効化を確認した。
 接触瞬間には大きいODE反力が生じ得るため、要求トルクは上限制限後の値も記録する。
 
-Spinal（H7 v2）とNeuron（F4）の変更6翻訳単位は、生成したros_libとARMコンパイラで構文検査済みである。
-再実行には`arm-none-eabi-g++`を用意し、以下を使う。
-
-```bash
-python3 -B aerial_robot_nerve/test/syntax.py --ros-lib aerial_robot_nerve/spinal/mcu_project/boards/stm32H7_v2/ros_lib
-```
-
-ファームウェアのリンク・書込み、実機のモード読戻し・電流応答・通信断停止、実トルク係数、力覚を含む閉ループ安定性は未確認である。
+2026-10-28の変更ではファームウェア追加機能を削除し、既存の電流指令・Torque Enableトピックに統一した。
+新規サービスを含まないSpinalメッセージで、数値・入力監視・有効化・電流制限とメッセージ直列化を含む18テストが成功した。
+同構成で依存を含む16パッケージのCatkin再ビルドも成功した。
+飛行ノード再起動後の統合試験ではHOVER・力覚有効化・物理停止時の無効化・明示的再有効化を確認した。
+一方、全ノード同時起動直後の離陸試験では`/dragon/aerial_robot_base_node`が終了コード-11で終了する問題を再現した。
+関節制御とIMU校正の待機だけでは解消せず、起動直後の飛行初期化については未解決である。
+PC停止・通信断に対するMCU側の追加タイムアウトは使用しない。
+実機の電流応答・実トルク係数、力覚を含む閉ループ安定性は未確認である。
 上記の試験成功は全形態の飛行安定性や実機出力トルクを保証するものではない。
 
 ---

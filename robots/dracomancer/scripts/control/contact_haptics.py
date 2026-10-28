@@ -12,8 +12,7 @@ from sensor_msgs.msg import JointState
 from rosgraph_msgs.msg import Clock
 from std_msgs.msg import Bool, UInt8
 from std_srvs.srv import SetBool, SetBoolResponse
-from spinal.msg import ServoControlCmd
-from spinal.srv import HapticConfig, HapticConfigRequest
+from spinal.msg import ServoControlCmd, ServoTorqueCmd
 from dracomancer.msg import MappingState
 
 # Works both from source and through catkin's executable relay/install tree.
@@ -48,16 +47,15 @@ class ContactHaptics:
             raise ValueError("current limit outside XM430 range")
         self.model = None
         self.lock = threading.RLock()
-        self.transition = threading.Lock()
         self.inputs, self.received, self.advanced = {}, {}, {}
         self.joints, self.joint_times = {}, {}
         self.mode, self.flight = bool(rospy.get_param("~teleop_mode", False)), None
-        self.active = self.arming = False
+        self.active = False
         self.robot_names, self.device_names = [], []
         self.current_pub = rospy.Publisher("/dracomancer/servo/target_current", ServoControlCmd, queue_size=1)
+        self.torque_pub = rospy.Publisher("/dracomancer/servo/torque_enable", ServoTorqueCmd, queue_size=1)
         self.debug_pub = rospy.Publisher("/dracomancer/contact/torque", JointState, queue_size=1)
         self.enabled_pub = rospy.Publisher("/dracomancer/contact/enabled", Bool, queue_size=1, latch=True)
-        self.config = rospy.ServiceProxy("/dracomancer/haptic_config", HapticConfig)
         rospy.Subscriber("/dragon/contact/wrench", WrenchStamped, lambda m: self.store("wrench", m, m.header.stamp), queue_size=1)
         rospy.Subscriber("/dracomancer/mapping_state", MappingState, lambda m: self.store("mapping", m, m.header.stamp), queue_size=1)
         rospy.Subscriber("/clock", Clock, lambda m: self.store("clock", m, m.clock), queue_size=1)
@@ -116,75 +114,44 @@ class ContactHaptics:
                 return False
         return True
 
-    def firmware(self, command):
-        return self.config(command=command, indices=self.ids,
-                           timeout_ms=int(self.settings["firmware_timeout_ms"]),
-                           current_limits=self.current_limits.tolist())
-
     def enable(self, req):
-        with self.transition:
+        with self.lock:
             if not req.data:
-                with self.lock:
-                    self.trip("operator disabled", force=True)
-                if self.hardware:
-                    try:
-                        self.firmware(HapticConfigRequest.DISARM)
-                    except rospy.ServiceException:
-                        pass  # The 200 ms MCU watchdog still runs without ROS.
+                self.trip("operator disabled", force=True)
                 return SetBoolResponse(True, "disabled; explicit enable required to restart")
-            with self.lock:
-                if self.active:
-                    return SetBoolResponse(True, "already enabled")
-                if not self.ready():
-                    return SetBoolResponse(False, "need fresh clock/contact/mapping/joints, HOVER and teleop_mode=true")
-                self.arming = True
-            try:
-                if self.hardware:
-                    response = self.firmware(HapticConfigRequest.CONFIGURE)
-                    if not response.success:
-                        raise ValueError("firmware rejected configuration")
-                    self.wait_firmware("ready")
-                    with self.lock:
-                        if not self.arming or not self.ready():
-                            raise ValueError("inputs expired during configuration")
-                    if not self.firmware(HapticConfigRequest.ARM).success:
-                        raise ValueError("firmware rejected ARM")
-                    self.wait_firmware("armed")
-                with self.lock:
-                    if not self.arming or not self.ready():
-                        raise ValueError("inputs expired during ARM")
-                    self.active, self.arming = True, False
-                return SetBoolResponse(True, "enabled" if self.hardware else "dry-run enabled; no current output")
-            except (rospy.ServiceException, ValueError) as error:
-                with self.lock:
-                    self.trip(str(error), force=True)
-                return SetBoolResponse(False, str(error))
-
-    def wait_firmware(self, field):
-        deadline = time.monotonic() + 3.0
-        while time.monotonic() < deadline and not rospy.is_shutdown():
-            with self.lock:
-                if not self.arming or not self.ready():
-                    raise ValueError("inputs expired during firmware handshake")
-            state = self.firmware(HapticConfigRequest.STATUS)
-            if state.success and getattr(state, field) and not state.fault:
-                return
-            time.sleep(0.02)
-        raise ValueError("firmware readback timeout: " + field)
+            if self.active:
+                return SetBoolResponse(True, "already enabled")
+            if not self.ready():
+                return SetBoolResponse(False, "need fresh clock/contact/mapping/joints, HOVER and teleop_mode=true")
+            if self.hardware and (not self.current_pub.get_num_connections() or
+                                  not self.torque_pub.get_num_connections()):
+                return SetBoolResponse(False, "need existing Spinal current and torque subscribers")
+            # Servo Operating Mode=0 is configured before launch. Use only the
+            # legacy current/torque topics; no firmware configuration RPC.
+            self.publish_current([0] * 7)
+            self.publish_torque(True)
+            self.active = True
+            return SetBoolResponse(True, "enabled" if self.hardware else "dry-run enabled; no current output")
 
     def publish_current(self, units):
         if self.hardware:
             msg = ServoControlCmd()
-            msg.stamp = rospy.Time.now()
             msg.index, msg.angles = self.ids, [int(v) for v in units]
             self.current_pub.publish(msg)
 
+    def publish_torque(self, enabled):
+        if self.hardware:
+            msg = ServoTorqueCmd()
+            msg.index, msg.torque_enable = self.ids, [int(enabled)] * 7
+            self.torque_pub.publish(msg)
+
     def trip(self, reason, force=False):
-        if self.active or self.arming or force:
-            self.active = self.arming = False
+        if self.active or force:
+            self.active = False
             self.publish_current([0] * 7)
-            # Stop the current heartbeat too. Spinal then latches torque OFF;
-            # subsequent healthy inputs cannot re-enable either MCU or this node.
+            self.publish_torque(False)
+            # This stop is executed by ROS only; legacy firmware has no added
+            # command watchdog. Healthy inputs do not re-enable this node.
             rospy.logwarn("contact haptics stopped: %s", reason)
 
     def torque(self):
@@ -212,13 +179,12 @@ class ContactHaptics:
     def tick(self):
         with self.lock:
             torque = np.zeros(7)
-            if self.active or self.arming:
+            if self.active:
                 if not self.ready():
                     self.trip("input/physics timeout or teleop/hover ended")
                 else:
                     try:
-                        if self.active:
-                            torque = self.torque()
+                        torque = self.torque()
                         units = np.rint(self.signs * torque / self.coefficients / 0.00269)
                         self.publish_current(np.clip(units, -self.current_limits, self.current_limits))
                     except (ValueError, KeyError, np.linalg.LinAlgError) as error:
