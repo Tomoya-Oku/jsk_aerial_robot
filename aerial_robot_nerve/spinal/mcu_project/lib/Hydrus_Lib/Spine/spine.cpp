@@ -216,7 +216,7 @@ namespace Spine
     /* set IMU weights */
     // no fusion
     imu_weight_[0] = 1.0;
-    for (uint i = 1; i < imu_weight_.size(); i++) imu_weight_[i] = 0.0;
+    for (unsigned int i = 1; i < imu_weight_.size(); i++) imu_weight_[i] = 0.0;
 
     for (int i = 0; i < slave_num_; i++) {
       HAL_Delay(100);

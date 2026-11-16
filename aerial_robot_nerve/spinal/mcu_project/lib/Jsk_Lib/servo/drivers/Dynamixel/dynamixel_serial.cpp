@@ -19,6 +19,8 @@ void DynamixelSerial::init(UART_HandleTypeDef* huart, osMutexId* mutex)
 	huart_ = huart;
   mutex_ = mutex;
 	servo_num_ = 0;
+  current_pending_=current_busy_=current_done_=current_cancel_=false;
+  current_generation_=0;
 	set_pos_tick_ = 0;
 	get_pos_tick_ = 0;
 	get_load_tick_ = 0;
@@ -78,6 +80,16 @@ void DynamixelSerial::init(UART_HandleTypeDef* huart, osMutexId* mutex)
 	getCurrentLimit();
 	getPositionGains();
 	getProfileVelocity();
+
+  // Mode 0 persists in EEPROM across reboot; block legacy auto-enable at startup.
+  for (unsigned i=0; i<servo_num_; ++i) {
+    uint32_t mode=0;
+    if (!currentRead(servo_[i].id_,CTRL_OPERATING_MODE,1,mode) || mode==0) {
+      current_[i].managed=true;
+      CurrentBus bus(*this,servo_[i].id_);
+      current_[i].stop(bus);
+    }
+  }
 
 
         //initialize encoder: only can support one encoder
@@ -211,11 +223,13 @@ void DynamixelSerial::reboot(uint8_t servo_index)
 
 void DynamixelSerial::setTorque(uint8_t servo_index)
 {
+  if (currentManaged(servo_index)) return;
   instruction_buffer_.push(std::make_pair(INST_SET_TORQUE, servo_index));
 }
 
 void DynamixelSerial::setTorqueFromPresetnPos(uint8_t servo_index)
 {
+  if (currentManaged(servo_index)) return;
   ServoData& s = servo_[servo_index];
   if(s.torque_enable_) s.goal_position_ = s.present_position_;
   instruction_buffer_.push(std::make_pair(INST_SET_TORQUE, servo_index));
@@ -340,6 +354,8 @@ void DynamixelSerial::update()
     }
   }
   read_status_packet_flag_ = false;
+
+  currentUpdate();
 
   uint32_t current_time = HAL_GetTick();
 
@@ -563,7 +579,7 @@ void DynamixelSerial::update()
 }
 
 /* Transmit instruction packet to Dynamixel */
-void DynamixelSerial::transmitInstructionPacket(uint8_t id, uint16_t len, uint8_t instruction, uint8_t* parameters)
+bool DynamixelSerial::transmitInstructionPacket(uint8_t id, uint16_t len, uint8_t instruction, uint8_t* parameters)
 {
   uint8_t transmit_data[INSTRUCTION_PACKET_SIZE];
   /* headers */
@@ -620,7 +636,7 @@ void DynamixelSerial::transmitInstructionPacket(uint8_t id, uint16_t len, uint8_
   /* send data */
   if(direct_ttl_mode_)  HAL_HalfDuplex_EnableTransmitter(huart_);
 
-  HAL_UART_Transmit(huart_, transmit_data, transmit_data_index, 10); //timeout: 10 ms. Although we found 2 ms is enough OK for our case by oscilloscope. Large value is better for UART async task in RTOS.
+  return HAL_UART_Transmit(huart_, transmit_data, transmit_data_index, 10) == HAL_OK; //timeout: 10 ms. Although we found 2 ms is enough OK for our case by oscilloscope. Large value is better for UART async task in RTOS.
 }
 /* Receive status packet to Dynamixel */
 int8_t DynamixelSerial::readStatusPacket(uint8_t status_packet_instruction)
@@ -765,7 +781,7 @@ int8_t DynamixelSerial::readStatusPacket(uint8_t status_packet_instruction)
 	/* read success */
 	switch (status_packet_instruction) {
 	case INST_PING:
-		servo_[servo_num_++].id_ = servo_id;
+		if (servo_num_ < MAX_SERVO_NUM) servo_[servo_num_++].id_ = servo_id;
 	    return 0;
 	case INST_GET_PRESENT_POS:
 	{
@@ -1279,4 +1295,147 @@ HAL_StatusTypeDef DynamixelSerial::read(uint8_t* data,  uint32_t timeout)
           return HAL_TIMEOUT;
         }
     }
+}
+
+// Direct UART current-control extension. Only the servo worker performs bus I/O.
+bool DynamixelSerial::currentRead(uint8_t id, uint16_t address, uint8_t size, uint32_t& value)
+{
+  uint8_t byte;
+  for (unsigned i=0; i<RX_BUFFER_SIZE && read(&byte,0)==HAL_OK; ++i) {}
+  cmdRead(id,address,size);
+  if (direct_ttl_mode_) HAL_HalfDuplex_EnableReceiver(huart_);
+  const uint8_t header[4]={255,255,253,0};
+  uint8_t packet[32];
+  unsigned count=0, total=0;
+  uint32_t start=HAL_GetTick();
+  while (static_cast<uint32_t>(HAL_GetTick()-start)<8) {
+    if (read(&byte,0)!=HAL_OK) continue;
+    if (count<4) {
+      if (byte==header[count]) packet[count++]=byte;
+      else { count=(byte==255) ? 1 : 0; packet[0]=255; }
+      continue;
+    }
+    packet[count++]=byte;
+    if (count==7) {
+      total=7+(packet[5] | (packet[6]<<8));
+      if (total<11 || total>sizeof(packet)) { count=0; continue; }
+    }
+    if (total && count==total) {
+      if (spinal_current::decode(packet,count,id,size,value)) return true;
+      count=total=0;
+    }
+  }
+  return false;
+}
+
+bool DynamixelSerial::currentWrite(uint8_t id, uint16_t address, uint8_t size, uint32_t value)
+{
+  if (size<1 || size>4) return false;
+  uint8_t data[9]={static_cast<uint8_t>(address),static_cast<uint8_t>(address>>8),size,0,id};
+  for (unsigned i=0; i<size; ++i) data[5+i]=static_cast<uint8_t>(value>>(8*i));
+  // Broadcast SyncWrite has no status reply; critical operations use Read verification.
+  return transmitInstructionPacket(DX_BROADCAST_ID,8+size,COMMAND_SYNC_WRITE,data);
+}
+
+bool DynamixelSerial::currentManaged(uint8_t index) const
+{
+  return index<servo_num_ && current_[index].managed;
+}
+
+bool DynamixelSerial::currentCommand(uint8_t index, uint32_t token, uint32_t sequence, int16_t raw)
+{
+  if (index>=servo_num_) return false;
+  if (mutex_!=NULL && osMutexWait(*mutex_,100)!=osOK) return false;
+  current_commands_[index].token=token;
+  current_commands_[index].sequence=sequence;
+  current_commands_[index].raw=raw;
+  current_commands_[index].pending=true;
+  if (mutex_!=NULL) osMutexRelease(*mutex_);
+  return true; // Acceptance and all bus I/O happen in the servo worker.
+}
+
+bool DynamixelSerial::currentRequest(uint8_t index, uint8_t id, uint8_t action,
+                                    uint32_t token, uint16_t limit, CurrentResult& result)
+{
+  result=CurrentResult();
+  if (index>=servo_num_ || id!=servo_[index].id_ || action>spinal_current::RESTORE) return false;
+  if (mutex_!=NULL && osMutexWait(*mutex_,100)!=osOK) return false;
+  if (current_pending_ || current_busy_) {
+    if (mutex_!=NULL) osMutexRelease(*mutex_);
+    return false;
+  }
+  current_index_=index; current_action_=action; current_token_=token; current_limit_=limit;
+  current_done_=false;
+  __DMB();
+  current_pending_=true;
+  if (mutex_!=NULL) osMutexRelease(*mutex_);
+  if (mutex_==NULL) currentUpdate();
+  const uint32_t start=HAL_GetTick();
+  while (!current_done_ && static_cast<uint32_t>(HAL_GetTick()-start)<1200) osDelay(1);
+  if (!current_done_) {
+    // Worker will cancel before ARM if a service request has timed out.
+    current_cancel_=true;
+    return false;
+  }
+  __DMB();
+  result=current_result_;
+  return result.success;
+}
+
+void DynamixelSerial::currentUpdate()
+{
+  if (mutex_!=NULL && osMutexWait(*mutex_,100)!=osOK) return;
+  if (current_pending_) {
+    current_pending_=false; current_busy_=true;
+    const uint8_t index=current_index_;
+    auto& session=current_[index];
+    CurrentBus bus(*this,servo_[index].id_);
+    bool success=false;
+    if (!current_cancel_) {
+      switch (current_action_) {
+      case spinal_current::QUERY: success=session.inspect(bus); break;
+      case spinal_current::PREPARE:
+        if (++current_generation_==0) ++current_generation_;
+        // A host nonce prevents token reuse across Spinal power cycles.
+        if (current_token_!=0) {
+          uint32_t fresh=current_token_^(current_generation_*0x9e3779b9u);
+          if (!fresh) fresh=0xffffffffu;
+          success=session.prepare(bus,current_limit_,fresh);
+        } else session.status=spinal_current::DENIED;
+        break;
+      case spinal_current::ARM: success=session.arm(bus,current_token_); break;
+      case spinal_current::STOP:
+        if (session.managed) success=session.stop(bus) && session.inspect(bus);
+        else session.status=spinal_current::DENIED;
+        break;
+      case spinal_current::RESTORE: success=session.restore(bus); break;
+      }
+    }
+    if (current_cancel_) { session.stop(bus); success=false; }
+    current_result_.success=success;
+    current_result_.status=session.status;
+    current_result_.snapshot=session.snapshot;
+    current_result_.token=session.token;
+    servo_[index].torque_enable_=session.armed;
+    if (success && current_action_==spinal_current::RESTORE) {
+      // Refresh legacy position command after the mode change's encoder reset.
+      servo_[index].setPresentPosition(session.snapshot.position);
+      servo_[index].goal_position_=session.snapshot.position;
+    }
+    current_cancel_=false; current_busy_=false;
+    __DMB();
+    current_done_=true;
+  }
+  for (unsigned i=0; i<servo_num_; ++i) {
+    if (!current_[i].managed) continue;
+    CurrentBus bus(*this,servo_[i].id_);
+    if (current_commands_[i].pending) {
+      const auto command=current_commands_[i];
+      current_commands_[i].pending=false;
+      current_[i].command(bus,command.token,command.sequence,command.raw);
+    }
+    current_[i].tick(bus);
+    servo_[i].torque_enable_=current_[i].armed;
+  }
+  if (mutex_!=NULL) osMutexRelease(*mutex_);
 }

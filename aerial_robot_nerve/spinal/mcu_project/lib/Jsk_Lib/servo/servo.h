@@ -13,6 +13,8 @@ includes ------------------------------------------------------------------*/
 #include "drivers/kondo_servo/kondo_servo.h"
 #include <ros.h>
 #include <spinal/ServoControlCmd.h>
+#include <spinal/DirectServoCurrent.h>
+#include <spinal/DirectServoMode.h>
 #include <spinal/ServoStates.h>
 #include <spinal/ServoTorqueStates.h>
 #include <spinal/ServoTorqueCmd.h>
@@ -38,6 +40,8 @@ public:
   DirectServo():
     servo_ctrl_sub_("servo/target_states", &DirectServo::servoControlCallback,this),
     servo_torque_ctrl_sub_("servo/torque_enable", &DirectServo::servoTorqueControlCallback,this),
+    direct_current_sub_("servo/direct_current", &DirectServo::directCurrentCallback,this),
+    direct_mode_srv_("direct_servo_mode", &DirectServo::directModeCallback,this),
     joint_profiles_sub_("joint_profiles", &DirectServo::jointProfilesCallback,this),
     servo_state_pub_("servo/states", &servo_state_msg_),
     servo_torque_state_pub_("servo/torque_states", &servo_torque_state_msg_),
@@ -70,6 +74,10 @@ private:
   ros::Subscriber<spinal::ServoControlCmd, DirectServo> servo_ctrl_sub_;
   ros::Subscriber<spinal::ServoTorqueCmd, DirectServo> servo_torque_ctrl_sub_;
   ros::Subscriber<spinal::JointProfiles, DirectServo> joint_profiles_sub_;
+  ros::Subscriber<spinal::DirectServoCurrent,DirectServo> direct_current_sub_;
+  ros::ServiceServer<spinal::DirectServoMode::Request,spinal::DirectServoMode::Response,DirectServo> direct_mode_srv_;
+  void directCurrentCallback(const spinal::DirectServoCurrent& msg);
+  void directModeCallback(const spinal::DirectServoMode::Request& req,spinal::DirectServoMode::Response& res);
   ros::Publisher servo_state_pub_;
   ros::Publisher servo_torque_state_pub_;
 

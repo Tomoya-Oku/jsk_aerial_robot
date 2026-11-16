@@ -12,6 +12,8 @@
 #ifndef Base_Servo_driver_h
 #define Base_Servo_driver_h
 
+#include <array>
+
 #define MAX_SERVO_NUM 10
 
 class ServoData {

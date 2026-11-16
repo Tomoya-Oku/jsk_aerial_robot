@@ -41,6 +41,10 @@ bool DirectServo::init(UART_HandleTypeDef* huart,  ros::NodeHandle* nh, osMutexI
 
   nh_ = nh;
   nh_->subscribe(servo_ctrl_sub_);
+#if !KONDO
+  nh_->subscribe(direct_current_sub_);
+  nh_->advertiseService(direct_mode_srv_);
+#endif
   nh_->subscribe(servo_torque_ctrl_sub_);
   nh_->subscribe(joint_profiles_sub_);
   nh_->advertise(servo_state_pub_);
@@ -141,7 +145,10 @@ void DirectServo::torqueEnable(const std::map<uint8_t, float>& servo_map)
           nh_->logerror("Invalid Servo ID!");
           return;
         }
-      ServoData& s = servo_handler_.getServo()[index];
+  #if !KONDO
+    if (servo_handler_.currentManaged(index)) continue;
+#endif
+    ServoData& s = servo_handler_.getServo()[index];
       if(servo.second && !s.torque_enable_){
         s.torque_enable_ = true;
         servo_handler_.setTorque(index);
@@ -171,7 +178,10 @@ void DirectServo::setGoalAngle(const std::map<uint8_t, float>& servo_map, uint8_
           nh_->logerror("Invalid Servo ID!");
           return;
         }
-      ServoData& s = servo_handler_.getServo()[index];
+  #if !KONDO
+    if (servo_handler_.currentManaged(index)) continue;
+#endif
+    ServoData& s = servo_handler_.getServo()[index];
       s.setGoalPosition(goal_pos);
       if (! s.torque_enable_) {
         s.torque_enable_ = true;
@@ -191,6 +201,9 @@ void DirectServo::servoControlCallback(const spinal::ServoControlCmd& control_ms
         nh_->logerror("Invalid Servo ID!");
         return;
       }
+#if !KONDO
+    if (servo_handler_.currentManaged(index)) continue;
+#endif
     ServoData& s = servo_handler_.getServo()[index];
     int32_t goal_pos = static_cast<int32_t>(control_msg.angles[i]);
     s.setGoalPosition(goal_pos);
@@ -211,6 +224,9 @@ void DirectServo::servoTorqueControlCallback(const spinal::ServoTorqueCmd& contr
         nh_->logerror("Invalid Servo ID!");
         return;
       }
+#if !KONDO
+    if (servo_handler_.currentManaged(index)) continue;
+#endif
     ServoData& s = servo_handler_.getServo()[index];
     s.torque_enable_ = (control_msg.torque_enable[i] != 0) ? true : false;
     servo_handler_.setTorqueFromPresetnPos(index);
@@ -239,6 +255,9 @@ void DirectServo::servoConfigCallback(const spinal::SetDirectServoConfig::Reques
       nh_->logerror("Invalid Servo ID!");
       return;
     }
+#if !KONDO
+  if (servo_handler_.currentManaged(servo_index)) {res.success=false; return;}
+#endif
   ServoData& s = servo_handler_.getServo()[servo_index];
   switch (command) {
   case spinal::SetDirectServoConfig::Request::SET_SERVO_HOMING_OFFSET:
@@ -378,4 +397,35 @@ void DirectServo::jointProfilesCallback(const spinal::JointProfiles& joint_prof_
     joint_profiles_[i].angle_scale = joint_prof_msg.joints[i].angle_scale;
     joint_profiles_[i].zero_point_offset = joint_prof_msg.joints[i].zero_point_offset;
   }
+}
+
+void DirectServo::directCurrentCallback(const spinal::DirectServoCurrent& msg)
+{
+#if !KONDO
+  if (msg.index_length!=msg.session_length || msg.index_length!=msg.sequence_length ||
+      msg.index_length!=msg.current_length || msg.index_length>MAX_SERVO_NUM) return;
+  // Validate the entire packet before queueing any joint.
+  for (unsigned i=0; i<msg.index_length; ++i) {
+    if (msg.index[i]>=servo_handler_.getServoNum()) return;
+    for (unsigned j=0; j<i; ++j) if (msg.index[i]==msg.index[j]) return;
+  }
+  for (unsigned i=0; i<msg.index_length; ++i)
+    servo_handler_.currentCommand(msg.index[i],msg.session[i],msg.sequence[i],msg.current[i]);
+#endif
+}
+
+void DirectServo::directModeCallback(const spinal::DirectServoMode::Request& req,spinal::DirectServoMode::Response& res)
+{
+  res.success=false;
+  res.status=spinal_current::DENIED;
+#if !KONDO
+  DynamixelSerial::CurrentResult result;
+  servo_handler_.currentRequest(req.index,req.servo_id,req.action,req.session,req.current_limit,result);
+  res.success=result.success; res.status=result.status;
+  res.servo_id=(req.index<servo_handler_.getServoNum()) ? servo_handler_.getServo()[req.index].id_ : 255;
+  res.model_number=result.snapshot.model; res.firmware_version=result.snapshot.firmware;
+  res.operating_mode=result.snapshot.mode; res.current_limit=result.snapshot.limit;
+  res.torque_enabled=result.snapshot.torque; res.position=result.snapshot.position;
+  res.session=result.token; res.timeout_ms=spinal_current::Session::TIMEOUT_MS;
+#endif
 }
