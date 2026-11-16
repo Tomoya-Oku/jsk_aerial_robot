@@ -35,6 +35,7 @@
        shape_feasibility_node (pluginlib). Required only for teleoperating DRAGON. -->
   <run_depend>dragon</run_depend>
   <run_depend>spinal</run_depend>
+  <run_depend>dracomancer_mkii_ros</run_depend>
   <run_depend>roscpp</run_depend>
   <run_depend>pluginlib</run_depend>
   <run_depend>diagnostic_msgs</run_depend>

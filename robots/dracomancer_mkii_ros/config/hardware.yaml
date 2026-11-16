@@ -1,0 +1,15 @@
+# Fill from the real wiring, CAD-zero calibration, and measured joint Nm/A.
+# Empty configuration is intentionally read-only and never arms a motor.
+calibrated: false
+actuators: {}
+# Example schema (values must come from measurements; no inferred IDs/limits):
+# actuators:
+#   right_joint_1:
+#     index: <Spinal scan index, 0..9>
+#     id: <actual DYNAMIXEL bus ID>
+#     direction: <1 or -1>
+#     zero_tick: <servo/states.angle at CAD q=0>
+#     radians_per_tick: <joint rad/count; 2*pi/4096 for direct shaft drive>
+#     joint_nm_per_amp: <measured joint Nm/A>
+#     max_current_amp: <approved current cap in A>
+#     max_torque_nm: <approved joint torque cap in Nm>

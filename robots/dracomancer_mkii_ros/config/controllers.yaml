@@ -1,0 +1,102 @@
+# Simulation values only; not measured XM430 hardware limits.
+joint_state_controller:
+  type: joint_state_controller/JointStateController
+  publish_rate: 100
+right_joint_1_position:
+  type: effort_controllers/JointPositionController
+  joint: right_joint_1
+  pid: {p: 30.0, i: 0.0, d: 0.5, i_clamp: 0.0}
+right_joint_1_effort:
+  type: effort_controllers/JointEffortController
+  joint: right_joint_1
+right_joint_2_position:
+  type: effort_controllers/JointPositionController
+  joint: right_joint_2
+  pid: {p: 30.0, i: 0.0, d: 0.5, i_clamp: 0.0}
+right_joint_2_effort:
+  type: effort_controllers/JointEffortController
+  joint: right_joint_2
+right_joint_3_position:
+  type: effort_controllers/JointPositionController
+  joint: right_joint_3
+  pid: {p: 30.0, i: 0.0, d: 0.5, i_clamp: 0.0}
+right_joint_3_effort:
+  type: effort_controllers/JointEffortController
+  joint: right_joint_3
+right_joint_4_position:
+  type: effort_controllers/JointPositionController
+  joint: right_joint_4
+  pid: {p: 30.0, i: 0.0, d: 0.5, i_clamp: 0.0}
+right_joint_4_effort:
+  type: effort_controllers/JointEffortController
+  joint: right_joint_4
+right_joint_5_position:
+  type: effort_controllers/JointPositionController
+  joint: right_joint_5
+  pid: {p: 30.0, i: 0.0, d: 0.5, i_clamp: 0.0}
+right_joint_5_effort:
+  type: effort_controllers/JointEffortController
+  joint: right_joint_5
+right_joint_6_position:
+  type: effort_controllers/JointPositionController
+  joint: right_joint_6
+  pid: {p: 30.0, i: 0.0, d: 0.5, i_clamp: 0.0}
+right_joint_6_effort:
+  type: effort_controllers/JointEffortController
+  joint: right_joint_6
+right_joint_7_position:
+  type: effort_controllers/JointPositionController
+  joint: right_joint_7
+  pid: {p: 30.0, i: 0.0, d: 0.5, i_clamp: 0.0}
+right_joint_7_effort:
+  type: effort_controllers/JointEffortController
+  joint: right_joint_7
+left_joint_1_position:
+  type: effort_controllers/JointPositionController
+  joint: left_joint_1
+  pid: {p: 30.0, i: 0.0, d: 0.5, i_clamp: 0.0}
+left_joint_1_effort:
+  type: effort_controllers/JointEffortController
+  joint: left_joint_1
+left_joint_2_position:
+  type: effort_controllers/JointPositionController
+  joint: left_joint_2
+  pid: {p: 30.0, i: 0.0, d: 0.5, i_clamp: 0.0}
+left_joint_2_effort:
+  type: effort_controllers/JointEffortController
+  joint: left_joint_2
+left_joint_3_position:
+  type: effort_controllers/JointPositionController
+  joint: left_joint_3
+  pid: {p: 30.0, i: 0.0, d: 0.5, i_clamp: 0.0}
+left_joint_3_effort:
+  type: effort_controllers/JointEffortController
+  joint: left_joint_3
+left_joint_4_position:
+  type: effort_controllers/JointPositionController
+  joint: left_joint_4
+  pid: {p: 30.0, i: 0.0, d: 0.5, i_clamp: 0.0}
+left_joint_4_effort:
+  type: effort_controllers/JointEffortController
+  joint: left_joint_4
+left_joint_5_position:
+  type: effort_controllers/JointPositionController
+  joint: left_joint_5
+  pid: {p: 30.0, i: 0.0, d: 0.5, i_clamp: 0.0}
+left_joint_5_effort:
+  type: effort_controllers/JointEffortController
+  joint: left_joint_5
+left_joint_6_position:
+  type: effort_controllers/JointPositionController
+  joint: left_joint_6
+  pid: {p: 30.0, i: 0.0, d: 0.5, i_clamp: 0.0}
+left_joint_6_effort:
+  type: effort_controllers/JointEffortController
+  joint: left_joint_6
+left_joint_7_position:
+  type: effort_controllers/JointPositionController
+  joint: left_joint_7
+  pid: {p: 30.0, i: 0.0, d: 0.5, i_clamp: 0.0}
+left_joint_7_effort:
+  type: effort_controllers/JointEffortController
+  joint: left_joint_7
