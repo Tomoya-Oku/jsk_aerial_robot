@@ -29,5 +29,5 @@ roslaunch dracomancer shape_demo.launch
 | `src/dracomancer/` | 校正済み電流換算・セッション・出力排他のPython部品 |
 | `scripts/control/shape_*.py` | CAD中心線による形状写像・診断 |
 
-研究仕様は[設計書](docs/design-spec.md)、起動・検証は[操作手順](docs/mkii.md)、
-移行内容と検証範囲は[統合記録](docs/integration.md)を参照する。
+文書の入口は[ドキュメント一覧](docs/README.md)。
+起動・検証は[操作手順](docs/usage.md)、研究仕様・未実装の課題は一覧内の各設計書を参照する。
