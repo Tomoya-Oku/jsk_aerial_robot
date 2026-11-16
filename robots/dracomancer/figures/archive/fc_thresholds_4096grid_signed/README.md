@@ -43,11 +43,14 @@ heuristic needs to be reconsidered for a signed distribution.
 
 ## Regeneration
 
+Run from this directory. New plots are written outside `archive/` to keep the
+saved results intact.
+
 ```bash
 MPLCONFIGDIR=/tmp/mpl_fc_signed \
-python3 ../scripts/plot_fc_data.py \
+python3 ../../scripts/plot_fc_data.py \
   fc_4096grid_signed_merged.csv \
-  --out-dir . \
+  --out-dir ../../fc_thresholds_4096grid_signed \
   --name-prefix fc_4096grid_signed \
   --formats png svg \
   --bins 60 \
@@ -57,9 +60,9 @@ python3 ../scripts/plot_fc_data.py \
 
 ```bash
 MPLCONFIGDIR=/tmp/mpl_fc_signed_zoom \
-python3 ../scripts/plot_fc_data.py \
+python3 ../../scripts/plot_fc_data.py \
   fc_4096grid_signed_merged.csv \
-  --out-dir . \
+  --out-dir ../../fc_thresholds_4096grid_signed \
   --name-prefix fc_4096grid_signed_zoom \
   --formats png svg \
   --bins 60 \
@@ -71,9 +74,9 @@ python3 ../scripts/plot_fc_data.py \
 
 ```bash
 MPLCONFIGDIR=/tmp/mpl_fc_signed_force \
-python3 ../scripts/plot_fc_data.py \
+python3 ../../scripts/plot_fc_data.py \
   fc_4096grid_signed_merged.csv \
-  --out-dir . \
+  --out-dir ../../fc_thresholds_4096grid_signed \
   --name-prefix fc_4096grid_signed \
   --formats png svg \
   --bins 64 \

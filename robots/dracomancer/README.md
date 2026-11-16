@@ -31,9 +31,11 @@ roslaunch dracomancer shape_demo.launch
 | `scripts/control/shape_*.py` | CAD中心線による形状写像・診断 |
 | `test/` | 単体・回帰テストとROS・Gazebo検証。Mk-II固有の検証は`test/mkii/` |
 | `figures/scripts/` | オフラインの作図スクリプト |
+| `figures/archive/` | 保存対象とした過去の図・CSV・集計。現行Mk-IIの検証結果とは区別する |
 
 新規のログ・bag・作図結果は一時生成物としてGit管理から除外する。
 作図スクリプトの出力先は`figures/`内または実験結果の保存先とし、`figures/scripts/`へ混在させない。
+保存対象と決めた成果物のみ`figures/archive/`へ移し、通常の出力先にはしない。
 
 文書の入口は[ドキュメント一覧](docs/README.md)。
 起動・検証は[操作手順](docs/usage.md)、研究仕様・未実装の課題は一覧内の各設計書を参照する。

@@ -11,3 +11,4 @@ __pycache__/
 # Keep plot sources separate from generated figures and experiment data.
 /figures/*
 !/figures/scripts/
+!/figures/archive/
