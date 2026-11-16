@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import yaml
 
 PACKAGE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PACKAGE / 'src'))
@@ -157,6 +158,22 @@ class RuntimeTest(unittest.TestCase):
                 self.direct.SpinalControl()
         self.rospy.Publisher.assert_not_called()
         self.rospy.on_shutdown.assert_not_called()
+
+    def test_configured_bus_ids_do_not_replace_scan_indexes(self):
+        settings = yaml.safe_load((PACKAGE / 'config/mkii/hardware.yaml').read_text(encoding='utf-8'))
+        common = dict(zero_tick=2048, radians_per_tick=.0015, direction=1,
+                      joint_nm_per_amp=2., max_current_amp=.5, max_torque_nm=.2)
+        params = {'joints': list(settings['servo_ids']), '~servo_ids': settings['servo_ids'],
+                  '~actuators': {'right_joint_7': dict(common, index=2),
+                                 'left_joint_7': dict(common, index=3)}}
+        self.rospy.get_param.side_effect = lambda name, default=None: params.get(name, default)
+        with patch.object(self.direct, 'DaemonExecutor'), patch.object(self.direct.threading, 'Thread'):
+            node = self.direct.SpinalControl()
+        self.assertEqual(node.config['right_joint_7']['id'], 6)
+        self.assertEqual(node.config['left_joint_7']['id'], 16)
+        self.assertEqual(node.config['right_joint_7']['index'], 2)
+        self.assertEqual(node.config['left_joint_7']['index'], 3)
+        self.assertFalse(node.calibrated)
 
     def test_removed_mki_mapping_is_rejected(self):
         self.rospy.get_param.side_effect = lambda name, default=None: 'distal' if name == '~mapping_mode' else default

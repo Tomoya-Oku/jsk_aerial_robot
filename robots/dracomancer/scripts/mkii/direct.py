@@ -59,13 +59,21 @@ class SpinalControl:
         self.names = rospy.get_param('joints')
         self.calibrated = rospy.get_param('~calibrated', False) is True
         self.config = rospy.get_param('~actuators', {})
+        self.servo_ids = rospy.get_param('~servo_ids', {})
         if not isinstance(self.config, dict) or len(self.config) > 10:
             raise ValueError('actuators must map at most 10 direct-UART servo indexes')
+        if not isinstance(self.servo_ids, dict):
+            raise ValueError('servo_ids must map CAD joint names to physical bus IDs')
         indexes, ids = set(), set()
         self.scales, self.limits, self.device_limits = {}, {}, {}
         for name, cfg in self.config.items():
             if name not in self.names:
                 raise ValueError('Unknown URDF joint '+name)
+            # An explicit calibrated configuration retains its ID override.
+            # Never derive a Spinal scan index from the physical bus ID.
+            cfg = dict(cfg)
+            cfg.setdefault('id', self.servo_ids.get(name))
+            self.config[name] = cfg
             index, servo_id = cfg['index'], cfg['id']
             if (type(index) is not int or type(servo_id) is not int or not 0 <= index < 10
                     or not 0 <= servo_id <= 252 or index in indexes or servo_id in ids):

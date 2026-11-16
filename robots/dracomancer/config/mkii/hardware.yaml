@@ -2,11 +2,27 @@
 # Empty configuration is intentionally read-only and never arms a motor.
 calibrated: false
 actuators: {}
-# Example schema (values must come from measurements; no inferred IDs/limits):
+# Physical DYNAMIXEL IDs in CAD joint order; these are not Spinal scan indexes.
+servo_ids:
+  right_joint_1: 0
+  right_joint_2: 1
+  right_joint_3: 2
+  right_joint_4: 3
+  right_joint_5: 4
+  right_joint_6: 5
+  right_joint_7: 6
+  left_joint_1: 10
+  left_joint_2: 11
+  left_joint_3: 12
+  left_joint_4: 13
+  left_joint_5: 14
+  left_joint_6: 15
+  left_joint_7: 16
+# Example schema (calibration/limits must come from measurements):
 # actuators:
 #   right_joint_1:
 #     index: <Spinal scan index, 0..9>
-#     id: <actual DYNAMIXEL bus ID>
+#     id: <optional override; defaults to servo_ids for this joint>
 #     direction: <1 or -1>
 #     zero_tick: <servo/states.angle at CAD q=0>
 #     radians_per_tick: <joint rad/count; 2*pi/4096 for direct shaft drive>

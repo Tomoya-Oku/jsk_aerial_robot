@@ -30,6 +30,10 @@ Gazeboとは別のROS masterを使用する。`use_sim_time=true` の環境で�
 - CADのq=0に対応するエンコーダ値、正方向、関節rad/count
 - 校正済みの関節出力Nm/A、使用する最大電流と最大トルク
 
+物理IDの既定対応は[4.6のID仕様](design-spec/04-hardware.md#46-actuator--sensor)に従い、
+`servo_ids`に設定済み。`actuators`内の`id`は省略でき、明示した場合はその値を優先する。
+scan indexと校正値は別途実測して設定する。ID対応表14軸の定義だけでは駆動を有効にしない。
+
 既定は `calibrated: false`、空の対応表で駆動しない。
 ストール値から推定したNm/Aを校正値としては扱わない。
 

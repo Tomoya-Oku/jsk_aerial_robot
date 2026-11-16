@@ -181,6 +181,10 @@ CAN接続Neuron経由の旧力覚出力・旧関節名入出力は廃止する�
 CADの15リンク・14関節と新STLは`dracomancer`パッケージが所有し、標準名前空間は`/dracomancer`。
 主な計測・形態入力は右腕の`right_joint_1..7`。左腕の表示は維持するが、1台のDirectServoの最大10軸を超える設定は拒否する。
 
+物理DYNAMIXEL IDは、`right_joint_1..7`を順に **0〜6**、`left_joint_1..7`を順に **10〜16** とする。
+既定対応は`config/mkii/hardware.yaml`の`servo_ids`で管理する。
+Spinal scan indexは接続時に確認する0〜9の別番号であり、物理IDから推定しない。
+
 `config/mkii/hardware.yaml`は既定で`calibrated: false`・空の関節対応表とする。
 実測したscan index・DYNAMIXEL ID・CAD零点・符号・rad/count・Nm/A・電流およびトルク上限を設定しなければ駆動しない。
 上記の公称Nm/Aやシミュレーション用のURDF effort/velocityを、実機校正値へ自動転記しない。
