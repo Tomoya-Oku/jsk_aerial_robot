@@ -1,0 +1,29 @@
+# Mk-II right-arm CAD frames. These are configurable geometric proxies,
+# not calibrated anatomical landmarks. torso_point must be set explicitly.
+shape:
+  human_base: base_link
+  torso_point: []
+  human_points:
+    - {link: right_link1_shoulder, xyz: [0, 0, 0]}
+    - {link: right_link4_lower_arm_upper, xyz: [0, 0, 0]}
+    - {link: right_link6_wrist_upper, xyz: [0, 0, 0]}
+    # CAD hand-link mass center: avoids discarding the last wrist rotation.
+    - {link: right_link7_wrist_lower, xyz: [0.0397499858, -0.0627907132, 0.0001589676]}
+  # Static calibration in the fixed mounting / link4-tail frames [rad].
+  # Identity is a simulation starting point, not a measured axis alignment.
+  human_alignment: [0, 0, 0]
+  dragon_alignment: [0, 0, 0]
+  # v1.5 link4 tail, from dragon_common.xacro. Explicit model-dependent endpoint.
+  dragon_tail: [0.474, 0, 0]
+  samples: 20
+  # Uniform arc-length position weights; total weight is normalized to one.
+  weights: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+  continuity: 0.002
+  rest_weight: 0.0002
+  damping: 0.00001
+  difference_step: 0.00001
+  tolerance: 0.000001
+  # Optimization at 10 Hz; the existing command loop remains 40 Hz.
+  update_rate: 10.0
+  max_iterations: 1
+  time_budget: 0.020

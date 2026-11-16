@@ -78,16 +78,21 @@
   <arg name="monitor_torque_inradius_topic"
        default="$(eval '/' + arg('robot_ns') + '/debug/fc_t_min' + ('_filtered' if arg('enable_fc_min_lowpass') else ''))" />
   <arg name="max_step" default="0.015"/>
+  <!-- rad/s, bounded in elapsed ROS time as well as by max_step. -->
+  <arg name="max_joint_velocity" default="0.1"/>
   <arg name="joint_limit" default="1.57079632679"/>
   <!-- Arm->DRAGON mapping strategy (teleop_mode=true):
          joint_pairing : flexion joints -> DRAGON yaw, pitch held at 0 (planar).
          geometric     : arm FK -> link directions -> yaw/pitch decomposition.
+         shape         : URDF centerline optimization; explicit calibration required.
          distal        : absolute match of distal arm joints (wrist + elbow) to
                          DRAGON joints; every unmapped joint held unchanged. Default.
                          ("elbow_only" is a backward-compatible alias of distal.) -->
   <arg name="mapping_mode" default="distal"/>
+  <arg name="shape_config" default="$(find dracomancer)/config/control/shape.yaml"/>
+  <arg name="human_description" default="/dracomancer_mkii/robot_description"/>
   <!-- mapping_reference: base pose the arm->DRAGON mapping deforms around
-       (shared by every mapping_mode).
+       (legacy modes; shape uses shape/rest or startup_pose as regularization).
          straight : map around 0 rad (DRAGON straightens out).
          circular : relative deformation around startup_pose (circular DRAGON shape). Default. -->
   <arg name="joint_pairing_reference" default="circular"/>  <!-- deprecated alias of mapping_reference -->
@@ -306,6 +311,7 @@
         name="$(arg device_ns)_control_joint_angle"
         output="screen"
         if="$(arg enable_joint_angle_control)">
+    <env name="OPENBLAS_NUM_THREADS" value="1"/>
     <param name="device_ns" value="/$(arg device_ns)"/>
     <param name="robot_name" value="$(arg robot_ns)"/>
     <param name="device_joint_topic" value="$(arg device_joint_topic)"/>
@@ -314,6 +320,8 @@
     <param name="teleop_mode" value="$(arg teleop_mode)"/>
     <param name="mode_topic" value="$(arg mode_topic)"/>
     <param name="mapping_mode" value="$(arg mapping_mode)"/>
+    <rosparam command="load" file="$(arg shape_config)" if="$(eval arg('mapping_mode') == 'shape')"/>
+    <param name="human_description" value="$(arg human_description)"/>
     <param name="mapping_reference" value="$(arg mapping_reference)"/>
     <param name="joint_pairing_scale" value="$(arg joint_pairing_scale)"/>
     <param name="capture_roll_neutral" value="$(arg capture_roll_neutral)"/>
@@ -342,6 +350,7 @@
     <param name="wrist_yaw_source_scale" value="$(arg wrist_yaw_source_scale)"/>
     <param name="joint_limit" value="$(arg joint_limit)"/>
     <param name="max_step" value="$(arg max_step)"/>
+    <param name="max_joint_velocity" value="$(arg max_joint_velocity)"/>
     <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
     <param name="enable_link4_anchor" value="$(arg enable_link4_anchor)"/>
     <param name="link4_anchor_mode" value="$(arg link4_anchor_mode)"/>

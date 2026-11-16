@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import time
 import rospy
 import numpy as np
 import tf2_ros
@@ -11,8 +12,10 @@ from geometry_msgs.msg import Vector3Stamped
 from nav_msgs.msg import Odometry
 from aerial_robot_msgs.msg import FlightNav
 from dracomancer.srv import ShapeFeasibility, ShapeFeasibilityRequest
+from shape_mapping import limit_step, vector
+from shape_runtime import ShapeRuntime
 
-class ControlJoints:
+class ControlJoints(ShapeRuntime):
     def __init__(self):
         rospy.init_node("control_joint_angle")
 
@@ -43,15 +46,16 @@ class ControlJoints:
         # Mapping strategy: "distal" (default, absolute match of distal arm joints
         # (wrist + elbow) to DRAGON joints, every unmapped joint held unchanged),
         # "joint_pairing" (medium-term), or "geometric" (long-term, FK + plane
-        # projection). "elbow_only" is a backward-compatible alias of "distal".
+        # projection), or "shape" (URDF centerline optimization, opt-in).
+        # "elbow_only" is a backward-compatible alias of "distal".
         # See docs/design-spec/05-software.md.
         self.mapping_mode = str(rospy.get_param("~mapping_mode", "distal")).lower()
         if self.mapping_mode == "elbow_only":
             self.mapping_mode = "distal"  # backward-compatible alias
-        if self.mapping_mode not in ("joint_pairing", "geometric", "distal"):
+        if self.mapping_mode not in ("joint_pairing", "geometric", "distal", "shape"):
             rospy.logwarn("unknown mapping_mode '%s', fall back to 'joint_pairing'", self.mapping_mode)
             self.mapping_mode = "joint_pairing"
-        # Reference (base) pose the mapping deforms around. Shared by every mapping_mode:
+        # Reference pose for the legacy mappings; shape uses its explicit q_rest:
         #   straight : map around 0 rad (DRAGON straightens out).
         #   circular : map around startup_pose (DRAGON keeps its circular takeoff shape). Default.
         # The legacy name (joint_pairing_reference) and legacy values (zero/startup) are
@@ -331,6 +335,13 @@ class ControlJoints:
         self.geom_pitch_scale = rospy.get_param("~geom_pitch_scale", 1.0)
         self.joint_limit = rospy.get_param("~joint_limit", np.pi / 2.0)
         self.max_step = rospy.get_param("~max_step", 0.015)
+        # v1.5 URDF velocity is 0.1 rad/s. Shape mode additionally intersects
+        # this configurable cap with the limits of the loaded robot model.
+        velocity = rospy.get_param("~max_joint_velocity", 0.1)
+        self.joint_velocity_limits = vector([velocity]*6 if np.isscalar(velocity) else velocity, 6)
+        if np.any(self.joint_velocity_limits <= 0) or not np.isfinite(self.rate_hz) or self.rate_hz <= 0:
+            raise ValueError("joint velocity and control rate must be positive")
+        self.last_command_stamp = None
         self.capture_neutral = rospy.get_param("~capture_neutral_on_first_msg", False)
         self.publish_only_when_hovering = rospy.get_param("~publish_only_when_hovering", True)
         self.publish_before_device_ready = rospy.get_param("~publish_before_device_ready", False)
@@ -421,6 +432,10 @@ class ControlJoints:
         # Geometric-mode reference (neutral) relative angles, computed lazily so a
         # captured neutral pose can be used if available.
         self.geom_ref = None
+        if self.mapping_mode == "shape":
+            self.init_shape()
+            if self.feasibility_gate_mode != "hold":
+                raise ValueError("shape mode currently supports only the hold feasibility gate")
 
         # Publisher
         self.joints_ctrl_pub = rospy.Publisher(self.command_topic, JointState, queue_size=10)
@@ -662,6 +677,12 @@ class ControlJoints:
         return value - neutral
 
     def device_joint_cb(self, msg):
+        if self.mapping_mode == "shape":
+            self.shape_packet_valid = self.valid_joint_packet(msg)
+            self.shape_input_stamp = msg.header.stamp
+            self.shape_input_received = rospy.Time.now()
+            if not self.shape_packet_valid:
+                return
         self.latest_device_joints = {
             name: float(pos) for name, pos in zip(msg.name, msg.position)
         }
@@ -681,6 +702,10 @@ class ControlJoints:
                 rospy.loginfo("Captured dracomancer neutral joints for DRAGON mapping")
 
     def robot_joint_cb(self, msg):
+        if self.mapping_mode == "shape":
+            self.shape_robot_valid = self.valid_joint_packet(msg)
+            if not self.shape_robot_valid:
+                return
         self.latest_robot_joints = {
             name: float(pos) for name, pos in zip(msg.name, msg.position)
         }
@@ -717,6 +742,8 @@ class ControlJoints:
             self.torque_radius_recover_threshold = max(self.torque_radius_threshold, float(msg.data[1]))
 
     def mapped_target(self):
+        if self.mapping_mode == "shape":
+            return self.shape_target()
         if not self.latest_device_joints:
             return list(self.last_feasible_target)
         if self.mapping_mode == "geometric":
@@ -1113,6 +1140,8 @@ class ControlJoints:
             rospy.logwarn(msg)
 
     def teleop_shape_target(self):
+        if self.mapping_mode == "shape":
+            return self.shape_gated_target()
         # Map the arm to a candidate DRAGON shape, then gate by predicted feasibility.
         candidate = self.mapped_target()
         self.publish_candidate_target(candidate)
@@ -1156,10 +1185,11 @@ class ControlJoints:
         return self.teleop_shape_target()
 
     def rate_limit(self, target):
-        limited = []
-        for cur, dst in zip(self.current_target, target):
-            delta = max(-self.max_step, min(self.max_step, dst - cur))
-            limited.append(cur + delta)
+        now = rospy.Time.now()
+        # Pauses / re-enable / clock jumps must not accumulate a large step.
+        dt = 0.0 if self.last_command_stamp is None else max(0., min(
+            (now-self.last_command_stamp).to_sec(), 1./self.rate_hz))
+        limited = limit_step(self.current_target, target, self.joint_velocity_limits, dt, self.max_step).tolist()
         return self.link4_body_step_scale(limited)
 
     def link4_body_step_scale(self, target):
@@ -1350,11 +1380,22 @@ class ControlJoints:
         self.switch_diag_pub.publish(msg)
 
     def make_joint_msg(self):
+        cycle_start = time.perf_counter()
+        if self.mapping_mode == "shape":
+            self.shape_cached = None  # one solve per control cycle, shared by diagnostics
         target = self.desired_target()
         # desired (raw mapping) vs target (feasible-gated) error, for haptic feedback.
         desired = self.mapped_target() if self.teleop_mode else target
-        self.current_target = self.link4_body_safety_gate(self.rate_limit(target))
-        self.maybe_publish_target_fc(self.current_target)
+        command = self.link4_body_safety_gate(self.rate_limit(target))
+        if self.mapping_mode == "shape":
+            command = self.shape_check_command(command)
+        else:
+            self.maybe_publish_target_fc(command)
+        self.current_target = command
+        if self.mapping_mode == "shape":
+            self.last_feasible_target = list(command)
+            self.shape_result["control_seconds"] = time.perf_counter() - cycle_start
+            self.publish_shape_diagnostics()
         self.publish_shape_error(desired, self.current_target)
         self.publish_switch_diag()
 
@@ -1365,6 +1406,9 @@ class ControlJoints:
         return msg
 
     def can_publish_joint_command(self):
+        if self.mapping_mode == "shape" and not self.shape_ready():
+            self.publish_shape_diagnostics()
+            return False
         if self.publish_only_when_hovering and not self.robot_hovering:
             return False
         if self.teleop_mode and not self.publish_before_device_ready and not self.latest_device_joints:
@@ -1575,7 +1619,9 @@ class ControlJoints:
                 joint_msg = self.make_joint_msg()
                 self.update_link4_anchor(joint_msg.position)
                 self.joints_ctrl_pub.publish(joint_msg)
+                self.last_command_stamp = rospy.Time.now()
             else:
+                self.last_command_stamp = None
                 self.update_link4_anchor()
             rate.sleep()
 
