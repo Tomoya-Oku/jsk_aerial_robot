@@ -7,6 +7,7 @@
   <arg name="contact_wrench_topic" default="/$(arg robot_ns)/estimated_external_wrench"/>
   <arg name="mode_topic" default="/$(arg device_ns)/teleop_mode"/>
   <arg name="teleop_mode" default="false"/>
+  <arg name="mapping_mode" default="distal"/>
   <arg name="rate" default="100.0"/>
 
   <!-- XM430 current output is opt-in until Operating Mode, Current Limit, signs,
@@ -37,6 +38,7 @@
     <param name="contact_wrench_topic" value="$(arg contact_wrench_topic)"/>
     <param name="mode_topic" value="$(arg mode_topic)"/>
     <param name="teleop_mode" value="$(arg teleop_mode)"/>
+    <param name="mapping_mode" value="$(arg mapping_mode)"/>
     <param name="rate" value="$(arg rate)"/>
     <param name="haptic_torque_topic" value="$(arg haptic_debug_topic)"/>
     <param name="enable_contact_feedback" value="$(arg enable_contact_feedback)"/>

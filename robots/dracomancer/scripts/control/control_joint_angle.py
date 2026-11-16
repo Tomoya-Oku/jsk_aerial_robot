@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import time
+import copy
 import rospy
 import numpy as np
 import tf2_ros
@@ -417,6 +418,7 @@ class ControlJoints(ShapeRuntime):
         self.gate_log_period = rospy.get_param("~gate_log_period", 1.0)
 
         self.latest_device_joints = {}
+        self.latest_device_sample = None
         self.latest_robot_joints = {}
         self.latest_robot_joint_stamp = rospy.Time(0)
         self.neutral_device_joints = {}
@@ -449,6 +451,13 @@ class ControlJoints(ShapeRuntime):
         self.nav_pub = rospy.Publisher(self.nav_topic, FlightNav, queue_size=1)
         self.baselink_rpy_pub = rospy.Publisher(self.baselink_rpy_topic, Vector3Stamped, queue_size=1)
         self.baselink_motion_pub = rospy.Publisher(self.baselink_motion_topic, Odometry, queue_size=1)
+        # Optional contact-haptic interface: differentiate this very mapping,
+        # rather than maintaining a second, potentially inconsistent copy.
+        self.mapping_pub = None
+        if rospy.get_param("~publish_mapping_jacobian", False):
+            from dracomancer.msg import MappingState
+            self.mapping_pub = rospy.Publisher(
+                self.device_ns + "/mapping_state", MappingState, queue_size=1)
 
         # TF for the link4 anchor
         self.tf_buffer = tf2_ros.Buffer()
@@ -686,6 +695,8 @@ class ControlJoints(ShapeRuntime):
         self.latest_device_joints = {
             name: float(pos) for name, pos in zip(msg.name, msg.position)
         }
+        # Publish an atomic timestamp/position pair for the haptic derivative.
+        self.latest_device_sample = (msg.header.stamp, self.latest_device_joints)
         self.maybe_capture_baselink_roll_neutral()
         if self.capture_neutral and not self.neutral_device_joints:
             # Capture the joints actually used as mapping sources. In joint_pairing the
@@ -1371,6 +1382,59 @@ class ControlJoints(ShapeRuntime):
         msg.data = [float(d - t) for d, t in zip(desired, target)]
         self.shape_error_pub.publish(msg)
 
+    def publish_mapping_state(self):
+        # This interface differentiates legacy anatomical-joint mappings only.
+        # ShapeRuntime has different inputs and stateful optimization caches.
+        if self.mapping_mode == "shape":
+            return
+        if self.mapping_pub is None or not self.teleop_mode or not self.robot_hovering:
+            return
+        from dracomancer.msg import MappingState
+        from contact_math import finite_jacobian
+        device_names = [
+            "shoulder_abduction_adduction_joint",
+            "shoulder_flexion_extension_joint",
+            "upper_arm_external_internal_rotation_joint",
+            "elbow_flexion_extension_joint",
+            "wrist_supination_joint",
+            "wrist_flexion_extension_joint",
+            "wrist_abduction_adduction_joint",
+        ]
+        # Freeze all mapping state so perturbations cannot recapture neutrals,
+        # change diagnostics, or race a device callback on the live controller.
+        sample = self.latest_device_sample
+        if sample is None:
+            return
+        stamp, positions = sample
+        snapshot = copy.copy(self)
+        snapshot.latest_device_joints = dict(positions)
+        snapshot.roll_neutral = dict(self.roll_neutral)
+        snapshot.neutral_device_joints = dict(self.neutral_device_joints)
+        snapshot.switch_diag = copy.deepcopy(self.switch_diag)
+        snapshot.last_feasible_target = list(self.last_feasible_target)
+        if stamp == rospy.Time(0) or any(n not in snapshot.latest_device_joints for n in device_names):
+            return
+        if snapshot.mapping_mode == "distal" and snapshot.capture_roll_neutral:
+            if snapshot.want_capture_roll_neutral:
+                return
+        snapshot.want_capture_roll_neutral = False
+
+        def evaluate(position):
+            snapshot.latest_device_joints = dict(zip(device_names, position))
+            return snapshot.mapped_target()
+
+        try:
+            matrix = finite_jacobian(evaluate, [positions[n] for n in device_names])
+        except (ValueError, FloatingPointError) as error:
+            rospy.logwarn_throttle(1.0, "contact mapping unavailable: %s", error)
+            return
+        msg = MappingState()
+        msg.header.stamp = stamp
+        msg.robot_joints = list(self.joint_names)
+        msg.device_joints = device_names
+        msg.jacobian = matrix.ravel().tolist()
+        self.mapping_pub.publish(msg)
+
     def publish_switch_diag(self):
         wrist = self.switch_diag["wrist"]
         elbow = self.switch_diag["elbow"]
@@ -1398,6 +1462,7 @@ class ControlJoints(ShapeRuntime):
             self.publish_shape_diagnostics()
         self.publish_shape_error(desired, self.current_target)
         self.publish_switch_diag()
+        self.publish_mapping_state()
 
         msg = JointState()
         msg.header.stamp = rospy.Time.now()

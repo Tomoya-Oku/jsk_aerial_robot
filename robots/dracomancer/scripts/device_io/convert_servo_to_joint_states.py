@@ -86,7 +86,7 @@ class ServoToJointStates:
                 current[sid] = float(s.angle)
 
         self.latest_servo_pos = current
-        self.last_servo_stamp = rospy.Time.now()
+        self.last_servo_stamp = msg.stamp
 
     def servo_data_stale(self):
         now = rospy.Time.now()
@@ -108,7 +108,12 @@ class ServoToJointStates:
 
     def make_joint_msg(self):
         msg = JointState()
-        msg.header.stamp = rospy.Time.now()
+        # Re-publishing cached angles must not make an old measurement look
+        # fresh to contact haptics. Zero also marks an incomplete 7-axis sample.
+        complete = all(sid in self.latest_servo_pos for sid in self.ordered_ids)
+        msg.header.stamp = (self.last_servo_stamp
+                            if complete and self.last_servo_stamp is not None
+                            else rospy.Time(0))
         msg.name = [self.id_to_joint_name[sid] for sid in self.ordered_ids]
 
         positions = []

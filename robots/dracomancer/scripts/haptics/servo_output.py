@@ -9,6 +9,7 @@ import rospy
 from spinal.msg import ServoControlCmd, ServoTorqueCmd
 
 from current_conversion import XM430CurrentConverter
+from output_lock import claim_output
 
 
 class XM430CurrentOutput:
@@ -31,6 +32,11 @@ class XM430CurrentOutput:
             raise ValueError("XM430 calibration count must match servo count")
         self.hardware_enabled = bool(hardware_enabled)
         self.torque_enabled = False
+
+        # Acquire before creating publishers or registering a shutdown callback.
+        # A rejected second writer must never send zero/OFF to the active writer.
+        self.output_lock = (claim_output(current_topic, torque_enable_topic)
+                            if self.hardware_enabled else None)
 
         self.current_pub = rospy.Publisher(current_topic, ServoControlCmd, queue_size=1)
         self.torque_enable_pub = rospy.Publisher(

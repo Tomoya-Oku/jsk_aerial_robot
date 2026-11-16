@@ -28,6 +28,13 @@ class HapticController:
             rospy.get_param("~enable_contact_feedback", False))
         self.enable_safety = self.parse_bool(
             rospy.get_param("~enable_safety_feedback", True))
+        hardware_output = self.parse_bool(rospy.get_param("~enable_hardware_output", False))
+        if rospy.get_param("~mapping_mode", "distal") == "shape":
+            # The inherited fixed-link Jacobian is not a CAD shape derivative.
+            # Keep diagnostics available, but never drive hardware with it.
+            self.enable_contact = False
+            hardware_output = False
+            rospy.logwarn("shape mode: contact feedback and haptic hardware output are disabled")
         self.contact_timeout = float(rospy.get_param("~contact_timeout", 0.1))
         self.safety_timeout = float(rospy.get_param("~safety_timeout", 0.25))
         self.joint_timeout = float(rospy.get_param("~joint_timeout", 0.25))
@@ -89,7 +96,7 @@ class HapticController:
             rospy.get_param("~actuator_signs", [1.0] * self.human_count),
             rospy.get_param("~current_topic", ns + "/servo/target_current"),
             rospy.get_param("~torque_enable_topic", ns + "/servo/torque_enable"),
-            self.parse_bool(rospy.get_param("~enable_hardware_output", False)),
+            hardware_output,
             rospy.get_param("~current_unit_amp", 0.00269),
             rospy.get_param("~current_limits_raw", []))
 

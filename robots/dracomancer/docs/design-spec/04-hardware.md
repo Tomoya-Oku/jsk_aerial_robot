@@ -174,6 +174,24 @@ XM430-W350-Rの制御仕様は次とする [10]。
 - 通信断・入力timeout・モード解除時に電流ゼロかつtorque disableへ移行すること
 - 機械ストッパ、非常停止、装着者が自力で離脱できる機構が機能すること
 
+### 壁押し実験専用設定
+
+壁押し接触シミュレーションの実機入力・力覚提示デバイスには、**DYNAMIXEL XM430-W350-Rを7台**使用する。
+通信は既存の **Spinal / Neuron経由**とし、トルク提示にはCurrent Control Mode（Operating Mode = 0）でGoal Currentを指令する [10]。
+提示倍率・関節別トルク上限の初期設定は[5.7 Haptic Feedback](05-software.md)に従う。
+電流から出力トルクへの換算には、暫定係数1.78 N·m/Aを使い、摩擦補償は加えない。
+この係数は`config/contact.yaml`の`torque_per_amp`で7関節別に校正できる。
+Goal Currentの単位は2.69 mAであり [10]、電流上限は提示トルク上限を超えない方向へ整数化する。
+初期設定の電流上限は41単位（約110.3 mA、換算上約0.196 N·m）となる。
+これはトルクセンサで測った実出力の保証値ではない。
+
+実機サーボは事前にOperating Mode=0とCurrent Limitを設定する。初期設定ではCurrent Limit=41を使用する。
+本ノードはサーボ設定の変更・読戻しを行わず、既存の電流指令・Torque Enableトピックを使用する。
+Operating Mode変更時はTorque OFFで設定し、Goal Current=0を確認してから有効化する [10]。
+Current LimitとOperating ModeはEEPROM設定であり、実験終了後も残る。
+Spinal / Neuronのファームウェア変更は不要であり、MCU側の追加タイムアウト機能は使用しない。
+本実装はSpinalのCAN接続先Neuron経由を対象とし、Spinalのdirect-servo経路は対象外とする。
+
 ---
 
 ## 4.7 Dual-armについて
