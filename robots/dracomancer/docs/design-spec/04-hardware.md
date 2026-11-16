@@ -8,7 +8,7 @@
 
 - 人体関節状態の計測
 - 腕リンク方向・相対姿勢の取得
-- 将来的な関節トルク提示
+- 関節トルク提示
 
 である。
 
@@ -39,7 +39,7 @@ Kanekoらの装置では、両手でデバイス全体を保持し、
 | Internal shape | device joints | 上肢形状 |
 | 長時間疲労対策 | floating-baseのため課題 | 身体支持・省動作 |
 | 入力間干渉 | position / attitude / joints間で発生 | 物理的に入力チャネル分離 |
-| Haptic | 未実装 | Mk-IIで拡張 |
+| Haptic | 未実装 | 7関節の電流制御による力覚提示 |
 
 Kanekoら自身も、長時間作業では floating-base device の保持負荷が問題となり、Joystickとのhybrid利用が有効な可能性を指摘している [3]。
 したがって、**Joystickとの分離は先行研究の課題を踏まえた設計変更**である。
@@ -151,8 +151,28 @@ Rigid exoskeletonでは人体関節軸とのmisalignment、attachment interface�
 
 ### Actuator
 
-力覚提示を行う関節には、バックドライブ性・通信周期・トルク余裕を確認した smart servo を使用する。
-既存部品・既存ドライバを優先し、新規モータ制御基板は原則開発しない。
+Mk-IIの能動7関節は、すべて **ROBOTIS XM430-W350-R** を使用する。位置計測と力覚提示を同じサーボで行い、既存のSpinal通信経路を使用する。新規モータ制御基板は原則開発しない。
+
+XM430-W350-Rの制御仕様は次とする [10]。
+
+| 項目 | Mk-II仕様 |
+|---|---|
+| 台数 | 7台（各能動関節に1台） |
+| 位置分解能 | 4096 pulse/rev |
+| 力覚提示モード | Current Control Mode（Operating Mode = 0） |
+| 電流指令単位 | 2.69 mA |
+| 電流―トルク換算 | \(K_t=1.783\,\mathrm{Nm/A}\) を初期公称値として使用 |
+| 通信 | 既存Spinalの `servo/target_current` と `servo/torque_enable` |
+
+\(K_t\) は12 V時のstall torque 4.1 Nmとstall current 2.3 Aから求める初期換算値であり、連続使用可能トルクまたは人体に対する安全値ではない。装着状態で関節ごとの符号、摩擦、実トルク、温度上昇を測定し、ソフトウェア電流上限とサーボのCurrent Limitを決定する。
+
+実機で力覚出力を有効化する前に、全サーボについて次を確認する。
+
+- Operating ModeがCurrent Control Modeであること
+- Current Limitが関節ごとの安全値以下であること
+- 正負の電流指令が意図した抵抗方向と一致すること
+- 通信断・入力timeout・モード解除時に電流ゼロかつtorque disableへ移行すること
+- 機械ストッパ、非常停止、装着者が自力で離脱できる機構が機能すること
 
 ---
 
@@ -183,3 +203,6 @@ DOI: 10.1109/SII64115.2026.11404691.
 “A Systematic Review on Rigid Exoskeleton Robot Design for Wearing Comfort: Joint Self-Alignment, Attachment Interface, and Structure Customization,”
 *IEEE Transactions on Neural Systems and Rehabilitation Engineering*, vol. 32, pp. 3815–3827, 2024.
 DOI: 10.1109/TNSRE.2024.3479283.
+
+[10] ROBOTIS, “XM430-W350,” *DYNAMIXEL e-Manual*.
+https://emanual.robotis.com/docs/en/dxl/x/xm430-w350/

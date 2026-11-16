@@ -17,6 +17,12 @@
   <!-- true: also start teleoperation.launch and enter teleoperation mode.
        false: keep bringup-only behavior. -->
   <arg name="teleop_mode" default="False" />
+  <!-- Haptic computation, hardware current output, and contact feedback are
+       separate switches.  All remain off unless explicitly requested. -->
+  <arg name="enable_haptics" default="False" />
+  <arg name="enable_haptic_hardware" default="False" />
+  <arg name="enable_contact_haptics" default="False" />
+  <arg name="enable_safety_haptics" default="True" />
   <!-- expose the same names used by shared launch files -->
   <arg name="real_machine" value="$(arg rm)"  />
   <arg name="simulation"   value="$(arg sim)" />
@@ -167,7 +173,11 @@
   <include file="$(find dracomancer)/launch/teleoperation.launch" if="$(arg teleop_mode)">
     <arg name="device_ns" value="$(arg robot_ns)" />
     <arg name="robot_ns" value="$(arg controlled_robot_ns)" />
-    <arg name="teleop_mode" value="teleoperation" />
+    <arg name="teleop_mode" value="$(arg teleop_mode)" />
+    <arg name="enable_haptics" value="$(arg enable_haptics)" />
+    <arg name="enable_haptic_hardware" value="$(arg enable_haptic_hardware)" />
+    <arg name="enable_contact_haptics" value="$(arg enable_contact_haptics)" />
+    <arg name="enable_safety_haptics" value="$(arg enable_safety_haptics)" />
   </include>
 
   ###########  Mobile Web Console  ###########

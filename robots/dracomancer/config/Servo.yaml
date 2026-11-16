@@ -2,10 +2,13 @@ servo_controller:
   state_sub_topic: /dracomancer/servo/states
 
   joints:
+    # Dracomancer Mk-II uses XM430-W350-R for all seven joints.
     angle_sgn: 1
     angle_scale: 0.00153398 # 2 * pi / 4096
     zero_point_offset: 2048
-    torque_scale: 1.0
+    # Nominal 12 V conversion: 1.783 Nm/A * 0.00269 A/current-unit.
+    # Per-joint human-safe limits still require Mk-II bench calibration.
+    torque_scale: 0.00479627
 
     filter_flag: true
     sample_freq: 50.0

@@ -12,7 +12,7 @@
 | 8 | LiDAR collision constraint | 必須 |
 | 9 | DRAGON real-flight validation | 必須 |
 | 10 | Mk-II lightweight / adjustable hardware | 必須 |
-| 11 | Contact haptic | 第2優先 |
+| 11 | Contact hapticの入力同定・実機評価 | 第2優先 |
 | 12 | Reference-link fixed mode | 第2優先 |
 | 13 | Web browser client + ROS bag可視化・メディア出力基盤 | 補助・本筋外 |
 | 14 | Dual-arm | 発展 |
