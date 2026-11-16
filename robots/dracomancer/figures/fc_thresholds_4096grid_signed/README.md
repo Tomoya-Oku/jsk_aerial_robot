@@ -45,7 +45,7 @@ heuristic needs to be reconsidered for a signed distribution.
 
 ```bash
 MPLCONFIGDIR=/tmp/mpl_fc_signed \
-python3 ../../scripts/experiments/plot_fc_data.py \
+python3 ../scripts/plot_fc_data.py \
   fc_4096grid_signed_merged.csv \
   --out-dir . \
   --name-prefix fc_4096grid_signed \
@@ -57,7 +57,7 @@ python3 ../../scripts/experiments/plot_fc_data.py \
 
 ```bash
 MPLCONFIGDIR=/tmp/mpl_fc_signed_zoom \
-python3 ../../scripts/experiments/plot_fc_data.py \
+python3 ../scripts/plot_fc_data.py \
   fc_4096grid_signed_merged.csv \
   --out-dir . \
   --name-prefix fc_4096grid_signed_zoom \
@@ -71,7 +71,7 @@ python3 ../../scripts/experiments/plot_fc_data.py \
 
 ```bash
 MPLCONFIGDIR=/tmp/mpl_fc_signed_force \
-python3 ../../scripts/experiments/plot_fc_data.py \
+python3 ../scripts/plot_fc_data.py \
   fc_4096grid_signed_merged.csv \
   --out-dir . \
   --name-prefix fc_4096grid_signed \

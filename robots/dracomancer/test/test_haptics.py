@@ -3,13 +3,13 @@
 
 """Unit tests for the ROS-independent Mk-II haptic models."""
 
-import os
+from pathlib import Path
 import sys
 import unittest
 
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts/haptics"))
 
 from contact_feedback import ContactFeedback
 from safety_feedback import SafetyFeedback, combine_torque, rate_limit

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Orchestrates the Mk-I flight-feasibility threshold-calibration experiment.
+# Orchestrates the DRAGON flight-feasibility threshold-calibration experiment.
 # Assumes a DRAGON Gazebo sim is already
 # hovering (flight_state == 5).
 #

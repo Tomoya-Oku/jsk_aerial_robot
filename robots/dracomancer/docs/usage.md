@@ -44,6 +44,7 @@ Mk-II単体Gazebo、DRAGONの別Gazebo、重複する形態指令ノードを同
 ## 再現できる検証
 
 ソースを取得したworkspaceで、変更内容に応じて次を使う。
+テストは`test/`へ集約し、Mk-II固有のモデル・直結制御・GUI検証は`test/mkii/`に置く。
 
 ```bash
 python3 -B src/jsk_aerial_robot/robots/dracomancer/test/mkii/model.py
@@ -51,8 +52,8 @@ python3 -B src/jsk_aerial_robot/robots/dracomancer/test/mkii/current.py
 python3 -B src/jsk_aerial_robot/robots/dracomancer/test/test_runtime.py
 python3 -B src/jsk_aerial_robot/robots/dracomancer/test/test_output.py
 python3 -B src/jsk_aerial_robot/robots/dracomancer/test/test_contact.py
-python3 -B src/jsk_aerial_robot/robots/dracomancer/scripts/haptics/test_haptics.py
-python3 -B src/jsk_aerial_robot/robots/dracomancer/tests/test_shape.py -v
+python3 -B src/jsk_aerial_robot/robots/dracomancer/test/test_haptics.py
+python3 -B src/jsk_aerial_robot/robots/dracomancer/test/test_shape.py -v
 ```
 
 `test_runtime.py`はROSインターフェースを模擬した回帰テスト。`test_shape.py`にはROS・PyKDL依存の検証を含む。

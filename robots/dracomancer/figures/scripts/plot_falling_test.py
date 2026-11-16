@@ -100,7 +100,7 @@ def parse_args():
     parser.add_argument(
         "-o",
         "--out-dir",
-        default=os.path.join(os.path.dirname(__file__), "falling_test"),
+        default=os.path.join(os.path.dirname(__file__), "..", "falling_test"),
         help="output directory",
     )
     parser.add_argument(

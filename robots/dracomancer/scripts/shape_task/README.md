@@ -19,7 +19,7 @@ Dracomancer（上肢外骨格デバイス）で DRAGON の形態を操作し、�
 | `../../config/shape_task/targets.yaml` | 目標形態リスト（L-like / Zigzag-like / Spiral-like） |
 | `../../config/shape_task/experiment.yaml` | しきい値・トピック名・試行管理などの全設定 |
 | `../../launch/shape_task.launch` | 実験ノード群の起動 |
-| `../../figures/plot_task.py` | 結果ディレクトリからの図生成 |
+| `../../figures/scripts/plot_task.py` | 結果ディレクトリからの図生成 |
 
 ## 実行手順
 
@@ -95,11 +95,9 @@ roslaunch dracomancer shape_task.launch dryrun:=true auto_start:=true
 rosrun dracomancer keyboard_baseline.py _enable_feasibility_gate:=false
 ```
 
-Dracomancer 側のダミー入力で試す場合は `dracomancer bringup.launch rm:=false sim:=true`
-（GUI スライダ → `/dracomancer/joint_states`）+ `teleoperation.launch
-enable_feasibility_gate:=false enable_link4_anchor:=false` を併用する。
-`teleoperation.launch` は `/dracomancer/joint_states` を生成しないため、先に
-`bringup.launch` 側を起動して入力を用意する。
+Dracomancerの仮想入力を併用する場合は、[形状操作](../../docs/shape.md)に従って
+viewerと体幹点・固定軸合わせを設定する。入力は`/dracomancer/measured_joint_states`。
+`teleoperation.launch`自体は入力を生成しない。
 
 ### 試行管理サービス
 
@@ -135,7 +133,7 @@ results/YYYYMMDD_HHMMSS/
   trial_001_raw.csv       # 時系列 raw ログ（record_rate = 40 Hz）
   trial_001_metrics.csv   # 試行の評価指標
   summary_metrics.csv     # 全試行の指標一覧（1試行1行）
-  plots/                  # figures/plot_task.py の出力（session_end 時に自動生成）
+  plots/                  # figures/scripts/plot_task.py の出力（session_end 時に自動生成）
 ```
 
 raw CSV 列: `time, target_name, q_star_0..5, q_current_0..5, q_target_0..5,
@@ -157,7 +155,7 @@ q_candidate_0..5, q_exo_0..6, r_f, r_tau, mu, gate_rejected, E_q, E_s` +
 | `path_efficiency` | ‖q_star − q_current[0]‖ / q_current の関節空間軌跡長 |
 
 オフライン再計算: `./compute_metrics.py trial_001_raw.csv`、
-図の再生成: `rosrun dracomancer plot_task.py <results_dir>`（`figures/plot_task.py`）。
+図の再生成: `rosrun dracomancer plot_task.py <results_dir>`（`figures/scripts/plot_task.py`）。
 
 ## 未接続・未確認項目
 

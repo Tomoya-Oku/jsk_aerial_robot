@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 
 
 BAG_DEFAULT = os.path.expanduser("~/rosbags/20260708_151650_joint_angles_mapping.bag")
-OUT_DEFAULT = os.path.join(os.path.dirname(__file__), "joint_angles_mapping")
+OUT_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "joint_angles_mapping")
 
 DRAGON_JOINTS = [
     "joint1_pitch",

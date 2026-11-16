@@ -27,12 +27,14 @@ install(TARGETS wall_contact LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATIO
 install(TARGETS shape_feasibility_node RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(DIRECTORY config launch scripts urdf meshes docs
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION} USE_SOURCE_PERMISSIONS)
+install(DIRECTORY figures/scripts
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/figures USE_SOURCE_PERMISSIONS)
 install(FILES README.md DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 if(CATKIN_ENABLE_TESTING)
   catkin_add_nosetests(test/test_contact.py)
   catkin_add_nosetests(test/test_output.py)
   catkin_add_nosetests(test/test_runtime.py)
-  catkin_add_nosetests(scripts/haptics/test_haptics.py)
+  catkin_add_nosetests(test/test_haptics.py)
   add_test(NAME mkii_current COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/mkii/current.py)
   add_test(NAME mkii_model COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/mkii/model.py)
 endif()

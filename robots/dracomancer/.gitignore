@@ -1,2 +1,13 @@
 __pycache__/
 *.py[cod]
+.pytest_cache/
+*.bag
+*.bag.active
+*.log
+*.tmp
+*.bak
+*~
+
+# Keep plot sources separate from generated figures and experiment data.
+/figures/*
+!/figures/scripts/

@@ -201,7 +201,7 @@ class TargetManager:
         rospy.loginfo("shape task session -> %s", self.results_dir)
 
     def dump_session_yaml(self):
-        # Effective config snapshot, consumed by figures/plot_task.py for
+        # Effective config snapshot, consumed by figures/scripts/plot_task.py for
         # threshold lines and kept as the experiment record.
         session = {
             "stamp": datetime.datetime.now().isoformat(),

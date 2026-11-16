@@ -7,10 +7,9 @@ Mirrors the fc->link4 chain used by control_joint_angle.py
 (dragon_fc_to_link4_matrix): each link is link_length long; a pitch joint
 (about +Y) sits at the link end, followed by a 2*inter_joint_x_offset spacer
 and the yaw joint (about +Z). All positions are expressed in the link4-root
-frame: link4 is the shoulder-corresponding link that control_joint_angle.py's
-link4-anchor holds fixed in the world during real operation, so this matches
-what an operator (and the world-fixed shadow marker) actually sees, and the
-shape comparison is invariant to the flying body pose.
+frame. This is a relative shape representation, independent of the flying
+body pose; it does not imply an active link4-anchor controller. The shadow
+visualizer chooses the display frame separately.
 
 Units: rad / m. Joint order: [j1_pitch, j1_yaw, j2_pitch, j2_yaw, j3_pitch, j3_yaw].
 """

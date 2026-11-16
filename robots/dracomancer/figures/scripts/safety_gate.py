@@ -10,7 +10,7 @@ from textwrap import dedent
 from xml.sax.saxutils import escape
 
 
-OUT = Path(__file__).with_suffix(".svg")
+OUT = Path(__file__).resolve().parents[1] / "safety_gate.svg"
 
 
 def text(x, y, body, class_name):

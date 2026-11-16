@@ -19,8 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-DRACOMANCER = os.path.join(ROOT, "robots", "dracomancer")
+DRACOMANCER = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SHAPE_TASK = os.path.join(DRACOMANCER, "scripts", "shape_task")
 sys.path.insert(0, SHAPE_TASK)
 
