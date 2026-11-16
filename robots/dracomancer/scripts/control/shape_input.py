@@ -10,7 +10,7 @@ if __name__ == "__main__":
     rospy.init_node("shape_input")
     if not rospy.get_param("/use_sim_time", False):
         raise RuntimeError("shape_input requires simulation time")
-    publisher = rospy.Publisher("/dracomancer_mkii/joint_cmd", JointState, queue_size=1)
+    publisher = rospy.Publisher("/dracomancer/joint_cmd", JointState, queue_size=1)
     names = ["%s_joint_%d" % (side, i) for side in ("right", "left") for i in range(1, 8)]
     rate = rospy.Rate(40)
     start = None

@@ -1,0 +1,19 @@
+<launch>
+  <!-- Mk-II viewer: joint_cmd to joint_states with the CAD angle/torque panel. -->
+  <arg name="robot_ns" default="dracomancer"/>
+  <arg name="rviz" default="true"/>
+  <arg name="panel" default="true"/>
+  <arg name="mount_height" default="1.0"/>
+  <group ns="$(arg robot_ns)">
+    <param name="robot_description" command="$(find xacro)/xacro --inorder '$(find dracomancer)/urdf/mkii.urdf.xacro' robot_ns:=$(arg robot_ns) mount_height:=$(arg mount_height)"/>
+    <rosparam command="load" file="$(find dracomancer)/config/mkii/joints.yaml"/>
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher"/>
+    <node pkg="dracomancer" type="control.py" name="control" output="screen">
+      <param name="backend" value="viewer"/>
+    </node>
+    <node pkg="dracomancer" type="panel.py" name="panel" if="$(arg panel)" output="screen">
+      <remap from="joint_states" to="joint_cmd"/>
+    </node>
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find dracomancer)/config/mkii/mkii.rviz" if="$(arg rviz)"/>
+  </group>
+</launch>

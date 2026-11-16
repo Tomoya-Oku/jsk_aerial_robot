@@ -1,5 +1,8 @@
 # Codex実装指示書：Dracomancer → DRAGONのCross-embodiment Shape-based Retargeting
 
+本書は初回実装時の履歴資料。旧モードの維持など、後続の指示で変更した箇所がある。
+現行仕様は[設計書](design-spec.md)、Mk-II統合・Mk-I削除は[統合記録](integration.md)を参照する。
+
 ## 0. 目的と作業方針
 
 `Tomoya-Oku/jsk_aerial_robot` の `develop` を基準に、Dracomancer（7関節自由度）の人腕形状を**共通の3D中心線形状空間**で表現し、DRAGON（4リンク、3関節×Pitch/Yaw＝内部6DoF）の目標形態へ変換するモード `mapping_mode:=shape` を実装してください。

@@ -1,484 +1,130 @@
 <launch>
-  <!-- robot namespace -->
-  <arg name="device_ns" default="dracomancer"/>
-  <arg name="robot_ns" default="dragon"/>
-
-  <!-- serial settings -->
-  <arg name="port" default="/dev/ttyUSB0"/>
-  <arg name="baud" default="921600"/>
-  <arg name="enable_joystick_serial" default="false"/>
-
-  <!-- topic names -->
-  <arg name="js_raw_topic" default="/joystick/raw"/>
-  <arg name="js_calibrated_topic" default="/$(arg device_ns)/joystick/calibrated"/>
-  <arg name="device_joint_topic" default="/$(arg device_ns)/joint_states"/>
-  <!-- Predictive shape-feasibility gate (teleop_mode=true).
-       shape_feasibility_node runs in the controlled robot's namespace so its
-       robot model can read <robot_ns>/robot_description.
-       Default ON: force/torque volume radii and the coupled static-wrench
-       feasibility result are used as the dangerous-shape gate when
-       teleop_mode=true. If the predictor is too conservative for a DRAGON
-       model/config and freezes deformation, pass enable_feasibility_gate:=false
-       for fallback operation. -->
-  <arg name="enable_feasibility_gate" default="true"/>
-  <!-- hold: current hard gate; step_search: try smaller feasible increments;
-       soft_scale: move partially toward infeasible candidates. -->
-  <arg name="feasibility_gate_mode" default="hold"/>
-  <arg name="feasibility_step_fraction" default="0.25"/>
-  <arg name="feasibility_min_step_fraction" default="0.03"/>
-  <arg name="feasibility_soft_min_scale" default="0.0"/>
-  <arg name="feasibility_service" default="/$(arg robot_ns)/shape_feasibility/check_shape"/>
-  <arg name="robot_model_plugin_name" default="dragon/full_vectoring_robot_model"/>
-  <!-- shape_feasibility prediction mode:
-         model            : legacy getFeasibleControlF/TMin() after updateRobotModel().
-         optimized_gimbal : DRAGON full-vectoring model's gimbal-processed state.
-         controller       : use latest controller gimbal command and optional body
-                            attitude feedback to approximate /debug/fc_*_min.
-         allocation       : default; run static hover allocation for the candidate shape,
-                            then evaluate fc with the allocated gimbal roll angles. -->
-  <arg name="shape_feasibility_prediction_mode" default="allocation"/>
-  <arg name="shape_feasibility_gimbal_feedback_topic" default="gimbals_ctrl"/>
-  <arg name="shape_feasibility_baselink_rpy_topic" default="final_target_baselink_rpy"/>
-  <arg name="shape_feasibility_baselink_odom_topic" default="uav/baselink/odom"/>
-  <arg name="shape_feasibility_use_gimbal_feedback" default="true"/>
-  <arg name="shape_feasibility_use_baselink_rpy_feedback" default="true"/>
-  <arg name="shape_feasibility_use_baselink_odom_feedback" default="true"/>
-  <arg name="shape_feasibility_feedback_timeout" default="0.25"/>
-  <arg name="shape_feasibility_allocation_refine_max_iteration" default="5"/>
-  <arg name="shape_feasibility_allocation_refine_threshold" default="0.0001"/>
-  <arg name="feasibility_rate" default="10.0"/>
-  <arg name="enable_target_fc_prediction" default="true"/>
-  <arg name="target_fc_prediction_rate" default="10.0"/>
-  <!-- Gate fallback used only until the threshold topic arrives.
-       hard thresholds enter hold; recover thresholds (min) release hold.
-       Defaults match volume_radius_monitor and are inherited from Mk-I.
-       Recalibration is required for Mk-II. -->
-  <arg name="force_radius_threshold" default="0.108990"/>
-  <arg name="torque_radius_threshold" default="0.015400"/>
-  <arg name="force_radius_recover_threshold" default="0.249220"/>
-  <arg name="torque_radius_recover_threshold" default="0.278159"/>
-  <!-- Live Force/Torque volume radius monitor.
-       Keep this with teleoperation so shape_safety logs and threshold topics
-       are visible in the same terminal as the shape controller. -->
-  <arg name="enable_volume_radius_monitor" default="true"/>
-  <arg name="enable_shape_safety" default="true"/>
-  <arg name="missing_inradius_scale" default="1.0"/>
-  <arg name="min_safety_scale" default="0.0"/>
-  <arg name="force_inradius_min" default="0.249220"/>
-  <arg name="torque_inradius_min" default="0.278159"/>
-  <arg name="force_inradius_hard_min" default="0.108990"/>
-  <arg name="torque_inradius_hard_min" default="0.015400"/>
-  <arg name="inradius_timeout" default="0.5"/>
-  <arg name="safety_log_period" default="1.0"/>
-  <!-- Low-pass the measured fc_f_min / fc_t_min before live shape_safety logs. -->
-  <arg name="enable_fc_min_lowpass" default="true"/>
-  <arg name="fc_min_lowpass_cutoff_hz" default="2.0"/>
-  <arg name="monitor_force_inradius_topic"
-       default="$(eval '/' + arg('robot_ns') + '/debug/fc_f_min' + ('_filtered' if arg('enable_fc_min_lowpass') else ''))" />
-  <arg name="monitor_torque_inradius_topic"
-       default="$(eval '/' + arg('robot_ns') + '/debug/fc_t_min' + ('_filtered' if arg('enable_fc_min_lowpass') else ''))" />
-  <arg name="max_step" default="0.015"/>
-  <!-- rad/s, bounded in elapsed ROS time as well as by max_step. -->
-  <arg name="max_joint_velocity" default="0.1"/>
-  <arg name="joint_limit" default="1.57079632679"/>
-  <!-- Arm->DRAGON mapping strategy (teleop_mode=true):
-         joint_pairing : flexion joints -> DRAGON yaw, pitch held at 0 (planar).
-         geometric     : arm FK -> link directions -> yaw/pitch decomposition.
-         shape         : URDF centerline optimization; explicit calibration required.
-         distal        : absolute match of distal arm joints (wrist + elbow) to
-                         DRAGON joints; every unmapped joint held unchanged. Default.
-                         ("elbow_only" is a backward-compatible alias of distal.) -->
-  <arg name="mapping_mode" default="distal"/>
-  <arg name="shape_config" default="$(find dracomancer)/config/control/shape.yaml"/>
-  <arg name="human_description" default="/dracomancer_mkii/robot_description"/>
-  <!-- Opt-in local mapping derivative for contact haptics. -->
-  <arg name="publish_mapping_jacobian" default="false"/>
-  <!-- mapping_reference: base pose the arm->DRAGON mapping deforms around
-       (legacy modes; shape uses shape/rest or startup_pose as regularization).
-         straight : map around 0 rad (DRAGON straightens out).
-         circular : relative deformation around startup_pose (circular DRAGON shape). Default. -->
-  <arg name="joint_pairing_reference" default="circular"/>  <!-- deprecated alias of mapping_reference -->
-  <arg name="mapping_reference" default="$(arg joint_pairing_reference)"/>
-  <arg name="joint_pairing_scale" default="1.0"/>
-  <!-- Allocation-roll neutral capture: at every switch to teleop_mode=true
-       (and hover start / ~recapture_anchor), the upper-arm / forearm roll
-       angles are captured as the allocation neutral, so their assembly-defined
-       servo zeros do not pin the elbow/wrist pitch-yaw allocation at the
-       saturation edge. Every other source joint stays an absolute-angle match.
-       false uses raw absolute roll angles. -->
-  <arg name="capture_roll_neutral" default="true"/>
-  <!-- Elbow-plane mapping for distal mode: saturate upper-arm roll to +/-90deg
-       from its reference (r) and allocate elbow flexion as joint2 pitch:yaw =
-       r:(pi/2 - |r|). The roll sign is carried on joint2_pitch, so joint2_yaw
-       stays continuous across the neutral roll. -->
-  <arg name="enable_elbow_roll_switching" default="true"/>
-  <arg name="elbow_roll_offset" default="0.0"/>
-  <arg name="elbow_pitch_sign" default="1.0"/>
-  <arg name="elbow_yaw_sign" default="1.0"/>
-  <arg name="elbow_pitch_scale" default="1.0"/>
-  <arg name="elbow_yaw_scale" default="1.0"/>
-  <!-- Wrist-plane mapping for distal mode: saturate upper-arm and wrist rolls to
-       +/-90deg after subtracting each reference, then allocate wrist flexion to
-       joint1 pitch/yaw with cos(theta + phi):sin(theta + phi). -->
-  <arg name="enable_wrist_roll_switching" default="true"/>
-  <arg name="wrist_roll_offsets" default="[0.0, 0.0]"/>
-  <arg name="wrist_pitch_sign" default="1.0"/>
-  <arg name="wrist_yaw_sign" default="1.0"/>
-  <arg name="wrist_pitch_scale" default="1.0"/>
-  <arg name="wrist_yaw_scale" default="1.0"/>
-  <arg name="wrist_yaw_source_sign" default="1.0"/>
-  <arg name="wrist_yaw_source_scale" default="1.0"/>
-  <!-- distal mapping lists are set as private params inside the control_joint_angle
-       node below (parallel lists: human source joint -> DRAGON target joint, sign,
-       scale). Default: wrist flexion -> joint1_pitch, wrist abduction -> joint1_yaw,
-       elbow flexion -> joint2_pitch/yaw selected by upper-arm roll, shoulder
-       flexion -> joint3_pitch, shoulder abduction -> joint3_yaw;
-       target=clamp(sign*scale*source+offset), signs=[1,1,1,1,-1],
-       offsets=[0,0,0,0,0], scales=1.0. -->
-  <arg name="capture_neutral_on_first_msg" default="false"/>
-  <!-- distal link4 anchor: helper to keep the arm-tip link (link4) ~fixed in
-       world while joints bend. The default position_only mode anchors only the
-       link4 position by commanding COG position (uav/nav POS_MODE) alongside
-       joints_ctrl. Use position_yaw to also hold link4 yaw through the COG yaw
-       target (roll/pitch untouched), or full to compensate baselink attitude. -->
-  <arg name="enable_link4_anchor" default="true"/>
-  <arg name="link4_anchor_mode" default="position_only"/> <!-- position_only / position_yaw / full -->
-  <!-- Offset of the anchored point along link4 x [m]. 0.0 = link4 frame origin
-       (joint3 side). Set to the link length (0.474) to anchor the tail tip so
-       tail-side joint inputs visibly translate the head-side links. -->
-  <arg name="link4_anchor_offset_x" default="0.0"/>
-  <arg name="publish_link4_anchor_baselink_motion" default="false"/>
-  <!-- Limit joint-step progress so the link4-anchor body compensation target does
-       not require excessive COG position, or baselink attitude motion in full mode. -->
-  <arg name="enable_link4_anchor_body_step_scaling" default="true"/>
-  <arg name="link4_anchor_max_body_pos_rate" default="0.4"/>
-  <arg name="link4_anchor_max_body_rpy_rate" default="0.8"/>
-  <!-- Reject link4-anchor targets that would require unsafe body attitude,
-       altitude, or horizontal drift from the hover-start COG.
-       These limits are evaluated after max_step/body-step scaling; rejected targets
-       hold the previous joint command and publish no rejected body command. -->
-  <arg name="enable_link4_anchor_body_safety" default="true"/>
-  <arg name="link4_anchor_max_abs_roll" default="0.6"/>
-  <arg name="link4_anchor_max_abs_pitch" default="0.6"/>
-  <arg name="link4_anchor_min_cog_z" default="0.6"/>
-  <arg name="link4_anchor_max_cog_z" default="2.5"/>
-  <arg name="link4_anchor_max_cog_xy_offset" default="0.9"/>
-  <arg name="link4_anchor_max_abs_yaw_delta" default="2.0943951023931953"/>
-  <!-- Hold shape updates when the controlled robot is not tracking the current
-       link4-anchor body/joint targets.  In position_yaw, the yaw guard prevents
-       shape commands from running ahead of the COG yaw response. -->
-  <arg name="enable_link4_anchor_tracking_safety" default="true"/>
-  <arg name="link4_anchor_max_cog_tracking_error" default="0.2"/>
-  <arg name="link4_anchor_max_yaw_tracking_error" default="0.5235987755982988"/>
-  <arg name="link4_anchor_max_tracking_roll" default="0.2617993877991494"/>
-  <arg name="link4_anchor_max_tracking_pitch" default="0.2617993877991494"/>
-  <arg name="enable_link4_anchor_joint_tracking_safety" default="true"/>
-  <arg name="link4_anchor_max_joint_tracking_error" default="0.3"/>
-  <arg name="link4_anchor_joint_tracking_timeout" default="0.5"/>
-  <!-- Baselink roll mapping: sum upper-arm roll and forearm roll deltas from the
-       captured neutral pose, then add the result to the link4-anchor baselink roll. -->
-  <arg name="enable_baselink_roll_mapping" default="true"/>
-  <arg name="baselink_roll_limit" default="1.5707963267948966"/>
-  <!-- Joystick movement control is OFF by default: control_position publishes a
-       POS_VEL_MODE FlightNav whose target_pos is unset (=0), which commands DRAGON
-       toward origin/ground (fall). Enable only once that is addressed. -->
-  <arg name="enable_position_control" default="false"/>
-  <arg name="position_velocity_only" default="false"/>
-  <arg name="joy_timeout" default="0.0"/>
-  <arg name="enable_attitude_control" default="false"/>
-  <arg name="enable_joint_angle_control" default="true"/>
-  <!-- teleop_mode: false holds startup_pose; true maps Dracomancer arm to DRAGON.
-       Joystick movement still depends on enable_position_control.
-       Runtime switch: rostopic pub -1 /dracomancer/teleop_mode std_msgs/Bool "data: true" -->
-  <arg name="teleop_mode" default="false"/>
-  <arg name="mode_topic" default="/$(arg device_ns)/teleop_mode"/>
-
-  <!-- Haptic calculation can run without driving the servos.  Hardware current
-       output and contact feedback are independently opt-in until Mk-II has been
-       calibrated and the wrench/Jacobian inputs have been validated. -->
-  <arg name="enable_haptics" default="false"/>
-  <arg name="enable_haptic_hardware" default="false"/>
-  <arg name="enable_contact_haptics" default="false"/>
-  <arg name="enable_safety_haptics" default="true"/>
-
-  <!-- pose (movement) control settings -->
-  <!-- nav_target: cog (重心) or baselink (ベースリンク) -->
-  <arg name="nav_target" default="cog"/>
-  <!-- direction_mode: none / yaw / yaw_pitch / full -->
-  <arg name="direction_mode" default="yaw"/>
-  <arg name="imu_topic" default="/$(arg device_ns)/imu"/>
-  <!-- IMU mounting correction (operator-body <- IMU board) [rad].
-       Default assumes the IMU is tilted 90deg on the operator's back.
-       Tune on the real hardware. -->
-  <arg name="imu_mount_roll" default="0.0"/>
-  <arg name="imu_mount_pitch" default="-1.57079632679"/>
-  <arg name="imu_mount_yaw" default="0.0"/>
-  <arg name="recapture_neutral_on_hover" default="true"/>
-  <arg name="publish_joints_only_when_hovering" default="true"/>
-  <arg name="hover_flight_state" default="5"/>
-  <arg name="publish_joints_before_device_ready" default="false"/>
-  <arg name="axis_x" default="0"/>
-  <arg name="axis_y" default="1"/>
-  <arg name="axis_z" default="2"/>
-  <arg name="xy_vel" default="0.3"/>
-  <arg name="z_vel" default="0.2"/>
-  <arg name="axis_roll" default="-1"/>
-  <arg name="axis_pitch" default="-1"/>
-  <arg name="axis_yaw" default="-1"/>
-  <arg name="roll_vel" default="0.0"/>
-  <arg name="pitch_vel" default="0.0"/>
-  <arg name="yaw_vel" default="0.0"/>
-
-  <!-- raw joystick publisher side -->
-  <!-- spinal/bridge.launch の中で rosserial_server を起動しているなら include でも可 -->
-  <node pkg="rosserial_server"
-        type="serial_node"
-        name="$(arg device_ns)_rosserial_server"
-        output="screen"
-        if="$(arg enable_joystick_serial)">
-    <param name="port" value="$(arg port)"/>
-    <param name="baud" value="$(arg baud)"/>
-    <remap from="joystick_m5stack" to="$(arg js_raw_topic)"/>
+  <arg name="device_ns" default="dracomancer" />
+  <arg name="device_joint_topic" default="/$(arg device_ns)/measured_joint_states" />
+  <arg name="robot_ns" default="dragon" />
+  <arg name="enable_feasibility_gate" default="true" />
+  <arg name="feasibility_gate_mode" default="hold" />
+  <arg name="feasibility_service" default="/$(arg robot_ns)/shape_feasibility/check_shape" />
+  <arg name="robot_model_plugin_name" default="dragon/full_vectoring_robot_model" />
+  <arg name="shape_feasibility_prediction_mode" default="allocation" />
+  <arg name="shape_feasibility_gimbal_feedback_topic" default="gimbals_ctrl" />
+  <arg name="shape_feasibility_baselink_rpy_topic" default="final_target_baselink_rpy" />
+  <arg name="shape_feasibility_baselink_odom_topic" default="uav/baselink/odom" />
+  <arg name="shape_feasibility_use_gimbal_feedback" default="true" />
+  <arg name="shape_feasibility_use_baselink_rpy_feedback" default="true" />
+  <arg name="shape_feasibility_use_baselink_odom_feedback" default="true" />
+  <arg name="shape_feasibility_feedback_timeout" default="0.25" />
+  <arg name="shape_feasibility_allocation_refine_max_iteration" default="5" />
+  <arg name="shape_feasibility_allocation_refine_threshold" default="0.0001" />
+  <arg name="feasibility_rate" default="10.0" />
+  <arg name="force_radius_threshold" default="0.108990" />
+  <arg name="torque_radius_threshold" default="0.015400" />
+  <arg name="force_radius_recover_threshold" default="0.249220" />
+  <arg name="torque_radius_recover_threshold" default="0.278159" />
+  <arg name="enable_volume_radius_monitor" default="true" />
+  <arg name="enable_shape_safety" default="true" />
+  <arg name="missing_inradius_scale" default="1.0" />
+  <arg name="min_safety_scale" default="0.0" />
+  <arg name="force_inradius_min" default="0.249220" />
+  <arg name="torque_inradius_min" default="0.278159" />
+  <arg name="force_inradius_hard_min" default="0.108990" />
+  <arg name="torque_inradius_hard_min" default="0.015400" />
+  <arg name="inradius_timeout" default="0.5" />
+  <arg name="safety_log_period" default="1.0" />
+  <arg name="enable_fc_min_lowpass" default="true" />
+  <arg name="fc_min_lowpass_cutoff_hz" default="2.0" />
+  <arg name="monitor_force_inradius_topic" default="$(eval '/' + arg('robot_ns') + '/debug/fc_f_min' + ('_filtered' if arg('enable_fc_min_lowpass') else ''))" />
+  <arg name="monitor_torque_inradius_topic" default="$(eval '/' + arg('robot_ns') + '/debug/fc_t_min' + ('_filtered' if arg('enable_fc_min_lowpass') else ''))" />
+  <arg name="max_step" default="0.015" />
+  <arg name="max_joint_velocity" default="0.1" />
+  <arg name="mapping_mode" default="shape" />
+  <arg name="shape_config" default="$(find dracomancer)/config/control/shape.yaml" />
+  <arg name="human_description" default="/$(arg device_ns)/robot_description" />
+  <arg name="teleop_mode" default="false" />
+  <arg name="enable_position_control" default="false" />
+  <arg name="position_velocity_only" default="true" />
+  <arg name="joy_timeout" default="0.1" />
+  <arg name="enable_joint_angle_control" default="true" />
+  <arg name="publish_joints_only_when_hovering" default="true" />
+  <node pkg="dracomancer" type="volume_radius_monitor.py" name="$(arg device_ns)_volume_radius_monitor" output="screen" if="$(arg enable_volume_radius_monitor)">
+    <param name="robot_name" value="$(arg robot_ns)" />
+    <param name="device_ns" value="/$(arg device_ns)" />
+    <param name="rate" value="40.0" />
+    <param name="force_inradius_topic" value="$(arg monitor_force_inradius_topic)" />
+    <param name="torque_inradius_topic" value="$(arg monitor_torque_inradius_topic)" />
+    <param name="force_inradius_min" value="$(arg force_inradius_min)" />
+    <param name="torque_inradius_min" value="$(arg torque_inradius_min)" />
+    <param name="force_inradius_hard_min" value="$(arg force_inradius_hard_min)" />
+    <param name="torque_inradius_hard_min" value="$(arg torque_inradius_hard_min)" />
+    <param name="inradius_timeout" value="$(arg inradius_timeout)" />
+    <param name="enable_shape_safety" value="$(arg enable_shape_safety)" />
+    <param name="missing_inradius_scale" value="$(arg missing_inradius_scale)" />
+    <param name="min_safety_scale" value="$(arg min_safety_scale)" />
+    <param name="safety_log_period" value="$(arg safety_log_period)" />
   </node>
-
-  <!-- joystick calibration -->
-  <node pkg="dracomancer"
-        type="calibrate_joystick.py"
-        name="$(arg device_ns)_calibrate_joystick"
-        output="screen">
-    <param name="js_raw_topic" value="$(arg js_raw_topic)"/>
-    <param name="js_calibrated_topic" value="$(arg js_calibrated_topic)"/>
-
-    <!-- calibration parameters -->
+  <node pkg="dracomancer" type="fc_min_lowpass.py" name="teleop_fc_min_lowpass" ns="$(arg robot_ns)" output="screen" if="$(arg enable_fc_min_lowpass)">
+    <param name="robot_name" value="$(arg robot_ns)" />
+    <param name="cutoff_hz" value="$(arg fc_min_lowpass_cutoff_hz)" />
+  </node>
+  <node pkg="dracomancer" type="shape_feasibility_node" name="shape_feasibility" ns="$(arg robot_ns)" output="screen" if="$(arg enable_feasibility_gate)">
+    <param name="robot_model_plugin_name" value="$(arg robot_model_plugin_name)" />
+    <param name="prediction_mode" value="$(arg shape_feasibility_prediction_mode)" />
+    <param name="gimbal_feedback_topic" value="$(arg shape_feasibility_gimbal_feedback_topic)" />
+    <param name="baselink_rpy_topic" value="$(arg shape_feasibility_baselink_rpy_topic)" />
+    <param name="baselink_odom_topic" value="$(arg shape_feasibility_baselink_odom_topic)" />
+    <param name="use_gimbal_feedback" value="$(arg shape_feasibility_use_gimbal_feedback)" />
+    <param name="use_baselink_rpy_feedback" value="$(arg shape_feasibility_use_baselink_rpy_feedback)" />
+    <param name="use_baselink_odom_feedback" value="$(arg shape_feasibility_use_baselink_odom_feedback)" />
+    <param name="feedback_timeout" value="$(arg shape_feasibility_feedback_timeout)" />
+    <param name="allocation_refine_max_iteration" value="$(arg shape_feasibility_allocation_refine_max_iteration)" />
+    <param name="allocation_refine_threshold" value="$(arg shape_feasibility_allocation_refine_threshold)" />
+  </node>
+  <node pkg="dracomancer" type="control_joint_angle.py" name="$(arg device_ns)_control_joint_angle" output="screen" if="$(arg enable_joint_angle_control)">
+    <param name="device_ns" value="/$(arg device_ns)" />
+    <param name="robot_name" value="$(arg robot_ns)" />
+    <param name="mapping_mode" value="$(arg mapping_mode)" />
+    <param name="device_joint_topic" value="$(arg device_joint_topic)" />
+    <param name="human_description" value="$(arg human_description)" />
+    <param name="teleop_mode" value="$(arg teleop_mode)" />
+    <param name="publish_only_when_hovering" value="$(arg publish_joints_only_when_hovering)" />
+    <param name="enable_feasibility_gate" value="$(arg enable_feasibility_gate)" />
+    <param name="feasibility_gate_mode" value="$(arg feasibility_gate_mode)" />
+    <param name="feasibility_service" value="$(arg feasibility_service)" />
+    <param name="feasibility_rate" value="$(arg feasibility_rate)" />
+    <param name="force_radius_threshold" value="$(arg force_radius_threshold)" />
+    <param name="torque_radius_threshold" value="$(arg torque_radius_threshold)" />
+    <param name="force_radius_recover_threshold" value="$(arg force_radius_recover_threshold)" />
+    <param name="torque_radius_recover_threshold" value="$(arg torque_radius_recover_threshold)" />
+    <param name="max_step" value="$(arg max_step)" />
+    <param name="max_joint_velocity" value="$(arg max_joint_velocity)" />
+    <rosparam command="load" file="$(arg shape_config)" />
+    <env name="OPENBLAS_NUM_THREADS" value="1" />
+  </node>
+  <node pkg="dracomancer" type="calibrate_joystick.py" name="$(arg device_ns)_calibrate_joystick" output="screen">
     <rosparam param="axis_indices">[0, 1]</rosparam>
     <rosparam param="invert_axes">[]</rosparam>
-    <param name="rate" value="40"/>
-    <param name="raw_timeout" value="$(arg joy_timeout)"/>
-    <param name="center_duration" value="2.0"/>
-    <param name="range_duration" value="5.0"/>
-    <param name="deadzone" value="0.05"/>
-
-    <!-- Calibration data -->
-    <param name="save_yaml" value="true"/>
-    <param name="use_saved_calibration" value="true"/>
-    <param name="yaml_path" value="$(find dracomancer)/config/joystick_calibration.yaml"/>
+    <param name="rate" value="40" />
+    <param name="js_raw_topic" value="/joystick/raw" />
+    <param name="js_calibrated_topic" value="/$(arg device_ns)/joystick/calibrated" />
+    <param name="raw_timeout" value="$(arg joy_timeout)" />
+    <param name="center_duration" value="2.0" />
+    <param name="range_duration" value="5.0" />
+    <param name="deadzone" value="0.05" />
+    <param name="save_yaml" value="true" />
+    <param name="use_saved_calibration" value="true" />
+    <param name="yaml_path" value="$(find dracomancer)/config/joystick_calibration.yaml" />
   </node>
-
-  <!-- Position Control -->
-  <node pkg="dracomancer"
-        type="control_position.py"
-        name="$(arg device_ns)_control_position"
-        output="screen"
-        if="$(arg enable_position_control)">
-    <param name="velocity_only" value="$(arg position_velocity_only)"/>
-    <param name="joy_timeout" value="$(arg joy_timeout)"/>
-    <param name="device_ns" value="/$(arg device_ns)"/>
-    <param name="robot_name" value="$(arg robot_ns)"/>
-    <param name="rate" value="40.0"/>
-    <param name="joy_topic" value="$(arg js_calibrated_topic)"/>
-    <param name="teleop_mode" value="$(arg teleop_mode)"/>
-    <param name="mode_topic" value="$(arg mode_topic)"/>
-
-    <!-- Movement target and IMU-relative direction -->
-    <param name="nav_target" value="$(arg nav_target)"/>
-    <param name="direction_mode" value="$(arg direction_mode)"/>
-    <param name="imu_topic" value="$(arg imu_topic)"/>
-    <rosparam param="imu_mount_rpy"
-              subst_value="true">[$(arg imu_mount_roll), $(arg imu_mount_pitch), $(arg imu_mount_yaw)]</rosparam>
-    <param name="recapture_on_hover" value="$(arg recapture_neutral_on_hover)"/>
-
-    <!-- Scaling and Threshold -->
-    <param name="axis_x" value="$(arg axis_x)"/>
-    <param name="axis_y" value="$(arg axis_y)"/>
-    <param name="axis_z" value="$(arg axis_z)"/>
-    <param name="scale_x" value="1.0"/>
-    <param name="scale_y" value="1.0"/>
-    <param name="scale_z" value="1.0"/>
-    <param name="xy_vel" value="$(arg xy_vel)"/>
-    <param name="z_vel" value="$(arg z_vel)"/>
-    <param name="deadzone" value="0.05"/>
+  <node pkg="dracomancer" type="control_position.py" name="$(arg device_ns)_control_position" output="screen" if="$(arg enable_position_control)">
+    <param name="velocity_only" value="$(arg position_velocity_only)" />
+    <param name="joy_timeout" value="$(arg joy_timeout)" />
+    <param name="device_ns" value="/$(arg device_ns)" />
+    <param name="robot_name" value="$(arg robot_ns)" />
+    <param name="rate" value="40.0" />
+    <param name="joy_topic" value="/$(arg device_ns)/joystick/calibrated" />
+    <param name="direction_mode" value="none" />
+    <param name="scale_x" value="1.0" />
+    <param name="scale_y" value="1.0" />
+    <param name="scale_z" value="1.0" />
+    <param name="deadzone" value="0.05" />
   </node>
-
-  <!-- Attitude Control -->
-  <node pkg="dracomancer"
-        type="control_orientation.py"
-        name="$(arg device_ns)_control_orientation"
-        output="screen"
-        if="$(arg enable_attitude_control)">
-    <param name="device_ns" value="/$(arg device_ns)"/>
-    <param name="robot_name" value="$(arg robot_ns)"/>
-    <param name="rate" value="40.0"/>
-    <param name="joy_topic" value="$(arg js_calibrated_topic)"/>
-    <param name="teleop_mode" value="$(arg teleop_mode)"/>
-    <param name="mode_topic" value="$(arg mode_topic)"/>
-    <param name="axis_roll" value="$(arg axis_roll)"/>
-    <param name="axis_pitch" value="$(arg axis_pitch)"/>
-    <param name="axis_yaw" value="$(arg axis_yaw)"/>
-    <param name="scale_roll" value="$(arg roll_vel)"/>
-    <param name="scale_pitch" value="$(arg pitch_vel)"/>
-    <param name="scale_yaw" value="$(arg yaw_vel)"/>
-    <param name="deadzone" value="0.05"/>
-  </node>
-
-  <!-- Joint Angle Control -->
-  <node pkg="dracomancer"
-        type="control_joint_angle.py"
-        name="$(arg device_ns)_control_joint_angle"
-        output="screen"
-        if="$(arg enable_joint_angle_control)">
-    <env name="OPENBLAS_NUM_THREADS" value="1"/>
-    <param name="device_ns" value="/$(arg device_ns)"/>
-    <param name="robot_name" value="$(arg robot_ns)"/>
-    <param name="device_joint_topic" value="$(arg device_joint_topic)"/>
-    <param name="command_topic" value="/$(arg robot_ns)/joints_ctrl"/>
-    <param name="rate" value="40.0"/>
-    <param name="teleop_mode" value="$(arg teleop_mode)"/>
-    <param name="mode_topic" value="$(arg mode_topic)"/>
-    <param name="mapping_mode" value="$(arg mapping_mode)"/>
-    <rosparam command="load" file="$(arg shape_config)" if="$(eval arg('mapping_mode') == 'shape')"/>
-    <param name="human_description" value="$(arg human_description)"/>
-    <param name="publish_mapping_jacobian" value="$(arg publish_mapping_jacobian)"/>
-    <param name="mapping_reference" value="$(arg mapping_reference)"/>
-    <param name="joint_pairing_scale" value="$(arg joint_pairing_scale)"/>
-    <param name="capture_roll_neutral" value="$(arg capture_roll_neutral)"/>
-    <!-- distal mapping (absolute match of arm joints; see comment above).
-         target = clamp(sign*scale*source + offset). joint3_pitch no longer uses
-         the previous +pi/2 shoulder-flexion offset. -->
-    <rosparam param="distal_source_joints">["wrist_flexion_extension_joint", "wrist_abduction_adduction_joint", "elbow_flexion_extension_joint", "shoulder_flexion_extension_joint", "shoulder_abduction_adduction_joint"]</rosparam>
-    <rosparam param="distal_target_joints">["joint1_pitch", "joint1_yaw", "joint2_yaw", "joint3_pitch", "joint3_yaw"]</rosparam>
-    <rosparam param="distal_signs">[1.0, 1.0, 1.0, 1.0, -1.0]</rosparam>
-    <rosparam param="distal_scales">[1.0, 1.0, 1.0, 1.0, 1.0]</rosparam>
-    <rosparam param="distal_offsets">[0.0, 0.0, 0.0, 0.0, 0.0]</rosparam>
-    <param name="enable_elbow_roll_switching" value="$(arg enable_elbow_roll_switching)"/>
-    <param name="elbow_roll_offset" value="$(arg elbow_roll_offset)"/>
-    <param name="elbow_pitch_sign" value="$(arg elbow_pitch_sign)"/>
-    <param name="elbow_yaw_sign" value="$(arg elbow_yaw_sign)"/>
-    <param name="elbow_pitch_scale" value="$(arg elbow_pitch_scale)"/>
-    <param name="elbow_yaw_scale" value="$(arg elbow_yaw_scale)"/>
-    <param name="enable_wrist_roll_switching" value="$(arg enable_wrist_roll_switching)"/>
-    <rosparam param="wrist_roll_joints">["upper_arm_external_internal_rotation_joint", "wrist_supination_joint"]</rosparam>
-    <rosparam param="wrist_roll_offsets" subst_value="true">$(arg wrist_roll_offsets)</rosparam>
-    <param name="wrist_pitch_sign" value="$(arg wrist_pitch_sign)"/>
-    <param name="wrist_yaw_sign" value="$(arg wrist_yaw_sign)"/>
-    <param name="wrist_pitch_scale" value="$(arg wrist_pitch_scale)"/>
-    <param name="wrist_yaw_scale" value="$(arg wrist_yaw_scale)"/>
-    <param name="wrist_yaw_source_sign" value="$(arg wrist_yaw_source_sign)"/>
-    <param name="wrist_yaw_source_scale" value="$(arg wrist_yaw_source_scale)"/>
-    <param name="joint_limit" value="$(arg joint_limit)"/>
-    <param name="max_step" value="$(arg max_step)"/>
-    <param name="max_joint_velocity" value="$(arg max_joint_velocity)"/>
-    <param name="capture_neutral_on_first_msg" value="$(arg capture_neutral_on_first_msg)"/>
-    <param name="enable_link4_anchor" value="$(arg enable_link4_anchor)"/>
-    <param name="link4_anchor_mode" value="$(arg link4_anchor_mode)"/>
-    <param name="link4_anchor_offset_x" value="$(arg link4_anchor_offset_x)"/>
-    <param name="publish_baselink_motion" value="$(arg publish_link4_anchor_baselink_motion)"/>
-    <param name="enable_link4_anchor_body_step_scaling" value="$(arg enable_link4_anchor_body_step_scaling)"/>
-    <param name="link4_anchor_max_body_pos_rate" value="$(arg link4_anchor_max_body_pos_rate)"/>
-    <param name="link4_anchor_max_body_rpy_rate" value="$(arg link4_anchor_max_body_rpy_rate)"/>
-    <param name="enable_link4_anchor_body_safety" value="$(arg enable_link4_anchor_body_safety)"/>
-    <param name="link4_anchor_max_abs_roll" value="$(arg link4_anchor_max_abs_roll)"/>
-    <param name="link4_anchor_max_abs_pitch" value="$(arg link4_anchor_max_abs_pitch)"/>
-    <param name="link4_anchor_min_cog_z" value="$(arg link4_anchor_min_cog_z)"/>
-    <param name="link4_anchor_max_cog_z" value="$(arg link4_anchor_max_cog_z)"/>
-    <param name="link4_anchor_max_cog_xy_offset" value="$(arg link4_anchor_max_cog_xy_offset)"/>
-    <param name="link4_anchor_max_abs_yaw_delta" value="$(arg link4_anchor_max_abs_yaw_delta)"/>
-    <param name="enable_link4_anchor_tracking_safety" value="$(arg enable_link4_anchor_tracking_safety)"/>
-    <param name="link4_anchor_max_cog_tracking_error" value="$(arg link4_anchor_max_cog_tracking_error)"/>
-    <param name="link4_anchor_max_yaw_tracking_error" value="$(arg link4_anchor_max_yaw_tracking_error)"/>
-    <param name="link4_anchor_max_tracking_roll" value="$(arg link4_anchor_max_tracking_roll)"/>
-    <param name="link4_anchor_max_tracking_pitch" value="$(arg link4_anchor_max_tracking_pitch)"/>
-    <param name="enable_link4_anchor_joint_tracking_safety" value="$(arg enable_link4_anchor_joint_tracking_safety)"/>
-    <param name="link4_anchor_max_joint_tracking_error" value="$(arg link4_anchor_max_joint_tracking_error)"/>
-    <param name="link4_anchor_joint_tracking_timeout" value="$(arg link4_anchor_joint_tracking_timeout)"/>
-    <param name="enable_baselink_roll_mapping" value="$(arg enable_baselink_roll_mapping)"/>
-    <param name="baselink_roll_limit" value="$(arg baselink_roll_limit)"/>
-    <rosparam param="baselink_roll_source_joints">["upper_arm_external_internal_rotation_joint", "wrist_supination_joint"]</rosparam>
-    <rosparam param="baselink_roll_signs">[-1.0, -1.0]</rosparam>
-    <rosparam param="baselink_roll_scales">[1.0, 1.0]</rosparam>
-    <param name="hover_flight_state" value="$(arg hover_flight_state)"/>
-    <param name="publish_only_when_hovering" value="$(arg publish_joints_only_when_hovering)"/>
-    <param name="publish_before_device_ready" value="$(arg publish_joints_before_device_ready)"/>
-    <param name="enable_feasibility_gate" value="$(arg enable_feasibility_gate)"/>
-    <param name="feasibility_gate_mode" value="$(arg feasibility_gate_mode)"/>
-    <param name="feasibility_step_fraction" value="$(arg feasibility_step_fraction)"/>
-    <param name="feasibility_min_step_fraction" value="$(arg feasibility_min_step_fraction)"/>
-    <param name="feasibility_soft_min_scale" value="$(arg feasibility_soft_min_scale)"/>
-    <param name="feasibility_service" value="$(arg feasibility_service)"/>
-    <param name="feasibility_rate" value="$(arg feasibility_rate)"/>
-    <param name="force_radius_threshold" value="$(arg force_radius_threshold)"/>
-    <param name="torque_radius_threshold" value="$(arg torque_radius_threshold)"/>
-    <param name="force_radius_recover_threshold" value="$(arg force_radius_recover_threshold)"/>
-    <param name="torque_radius_recover_threshold" value="$(arg torque_radius_recover_threshold)"/>
-    <param name="enable_target_fc_prediction" value="$(arg enable_target_fc_prediction)"/>
-    <param name="target_fc_prediction_rate" value="$(arg target_fc_prediction_rate)"/>
-  </node>
-
-  <!-- Live shape-safety monitor and threshold publisher. This is intentionally
-       launched with teleoperation so safety logs and the shape controller are
-       observed together during operation. -->
-  <node pkg="dracomancer"
-        type="volume_radius_monitor.py"
-        name="$(arg device_ns)_volume_radius_monitor"
-        output="screen"
-        if="$(arg enable_volume_radius_monitor)">
-    <param name="robot_name" value="$(arg robot_ns)"/>
-    <param name="device_ns" value="/$(arg device_ns)"/>
-    <param name="rate" value="40.0"/>
-    <param name="force_inradius_topic" value="$(arg monitor_force_inradius_topic)"/>
-    <param name="torque_inradius_topic" value="$(arg monitor_torque_inradius_topic)"/>
-    <param name="force_inradius_min" value="$(arg force_inradius_min)"/>
-    <param name="torque_inradius_min" value="$(arg torque_inradius_min)"/>
-    <param name="force_inradius_hard_min" value="$(arg force_inradius_hard_min)"/>
-    <param name="torque_inradius_hard_min" value="$(arg torque_inradius_hard_min)"/>
-    <param name="inradius_timeout" value="$(arg inradius_timeout)"/>
-    <param name="enable_shape_safety" value="$(arg enable_shape_safety)"/>
-    <param name="missing_inradius_scale" value="$(arg missing_inradius_scale)"/>
-    <param name="min_safety_scale" value="$(arg min_safety_scale)"/>
-    <param name="safety_log_period" value="$(arg safety_log_period)"/>
-  </node>
-
-  <!-- Smooth measured inradius for live shape_safety logging. Runs in the
-       controlled robot namespace so input/output stay under /<robot>/debug/. -->
-  <node pkg="dracomancer"
-        type="fc_min_lowpass.py"
-        name="teleop_fc_min_lowpass"
-        ns="$(arg robot_ns)"
-        output="screen"
-        if="$(arg enable_fc_min_lowpass)">
-    <param name="robot_name" value="$(arg robot_ns)"/>
-    <param name="cutoff_hz" value="$(arg fc_min_lowpass_cutoff_hz)"/>
-  </node>
-
-  <!-- Predictive shape-feasibility server. Runs in the controlled robot's
-       namespace so the robot model reads <robot_ns>/robot_description and rotor
-       rosparams. Requires the controlled robot (DRAGON) to be running. -->
-  <node pkg="dracomancer"
-        type="shape_feasibility_node"
-        name="shape_feasibility"
-        ns="$(arg robot_ns)"
-        output="screen"
-        if="$(arg enable_feasibility_gate)">
-    <param name="robot_model_plugin_name" value="$(arg robot_model_plugin_name)"/>
-    <param name="prediction_mode" value="$(arg shape_feasibility_prediction_mode)"/>
-    <param name="gimbal_feedback_topic" value="$(arg shape_feasibility_gimbal_feedback_topic)"/>
-    <param name="baselink_rpy_topic" value="$(arg shape_feasibility_baselink_rpy_topic)"/>
-    <param name="baselink_odom_topic" value="$(arg shape_feasibility_baselink_odom_topic)"/>
-    <param name="use_gimbal_feedback" value="$(arg shape_feasibility_use_gimbal_feedback)"/>
-    <param name="use_baselink_rpy_feedback" value="$(arg shape_feasibility_use_baselink_rpy_feedback)"/>
-    <param name="use_baselink_odom_feedback" value="$(arg shape_feasibility_use_baselink_odom_feedback)"/>
-    <param name="feedback_timeout" value="$(arg shape_feasibility_feedback_timeout)"/>
-    <param name="allocation_refine_max_iteration" value="$(arg shape_feasibility_allocation_refine_max_iteration)"/>
-    <param name="allocation_refine_threshold" value="$(arg shape_feasibility_allocation_refine_threshold)"/>
-  </node>
-
-  <include file="$(find dracomancer)/launch/haptics.launch" if="$(arg enable_haptics)">
-    <arg name="mapping_mode" value="$(arg mapping_mode)"/>
-    <arg name="device_ns" value="$(arg device_ns)"/>
-    <arg name="robot_ns" value="$(arg robot_ns)"/>
-    <arg name="teleop_mode" value="$(arg teleop_mode)"/>
-    <arg name="mode_topic" value="$(arg mode_topic)"/>
-    <arg name="enable_hardware_output" value="$(arg enable_haptic_hardware)"/>
-    <arg name="enable_contact_feedback" value="$(arg enable_contact_haptics)"/>
-    <arg name="enable_safety_feedback" value="$(arg enable_safety_haptics)"/>
-  </include>
 </launch>

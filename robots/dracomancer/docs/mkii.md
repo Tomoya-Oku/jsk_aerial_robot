@@ -1,103 +1,53 @@
-# Mk-IIのURDF・Gazebo・RViz
+# Mk-IIの起動と検証
 
-Mk-Iの既存 `bringup.launch`、関節名、設定は維持する。
-Mk-IIのCADモデルと操作ノードは同じリポジトリの `robots/dracomancer_mkii_ros/` に配置する。
-研究仕様は [4章](design-spec/04-hardware.md) と [5章](design-spec/05-software.md) が正本。
-ここでは起動・検証方法を扱う。
-
-## ビルド
-
-ROS 1環境で、このリポジトリを配置したCatkin workspaceから実行する。
-
-```bash
-catkin build spinal dracomancer_mkii_ros dracomancer
-source devel/setup.bash
-```
-
-新しいPythonパッケージとSpinalのメッセージがあるため、launchのコピーだけでは不十分。
-通常のdevelとinstallの双方にURDF、メッシュ、起動設定、操作ノードを導入する。
+モデル・GUI・直結制御は`dracomancer`パッケージに統合した。
+仕様の正本は[ハードウェア設計](design-spec/04-hardware.md)と[ソフトウェア設計](design-spec/05-software.md)。
 
 ## 起動
 
 ```bash
-# RViz＋角度ウィンドウ（既定）
-roslaunch dracomancer mkii.launch
-# Gazebo Classic＋RViz＋角度／トルクウィンドウ
-roslaunch dracomancer mkii.launch backend:=gazebo
-# 画面を開かずにシミュレーションする場合
-roslaunch dracomancer mkii.launch backend:=gazebo gui:=false rviz:=false panel:=false
+catkin build spinal dracomancer
+source devel/setup.bash
+roslaunch dracomancer bringup.launch
+roslaunch dracomancer bringup.launch backend:=gazebo
+roslaunch dracomancer bringup.launch backend:=hardware config:=/absolute/path/to/hardware.yaml
 ```
 
-`roslaunch dracomancer_mkii_ros view.launch` / `gazebo.launch` も利用できる。
-既定の名前空間は `/dracomancer_mkii`。Mk-Iの `/dracomancer` と区別する。
-`robot_ns`、`mount_height`、`rviz`、`panel` を必要に応じて指定できる。
-Gazebo Classic向けであり、ROS 2や新Gazebo Sim向けのlaunchではない。
+標準はviewer。`rviz:=false panel:=false`で表示を省略できる。
+`mkii.launch`は`bringup.launch`と同じ入口として残す。個別の`view.launch`・`gazebo.launch`・`hardware.launch`も利用可能。
+全入口の標準名前空間は`/dracomancer`、CAD関節名は`right_joint_1..7`・`left_joint_1..7`。
 
-AnglesタブはMk-Iと同じ `joint_state_publisher_gui` を再利用する。
-Torqueタブは関節ごとに位置／effort controllerを排他的に切り替える。
-Nmを指定してHOLDを押し続けると送信し、解放・ZERO・指令途絶でゼロにする。
-ゼロトルクは重力に抗する保持ではなく、腕が落下することがある。
-viewerのみではトルク操作は無効。
+実機は既存のSpinal rosserial bridgeへ接続する。bridgeも起動する場合だけ、
+`backend:=hardware connect_fc:=true fc_serial_port:=/dev/ttyUSB0`を指定する。
+ファームウェアの書込みは行わない。校正・事前設定・停止・復旧は[実機手順](hardware.md)を参照。
 
-## モデルと実機
+実機の`joint_states`は14関節の表示用で、未対応関節はCAD q=0を含む。
+形状操作には`measured_joint_states`を使う。校正済みかつ新鮮な実測関節だけを元の計測時刻で配信する。
+viewer・Gazeboも同じ`measured_joint_states`を配信し、teleoperationと実験ログは全backendでこの入力を使う。
+Gazeboは元の計測時刻を保持し、viewerは現在の仮想関節状態を配信する。
+形状用の実測体幹点・固定軸合わせは別途設定が必要で、既定設定のままでは形状指令を開始しない。
 
-`urdf/cad.urdf` が基準のCAD由来URDF、`urdf/mkii.urdf.xacro` がGazebo用モデル。
-どちらも同じパッケージの8種類のSTLを参照する。
-Mannequinを除く15リンク、左右各7関節。world固定はシミュレーション用の追加要素。
-連続関節とCAD保存姿勢のq=0は暫定で、実機の可動範囲・原点ではない。
-PID、2Nm／2rad/s、減衰、箱近似collisionも仮設定で、実機の保証値ではない。
+## シミュレーション
 
-Spinal UART直結の操作と校正、対応ボード、復旧方法は
-[実機手順](../../dracomancer_mkii_ros/docs/hardware.md) を参照。
-既定の実機設定は未校正・空の対応表で駆動しない。
-この導入ではファームウェア書込みや実機駆動を行わない。
+[形状操作手順](shape.md)の`shape_demo.launch`はMk-II viewerとDRAGON Gazeboを起動する地上デモ。
+`bringup.launch backend:=gazebo`はMk-II自身の物理シミュレーションで、両者を同じmasterへ重複起動しない。
+`contact.launch`はMk-II viewer・DRAGON Gazebo・固定壁の接触観測用。実機へ接続せず、接触力覚は出力しない。
+shape用のJacobianと直結力覚への接続は未実装。
 
 ## 検証
 
 ```bash
-cd <workspace>/build/dracomancer_mkii_ros
-ctest -R mkii_ --output-on-failure
-cd <workspace>/build/spinal
-ctest -R spinal_current --output-on-failure
-# リポジトリのルートから。専用masterを起動し、実機には接続しない
-bash robots/dracomancer_mkii_ros/test/run.sh viewer
-bash robots/dracomancer_mkii_ros/test/run.sh gazebo
-bash robots/dracomancer_mkii_ros/test/run.sh direct
+python3 -B robots/dracomancer/test/mkii/model.py
+python3 -B robots/dracomancer/test/mkii/current.py
+python3 -B robots/dracomancer/test/test_runtime.py
+python3 -B robots/dracomancer/test/test_output.py
+python3 -B robots/dracomancer/tests/test_shape.py -v
+# ROS・Qt・Gazeboが利用できる隔離masterでのみ実行
+bash robots/dracomancer/test/mkii/run.sh viewer
+bash robots/dracomancer/test/mkii/run.sh gazebo
+bash robots/dracomancer/test/mkii/run.sh direct
 ```
 
-`run.sh` は使用するローカルポートが空いていることを確認し、自分のROS/Gazeboだけを終了する。
-結果は一時ディレクトリに保存し、そのパスを表示する。ビルド生成物やログはコミットしない。
-modelテストはこのパッケージ内のCAD基準・メッシュhashを使い、別のエクスポータリポジトリを必要としない。
-
-## 導入の取り消し
-
-起動したroslaunchを終了する。Mk-II用パッケージと `mkii.launch` を導入前へ戻してCatkinを再ビルドする。
-既存Mk-Iのbringupは変更しない。実機へ書き込んだ後の復旧は別途元ファームウェアとサーボ設定が必要。
-
-### WSLでの時刻とペーシング
-
-2026-11-16の検証環境では、単調時計で約1秒の間に実時間時計が約7秒進む現象を観測した。
-Gazeboのフィードバックが数秒止まる場合があり、通常速度での連続動作は未確認。
-機能検証には、テスト限定で実時間ペーシングを外す設定を使用できる。
-
-```bash
-MKII_TEST_UNPACED=1 bash robots/dracomancer_mkii_ros/test/run.sh gazebo
-```
-
-これはGazeboのmax_update_rateだけを0へ変更し、時間刻み・重力・ODE設定を維持する。
-通常launchの既定値と、指令・フィードバックの期限監視は変更しない。
-
-## 確認結果（2026-11-16）
-
-- Spinal・Dracomancer・dracomancer_mkii_rosのCatkinビルド成功。
-- CTestのmkii_current・mkii_model・spinal_currentが成功。
-- Mk-IのbringupとMk-IIのviewer/gazebo/hardwareのlaunch解析が成功。不正backendは拒否。
-- install領域からPythonパッケージ、URDF、8種類のSTL、手順書を解決できることを確認。
-- viewerで14関節の状態と角度反映を確認。不正値とトルク操作を拒否。
-- 偽SpinalとQtで準備時OFF、Nm指令、解放時OFF、期限切れ、遅延ARM取消、校正ゲート、通常rosrun起動を確認。
-- GazeboはMKII_TEST_UNPACED=1で位置追従・effort切替・排他制御・一時停止中の期限監視・Qt操作を確認。
-- 実機書込み・駆動、RVizの目視確認、通常速度でのWSL連続動作は未確認。
-
-検証は専用のROS masterと偽ハードウェアを使用し、実機へ接続していない。
-Windows上のソースを参照する隔離Catkin workspaceでビルドし、既存workspaceは変更していない。
-設計仕様4章・5章が定める実機検証と校正を完了したものではない。
+CADの15リンク・14関節とSTLの保存を検証する。モデル内のcontinuous関節、q=0、PID、collision、
+2 Nm・2 rad/sはシミュレーション用の仮値であり、実機の保証値ではない。
+自己衝突は無効。今回の検証結果・未確認事項は[統合記録](integration.md)を参照する。

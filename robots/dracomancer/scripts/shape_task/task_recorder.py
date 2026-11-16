@@ -54,15 +54,7 @@ class TaskRecorder:
             return str(topics.get(key, default))
 
         self.joint_names = rospy.get_param("~dragon_joint_names", list(dragon_fk.JOINT_ORDER))
-        self.exo_joint_names = rospy.get_param("~exo_joint_names", [
-            "shoulder_abduction_adduction_joint",
-            "shoulder_flexion_extension_joint",
-            "upper_arm_external_internal_rotation_joint",
-            "elbow_flexion_extension_joint",
-            "wrist_supination_joint",
-            "wrist_flexion_extension_joint",
-            "wrist_abduction_adduction_joint",
-        ])
+        self.exo_joint_names = rospy.get_param("~exo_joint_names", ["right_joint_%d" % i for i in range(1, 8)])
         self.n_joints = len(self.joint_names)
         self.n_exo = len(self.exo_joint_names)
 
@@ -109,7 +101,7 @@ class TaskRecorder:
         rospy.Subscriber(topic("q_target", "/%s/joints_ctrl" % self.robot_ns),
                          JointState, self.make_joint_cb("q_target", self.joint_names),
                          queue_size=1)
-        rospy.Subscriber(topic("q_exo", self.device_ns + "/joint_states"),
+        rospy.Subscriber(topic("q_exo", self.device_ns + "/measured_joint_states"),
                          JointState, self.make_joint_cb("q_exo", self.exo_joint_names),
                          queue_size=1)
         rospy.Subscriber(topic("shape_error", self.device_ns + "/shape_control_error"),

@@ -29,9 +29,10 @@ Dracomancer（上肢外骨格デバイス）で DRAGON の形態を操作し、�
 # 端末1: DRAGON シミュレータ
 roslaunch dragon bringup.launch real_machine:=false simulation:=true headless:=false
 
-# 端末2: Dracomancer デバイス（実機なしなら rm:=false でスライダ入力）
-roslaunch dracomancer bringup.launch rm:=false sim:=true
-roslaunch dracomancer teleoperation.launch
+# 端末2: Mk-IIのCADスライダ（実機へ接続しない）
+roslaunch dracomancer bringup.launch
+# 体幹点・固定軸合わせを設定したshape設定を明示する
+roslaunch dracomancer teleoperation.launch shape_config:=/absolute/path/to/shape.yaml
 
 # 端末3: 形態目標到達タスク
 roslaunch dracomancer shape_task.launch
@@ -49,7 +50,7 @@ RViz では `MarkerArray` ディスプレイを追加し、トピック
 シャドウは既定で `world` フレームに貼られ、目標姿勢がロボット側TFに追従して動かない。
 これは位置の重なりではなく、関節角目標の固定参照として使うための表示である。
 表示先は DRAGON 側 RViz（`dragon/config/rviz_config`）を想定する。Dracomancer 側 RViz は
-Fixed Frame が `dracomancer/base_link` のため、DRAGON/world 側 TF とつながらず表示できない。
+統合後はworld固定のCADモデルを使用する。表示設定は`config/mkii/mkii.rviz`を参照する。
 `shape_task.launch` 起動直後は最初の目標を灰色のプレビューとして表示し、試行開始後に状態色へ切り替わる。
 従来の重ね合わせ表示が必要な場合は `roslaunch dracomancer shape_task.launch shadow_frame:=dragon/link4`
 で link4 追従表示に戻せる。

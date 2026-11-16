@@ -21,7 +21,7 @@ class ShapeTests(unittest.TestCase):
     def setUpClass(cls):
         robots = PACKAGE.parent
         cls.human_model = UrdfModel(xacro.process_file(str(
-            robots / "dracomancer_mkii_ros/urdf/mkii.urdf.xacro")).toxml())
+            robots / "dracomancer/urdf/mkii.urdf.xacro")).toxml())
         cls.dragon_model = UrdfModel(xacro.process_file(str(
             robots / "dragon/robots/quad/v1_5_202601.urdf.xacro")).toxml())
         cls.config = yaml.safe_load((PACKAGE / "config/control/shape.yaml").read_text())["shape"]
@@ -173,15 +173,11 @@ class ControllerTests(unittest.TestCase):
         from control_joint_angle import ControlJoints
         self.node = ControlJoints.__new__(ControlJoints)
 
-    def test_existing_mapping_dispatch(self):
+    def test_shape_mapping_dispatch(self):
         n = self.node
-        n.latest_device_joints = {"present": 0.}
-        for mode, method in (("distal", "distal_target"), ("geometric", "geometric_target"),
-                             ("joint_pairing", "joint_pairing_target")):
-            n.mapping_mode = mode
-            setattr(n, method, Mock(return_value=[.2]*6))
-            self.assertEqual(n.mapped_target(), [.2]*6)
-            getattr(n, method).assert_called_once_with()
+        n.shape_target = Mock(return_value=[.2]*6)
+        self.assertEqual(n.mapped_target(), [.2]*6)
+        n.shape_target.assert_called_once_with()
 
     def test_packet_validation(self):
         from sensor_msgs.msg import JointState
@@ -203,7 +199,6 @@ class ControllerTests(unittest.TestCase):
         n = self.node
         n.current_target, n.joint_velocity_limits = [0]*6, [.1]*6
         n.rate_hz, n.max_step = 40., .015
-        n.link4_body_step_scale = lambda q: q
         for now, previous, bound in ((10, None, 0), (10, 9, .0025), (10, 10.1, 0), (10, 9.999, .0001)):
             n.last_command_stamp = rospy.Time.from_sec(previous) if previous is not None else None
             with patch("rospy.Time.now", return_value=rospy.Time.from_sec(now)):
@@ -252,11 +247,12 @@ class ControllerTests(unittest.TestCase):
 
     def test_hover_gate_and_unprepared_input(self):
         n = self.node
-        n.mapping_mode = "distal"
+        n.shape_ready = Mock(return_value=True)
         n.publish_only_when_hovering, n.robot_hovering = True, False
         self.assertFalse(n.can_publish_joint_command())
-        n.robot_hovering, n.teleop_mode, n.publish_before_device_ready = True, True, False
-        n.latest_device_joints = {}
+        n.robot_hovering = True
+        n.shape_ready.return_value = False
+        n.publish_shape_diagnostics = Mock()
         self.assertFalse(n.can_publish_joint_command())
 
     def test_failed_solver_freezes_without_gate_call(self):

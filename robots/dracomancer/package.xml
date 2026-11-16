@@ -1,63 +1,48 @@
 <?xml version="1.0"?>
-<package>
+<package format="2">
   <name>dracomancer</name>
-  <version>0.0.0</version>
-  <description>Uplimb-Exoskeleton Type Teleoperation System</description>
-
+  <version>0.1.0</version>
+  <description>Dracomancer Mk-II CAD model, direct-UART control, and DRAGON shape teleoperation.</description>
   <maintainer email="oku@dragon.t.u-tokyo.ac.jp">Tomoya Oku</maintainer>
   <license>BSD</license>
   <url type="website">https://github.com/Tomoya-Oku/jsk_aerial_robot</url>
   <author email="oku@dragon.t.u-tokyo.ac.jp">Tomoya Oku</author>
-
   <buildtool_depend>catkin</buildtool_depend>
-  <build_depend>aerial_robot_control</build_depend>
-  <build_depend>aerial_robot_model</build_depend>
-  <build_depend>aerial_robot_msgs</build_depend>
-  <build_depend>pluginlib</build_depend>
   <build_depend>message_generation</build_depend>
-  <build_depend>message_runtime</build_depend>
-  <build_depend>diagnostic_msgs</build_depend>
-  <build_depend>geometry_msgs</build_depend>
-  <build_depend>dragon</build_depend>
-  <build_depend>std_msgs</build_depend>
-  <build_depend>sensor_msgs</build_depend>
-  <build_depend>visualization_msgs</build_depend>
-  <build_depend>roscpp</build_depend>
+  <build_depend>eigen</build_depend>
   <build_depend>gazebo_dev</build_depend>
-  <!-- <build_depend>rospy</build_depend> -->
-
-  <run_depend>aerial_robot_control</run_depend>
-  <run_depend>aerial_robot_model</run_depend>
-  <run_depend>aerial_robot_msgs</run_depend>
-  <run_depend>aerial_robot_estimation</run_depend>
-  <run_depend>aerial_robot_simulation</run_depend>
-  <run_depend>aerial_robot_base</run_depend>
-  <!-- dragon provides the robot model plugin loaded at runtime by
-       shape_feasibility_node (pluginlib). Required only for teleoperating DRAGON. -->
-  <run_depend>dragon</run_depend>
-  <run_depend>spinal</run_depend>
-  <run_depend>dracomancer_mkii_ros</run_depend>
-  <run_depend>roscpp</run_depend>
-  <run_depend>rospy</run_depend>
-  <run_depend>python3-numpy</run_depend>
-  <run_depend>pluginlib</run_depend>
-  <run_depend>diagnostic_msgs</run_depend>
-  <run_depend>geometry_msgs</run_depend>
-  <run_depend>std_msgs</run_depend>
-  <run_depend>sensor_msgs</run_depend>
-  <run_depend>visualization_msgs</run_depend>
-  <run_depend>message_runtime</run_depend>
-  <run_depend>gazebo_ros</run_depend>
-  <run_depend>gazebo_msgs</run_depend>
-  <run_depend>std_srvs</run_depend>
-  <run_depend>rosgraph_msgs</run_depend>
-  <run_depend>python3-rospkg</run_depend>
+  <depend>roscpp</depend>
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>controller_manager_msgs</depend>
+  <depend>aerial_robot_model</depend>
+  <depend>aerial_robot_msgs</depend>
+  <depend>dragon</depend>
+  <depend>pluginlib</depend>
+  <exec_depend>message_runtime</exec_depend>
+  <exec_depend>spinal</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>python3-rospkg</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher_gui</exec_depend>
+  <exec_depend>python_qt_binding</exec_depend>
+  <exec_depend>rviz</exec_depend>
+  <exec_depend>gazebo_ros</exec_depend>
+  <exec_depend>gazebo_msgs</exec_depend>
+  <exec_depend>gazebo_ros_control</exec_depend>
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>joint_state_controller</exec_depend>
+  <exec_depend>effort_controllers</exec_depend>
   <test_depend>python3-nose</test_depend>
-  <test_depend>python3-yaml</test_depend>
-
   <export>
     <gazebo_ros plugin_path="${prefix}/../../lib"/>
-    <aerial_robot_model plugin="${prefix}/plugins/robot_model_plugins.xml" />
-    <aerial_robot_control plugin="${prefix}/plugins/control_plugins.xml" />
   </export>
 </package>

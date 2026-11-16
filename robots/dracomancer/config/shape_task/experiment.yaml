@@ -11,7 +11,7 @@ device_ns: /dracomancer
 topics:
   q_current: /dragon/joint_states               # DRAGON 実関節角 (sensor_msgs/JointState)
   q_target: /dragon/joints_ctrl                 # 安全ゲート通過後の関節角指令 (JointState)
-  q_exo: /dracomancer/joint_states              # Dracomancer 7自由度関節角 (JointState)
+  q_exo: /dracomancer/measured_joint_states     # CAD右腕の有効計測値 (JointState)
   shape_error: /dracomancer/shape_control_error # 候補-指令の差 (Float64MultiArray)。q_candidate 再構成用
   r_f: /dragon/debug/fc_f_min_filtered          # 実測 force volume 半径 [N] (Float64)
   r_tau: /dragon/debug/fc_t_min_filtered        # 実測 torque volume 半径 [N·m] (Float64)
@@ -23,14 +23,7 @@ topics:
   flight_state: /dragon/flight_state            # UInt8 (HOVER=5)
 
 dragon_joint_names: [joint1_pitch, joint1_yaw, joint2_pitch, joint2_yaw, joint3_pitch, joint3_yaw]
-exo_joint_names:
-  - shoulder_abduction_adduction_joint
-  - shoulder_flexion_extension_joint
-  - upper_arm_external_internal_rotation_joint
-  - elbow_flexion_extension_joint
-  - wrist_supination_joint
-  - wrist_flexion_extension_joint
-  - wrist_abduction_adduction_joint
+exo_joint_names: [right_joint_1, right_joint_2, right_joint_3, right_joint_4, right_joint_5, right_joint_6, right_joint_7]
 
 # --- 成功条件 ---------------------------------------------------------------
 E_q_threshold: 0.15   # rad, RMS(q_current - q_star)

@@ -16,7 +16,7 @@ Visualization Manager:
     - Class: rviz/RobotModel
       Name: Dracomancer Mk-II
       Enabled: true
-      Robot Description: /dracomancer_mkii/robot_description
+      Robot Description: /dracomancer/robot_description
       Visual Enabled: true
       Collision Enabled: false
     - Class: rviz/RobotModel
@@ -29,7 +29,7 @@ Visualization Manager:
     - Class: rviz/MarkerArray
       Name: Human cyan and DRAGON orange centerlines
       Enabled: true
-      Marker Topic: /dracomancer_mkii/shape/markers
+      Marker Topic: /dracomancer/shape/markers
   Views:
     Current:
       Class: rviz/Orbit

@@ -1,5 +1,8 @@
 # Dracomancerブランチ調査
 
+本書はブランチ統合時点の履歴。後続のMk-IIパッケージ統合・Mk-I削除に伴う現行構成は
+[パッケージ統合記録](integration.md)を参照する。
+
 ## 統合結果（2026-11-17）
 
 - `feat/shape-mapping`をfast-forwardで取り込み、`feat/mkii-haptics`と

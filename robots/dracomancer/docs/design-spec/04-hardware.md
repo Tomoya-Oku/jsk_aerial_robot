@@ -162,7 +162,7 @@ XM430-W350-Rの制御仕様は次とする [10]。
 | 力覚提示モード | Current Control Mode（Operating Mode = 0） |
 | 電流指令単位 | 2.69 mA |
 | 電流―トルク換算 | \(K_t=1.783\,\mathrm{Nm/A}\) を初期公称値として使用 |
-| 通信 | 既存Spinalの `servo/target_current` と `servo/torque_enable` |
+| 通信 | Spinal UART/RS485直結の `direct_servo_mode` と `servo/direct_current` |
 
 \(K_t\) は12 V時のstall torque 4.1 Nmとstall current 2.3 Aから求める初期換算値であり、連続使用可能トルクまたは人体に対する安全値ではない。装着状態で関節ごとの符号、摩擦、実トルク、温度上昇を測定し、ソフトウェア電流上限とサーボのCurrent Limitを決定する。
 
@@ -174,23 +174,24 @@ XM430-W350-Rの制御仕様は次とする [10]。
 - 通信断・入力timeout・モード解除時に電流ゼロかつtorque disableへ移行すること
 - 機械ストッパ、非常停止、装着者が自力で離脱できる機構が機能すること
 
-### 壁押し実験専用設定
+### 統合後の直結制御
 
-壁押し接触シミュレーションの実機入力・力覚提示デバイスには、**DYNAMIXEL XM430-W350-Rを7台**使用する。
-通信は既存の **Spinal / Neuron経由**とし、トルク提示にはCurrent Control Mode（Operating Mode = 0）でGoal Currentを指令する [10]。
-提示倍率・関節別トルク上限の初期設定は[5.7 Haptic Feedback](05-software.md)に従う。
-電流から出力トルクへの換算には、暫定係数1.78 N·m/Aを使い、摩擦補償は加えない。
-この係数は`config/contact.yaml`の`torque_per_amp`で7関節別に校正できる。
-Goal Currentの単位は2.69 mAであり [10]、電流上限は提示トルク上限を超えない方向へ整数化する。
-初期設定の電流上限は41単位（約110.3 mA、換算上約0.196 N·m）となる。
-これはトルクセンサで測った実出力の保証値ではない。
+実機の標準経路は **Spinal → UART/RS485 → XM430-W350-R** とする。
+CAN接続Neuron経由の旧力覚出力・旧関節名入出力は廃止する。
+CADの15リンク・14関節と新STLは`dracomancer`パッケージが所有し、標準名前空間は`/dracomancer`。
+主な計測・形態入力は右腕の`right_joint_1..7`。左腕の表示は維持するが、1台のDirectServoの最大10軸を超える設定は拒否する。
 
-実機サーボは事前にOperating Mode=0とCurrent Limitを設定する。初期設定ではCurrent Limit=41を使用する。
-本ノードはサーボ設定の変更・読戻しを行わず、既存の電流指令・Torque Enableトピックを使用する。
-Operating Mode変更時はTorque OFFで設定し、Goal Current=0を確認してから有効化する [10]。
-Current LimitとOperating ModeはEEPROM設定であり、実験終了後も残る。
-Spinal / Neuronのファームウェア変更は不要であり、MCU側の追加タイムアウト機能は使用しない。
-本実装はSpinalのCAN接続先Neuron経由を対象とし、Spinalのdirect-servo経路は対象外とする。
+`config/mkii/hardware.yaml`は既定で`calibrated: false`・空の関節対応表とする。
+実測したscan index・DYNAMIXEL ID・CAD零点・符号・rad/count・Nm/A・電流およびトルク上限を設定しなければ駆動しない。
+上記の公称Nm/Aやシミュレーション用のURDF effort/velocityを、実機校正値へ自動転記しない。
+
+モード準備はTorque OFFで行い、明示的なARMと新しい指令がある間だけ電流を出力する。
+ホスト150 ms・MCU250 msの指令期限監視、モード読戻し、セッション・sequence検証を維持する。
+物理的な停止時間と出力トルクは実機で確認する。STM32H7/H7 V2向けの経路を対象とし、F7の直結動作は保証しない。
+
+実機の`joint_states`はCAD全体の表示用とする。形態操作は、校正済み・新鮮な実測関節のみを元の計測時刻で配信する
+`measured_joint_states`を使用し、未計測関節の表示上のq=0を操作入力にしない。
+導入・校正・復旧手順は[実機手順](../hardware.md)を参照する。
 
 ---
 

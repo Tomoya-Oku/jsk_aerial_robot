@@ -32,8 +32,8 @@ def main():
 
     rospy.Subscriber("/dragon/joints_ctrl", JointState, command)
     rospy.Subscriber("/dragon/joint_states", JointState, states.append)
-    rospy.Subscriber("/dracomancer_mkii/joint_states", JointState, human.append)
-    rospy.Subscriber("/dracomancer_mkii/shape/diagnostics", String,
+    rospy.Subscriber("/dracomancer/joint_states", JointState, human.append)
+    rospy.Subscriber("/dracomancer/shape/diagnostics", String,
                      lambda msg: diagnostics.append(json.loads(msg.data)))
     start = time.monotonic()
     while not rospy.is_shutdown() and time.monotonic()-start < args.duration:
@@ -52,8 +52,8 @@ def main():
         return dict(mean=float(np.mean(values)), p95=float(np.percentile(values, 95)), maximum=float(max(values)))
 
     tf_errors = {}
-    configs = [("human", "/dracomancer_mkii/robot_description", human,
-                "base_link", [n["link"] for n in rospy.get_param("/dracomancer_mkii_control_joint_angle/shape/human_points")], ""),
+    configs = [("human", "/dracomancer/robot_description", human,
+                "base_link", [n["link"] for n in rospy.get_param("/dracomancer_control_joint_angle/shape/human_points")], ""),
                ("dragon", "/dragon/robot_description", states, "link1", ["link4"], "dragon/")]
     for label, parameter, messages, base, tips, prefix in configs:
         model, errors = UrdfModel(rospy.get_param(parameter)), []
@@ -74,7 +74,7 @@ def main():
                    updates=sum(d.get("updated", False) for d in diagnostics), tf_errors=tf_errors)
     Path(args.output).write_text(json.dumps(dict(summary=summary, diagnostics=diagnostics, commands=commands), indent=2))
     print(json.dumps(summary, indent=2))
-    assert senders == {"/dracomancer_mkii_control_joint_angle"}, "competing command publisher"
+    assert senders == {"/dracomancer_control_joint_angle"}, "competing command publisher"
     assert max_speed <= .1 + 1e-8, "command angular velocity exceeded"
     assert np.all(np.isfinite(q)) and np.all(np.abs(q) <= np.pi/2+1e-8)
     assert np.max(np.ptp(q, axis=0)) > 1e-3, "no command response"

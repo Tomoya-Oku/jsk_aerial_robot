@@ -1,0 +1,21 @@
+<launch>
+  <!-- Use an already-running Spinal rosserial bridge. No serial opening or firmware flash here. -->
+  <arg name="robot_ns" default="dracomancer"/>
+  <arg name="config" default="$(find dracomancer)/config/mkii/hardware.yaml"/>
+  <arg name="spinal_ns" default="/dracomancer"/>
+  <arg name="rviz" default="true"/>
+  <arg name="panel" default="true"/>
+  <group ns="$(arg robot_ns)">
+    <param name="robot_description" command="$(find xacro)/xacro '$(find dracomancer)/urdf/mkii.urdf.xacro' robot_ns:=$(arg robot_ns)"/>
+    <rosparam command="load" file="$(find dracomancer)/config/mkii/joints.yaml"/>
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher"/>
+    <node pkg="dracomancer" type="direct.py" name="spinal_control" output="screen" required="true">
+      <rosparam command="load" file="$(arg config)"/>
+      <param name="mode_service" value="$(arg spinal_ns)/direct_servo_mode"/>
+      <param name="state_topic" value="$(arg spinal_ns)/servo/states"/>
+      <param name="current_topic" value="$(arg spinal_ns)/servo/direct_current"/>
+    </node>
+    <node pkg="dracomancer" type="panel.py" name="panel" if="$(arg panel)" output="screen"/>
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find dracomancer)/config/mkii/mkii.rviz" if="$(arg rviz)"/>
+  </group>
+</launch>

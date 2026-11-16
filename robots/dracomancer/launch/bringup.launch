@@ -1,192 +1,50 @@
-<?xml version="1.0"?>
 <launch>
-  ###########  Mode selection  ###########
-  <!--
-    rm  (real_machine) : true  → use real servo bridge / spinal FC
-                         false → use publish_fake_joint_states (no hardware needed)
-    sim (simulation)   : true  → enable visualization-oriented helpers
-                         false → headless/device-oriented defaults
-    The two flags are independent so all four combinations are valid:
-      rm:=false sim:=true  → fake publisher + joint_state_publisher_gui
-      rm:=true  sim:=true  → real servos + model/TF publishing
-      rm:=false sim:=false → fake publisher (web GUI only, no RViz)
-      rm:=true  sim:=false → real servos,  no RViz
-  -->
-  <arg name="rm"  default="True"  />
-  <arg name="sim" default="False" />
-  <!-- true: also start teleoperation.launch and enter teleoperation mode.
-       false: keep bringup-only behavior. -->
-  <arg name="teleop_mode" default="False" />
-  <!-- Haptic computation, hardware current output, and contact feedback are
-       separate switches.  All remain off unless explicitly requested. -->
-  <arg name="enable_haptics" default="False" />
-  <arg name="enable_haptic_hardware" default="False" />
-  <arg name="enable_contact_haptics" default="False" />
-  <arg name="enable_safety_haptics" default="True" />
-  <!-- expose the same names used by shared launch files -->
-  <arg name="real_machine" value="$(arg rm)"  />
-  <arg name="simulation"   value="$(arg sim)" />
-
-  ###########  Model / RViz  ###########
-  <arg name="robot_ns"     value="dracomancer" />
-  <arg name="headless"     default="True" />
-  <arg name="launch_rviz"  default="$(arg sim)" />
-  <!-- Keep this true on headless child PCs. Use dracomancer/rviz.launch on a GUI PC. -->
-  <arg name="model_headless" value="$(eval arg('headless') or not arg('launch_rviz'))" />
-
-  ###########  Mobile Web Console  ###########
-  <arg name="web"                         default="False" />
-  <arg name="launch_web_console"          default="$(arg web)" />
-  <arg name="web_console_port"            default="8080" />
-  <arg name="web_console_rosbridge_port"  default="9090" />
-  <arg name="web_console_launch_rosbridge" default="True" />
-
-  ###########  Flight controller  ###########
-  <arg name="connect_fc"           default="$(arg rm)" />
-  <arg name="fc_serial_port"       default="/dev/ttyUSB0" />
-  <arg name="fc_serial_baud"       default="921600" />
-  <arg name="run_servo_rough_calib" default="False" />
-
-  ###########  Servo / joint-state topics  ###########
-  <arg name="joint_states_topic" default="/$(arg robot_ns)/joint_states" />
-  <arg name="servo_topic"        default="/dracomancer/servo/states" />
-
-  ###########  Force/Torque volume radius monitor  ###########
-  <!-- Controlled articulated aerial robot (DRAGON etc.). Its feasible control
-       inradius (fc_f_min / fc_t_min) drives the shape-safety scale. -->
-  <arg name="controlled_robot_ns"      default="dragon" />
-  <!-- Normal teleoperation starts the monitor from teleoperation.launch so
-       shape_safety logs appear with control_joint_angle. Keep this off by
-       default to avoid duplicate threshold publishers. -->
-  <arg name="enable_volume_radius_monitor" default="False" />
-  <arg name="enable_shape_safety"      default="true" />
-  <arg name="missing_inradius_scale"   default="1.0" />
-  <arg name="min_safety_scale"         default="0.0" />
-  <!-- Threshold range [hard_min, min], inherited from the Mk-I 4096-grid
-       DRAGON shape sweep. Recalibration is required for Mk-II. -->
-  <arg name="force_inradius_min"       default="0.249220" />
-  <arg name="torque_inradius_min"      default="0.278159" />
-  <arg name="force_inradius_hard_min"  default="0.108990" />
-  <arg name="torque_inradius_hard_min" default="0.015400" />
-  <arg name="inradius_timeout"         default="0.5" />
-  <arg name="safety_log_period"        default="1.0" />
-  <!-- Low-pass the (noisy) measured fc_f_min / fc_t_min before the danger
-       judgment. The filter runs in the controlled robot's namespace and
-       republishes /<robot>/debug/fc_*_min_filtered. -->
-  <arg name="enable_fc_min_lowpass"    default="False" />
-  <arg name="fc_min_lowpass_cutoff_hz" default="2.0" />
-  <!-- Monitor input topics: filtered when the low-pass is on, raw otherwise. -->
-  <arg name="monitor_force_inradius_topic"
-       default="$(eval '/' + arg('controlled_robot_ns') + '/debug/fc_f_min' + ('_filtered' if arg('enable_fc_min_lowpass') else ''))" />
-  <arg name="monitor_torque_inradius_topic"
-       default="$(eval '/' + arg('controlled_robot_ns') + '/debug/fc_t_min' + ('_filtered' if arg('enable_fc_min_lowpass') else ''))" />
-
-  ###########  Robot Model  ###########
-  <include file="$(find aerial_robot_model)/launch/aerial_robot_model.launch" >
-    <arg name="headless"      value="$(arg model_headless)" />
-    <arg name="robot_model"   value="$(find dracomancer)/urdf/dracomancer.urdf" />
-    <arg name="robot_ns"      value="$(arg robot_ns)" />
-    <arg name="rviz_config"   value="$(find dracomancer)/config/rviz_config" />
-    <arg name="rviz_init_pose" value="$(find dracomancer)/config/RvizInit.yaml" />
-    <!-- joint states always come from our own source (servo bridge or fake publisher) -->
-    <arg name="need_joint_state" value="false" />
-  </include>
-
-  ###########  Sensors (spinal FC/IMU only when rm:=true)  ###########
-  <include file="$(find dracomancer)/launch/include/sensors.launch.xml" >
-    <arg name="real_machine"       value="$(arg real_machine)" />
-    <arg name="simulation"         value="$(arg simulation)" />
-    <arg name="robot_ns"           value="$(arg robot_ns)" />
-    <arg name="connect_fc"         value="$(arg connect_fc)" />
-    <arg name="fc_serial_port"     value="$(arg fc_serial_port)" />
-    <arg name="fc_serial_baud"     value="$(arg fc_serial_baud)" />
-    <arg name="run_servo_rough_calib" value="$(arg run_servo_rough_calib)" />
-  </include>
-
-  ###########  Servo Config  ###########
-  <rosparam file="$(find dracomancer)/config/Servo.yaml" command="load" ns="$(arg robot_ns)" />
-
-  ###########  rm:=true — real servo bridge  ###########
-  <group if="$(arg rm)">
-    <node pkg="aerial_robot_model" type="servo_bridge_node" name="servo_bridge"
-          output="screen" ns="$(arg robot_ns)" />
-    <node pkg="dracomancer" type="convert_servo_to_joint_states.py" name="convert_servo_to_joint_states"
-          output="screen">
-      <param name="servo_topic"        value="$(arg servo_topic)" />
-      <param name="joint_states_topic" value="$(arg joint_states_topic)" />
-      <param name="rate"               value="40.0" />
-    </node>
+  <arg name="backend" default="viewer" doc="viewer, gazebo, hardware"/>
+  <arg name="selected" value="$(eval {'viewer': 'viewer', 'gazebo': 'gazebo', 'hardware': 'hardware'}[arg('backend')])"/>
+  <arg name="robot_ns" default="dracomancer"/>
+  <arg name="rviz" default="true"/>
+  <arg name="panel" default="true"/>
+  <arg name="gui" default="true"/>
+  <arg name="mount_height" default="1.0"/>
+  <arg name="config" default="$(find dracomancer)/config/mkii/hardware.yaml"/>
+  <arg name="spinal_ns" default="/dracomancer"/>
+  <arg name="connect_fc" default="false"/>
+  <arg name="fc_serial_port" default="/dev/ttyUSB0"/>
+  <arg name="fc_serial_baud" default="921600"/>
+  <arg name="teleop_mode" default="false"/>
+  <arg name="shape_config" default="$(find dracomancer)/config/control/shape.yaml"/>
+  <!-- Hardware stays opt-in and requires a calibrated actuator table. -->
+  <group if="$(eval arg('selected') == 'hardware' and arg('connect_fc'))" ns="$(arg spinal_ns)">
+    <include file="$(find spinal)/launch/bridge.launch">
+      <arg name="mode" value="serial"/>
+      <arg name="serial_port" value="$(arg fc_serial_port)"/>
+      <arg name="serial_baud" value="$(arg fc_serial_baud)"/>
+    </include>
   </group>
-
-  ###########  rm:=false — fake joint publisher (no hardware needed)  ###########
-  <group unless="$(arg rm)">
-    <!-- Publishes /dracomancer/joint_states at 40 Hz from /dracomancer/joint_cmd -->
-    <node pkg="dracomancer" type="publish_fake_joint_states.py" name="publish_fake_joint_states"
-          output="screen">
-      <param name="joint_states_topic" value="$(arg joint_states_topic)" />
-      <param name="joint_cmd_topic"    value="/$(arg robot_ns)/joint_cmd" />
-      <param name="rate"               value="40.0" />
-    </node>
-
-    <!-- sim:=true web:=false — RViz GUI slider panel (redirected to joint_cmd).
-         Suppressed when web:=true because the web console slider is the sole input. -->
-    <node pkg="joint_state_publisher_gui" type="joint_state_publisher_gui"
-          name="joint_state_publisher_gui" output="screen" ns="$(arg robot_ns)"
-          if="$(eval arg('sim') and not arg('web'))">
-      <remap from="joint_states" to="/$(arg robot_ns)/joint_cmd" />
-    </node>
-  </group>
-
-  ###########  Force/Torque volume radius monitor (legacy optional)  ###########
-  <!-- Safety-radius pub/sub for device-only monitoring. Normal teleoperation
-       starts this from teleoperation.launch so logs and threshold topics live
-       with control_joint_angle. -->
-  <node pkg="dracomancer" type="volume_radius_monitor.py" name="volume_radius_monitor"
-        output="screen" if="$(arg enable_volume_radius_monitor)">
-    <param name="robot_name"             value="$(arg controlled_robot_ns)" />
-    <param name="device_ns"              value="/$(arg robot_ns)" />
-    <param name="rate"                   value="40.0" />
-    <param name="force_inradius_topic"   value="$(arg monitor_force_inradius_topic)" />
-    <param name="torque_inradius_topic"  value="$(arg monitor_torque_inradius_topic)" />
-    <param name="force_inradius_min"     value="$(arg force_inradius_min)" />
-    <param name="torque_inradius_min"    value="$(arg torque_inradius_min)" />
-    <param name="force_inradius_hard_min" value="$(arg force_inradius_hard_min)" />
-    <param name="torque_inradius_hard_min" value="$(arg torque_inradius_hard_min)" />
-    <param name="inradius_timeout"       value="$(arg inradius_timeout)" />
-    <param name="enable_shape_safety"    value="$(arg enable_shape_safety)" />
-    <param name="missing_inradius_scale" value="$(arg missing_inradius_scale)" />
-    <param name="min_safety_scale"       value="$(arg min_safety_scale)" />
-    <param name="safety_log_period"      value="$(arg safety_log_period)" />
-  </node>
-
-  ###########  fc_f_min / fc_t_min low-pass  ###########
-  <!-- Smooth the controlled robot's noisy measured inradius. Runs in the
-       controlled robot's namespace so input/output stay under /<robot>/debug/. -->
-  <node pkg="dracomancer" type="fc_min_lowpass.py" name="fc_min_lowpass"
-        ns="$(arg controlled_robot_ns)" output="screen"
-        if="$(arg enable_fc_min_lowpass)">
-    <param name="robot_name"  value="$(arg controlled_robot_ns)" />
-    <param name="cutoff_hz"   value="$(arg fc_min_lowpass_cutoff_hz)" />
-  </node>
-
-  ###########  Optional teleoperation stack  ###########
+  <include file="$(find dracomancer)/launch/view.launch" if="$(eval arg('selected') == 'viewer')">
+    <arg name="robot_ns" value="$(arg robot_ns)"/>
+    <arg name="rviz" value="$(arg rviz)"/>
+    <arg name="panel" value="$(arg panel)"/>
+    <arg name="mount_height" value="$(arg mount_height)"/>
+  </include>
+  <include file="$(find dracomancer)/launch/gazebo.launch" if="$(eval arg('selected') == 'gazebo')">
+    <arg name="robot_ns" value="$(arg robot_ns)"/>
+    <arg name="rviz" value="$(arg rviz)"/>
+    <arg name="panel" value="$(arg panel)"/>
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="mount_height" value="$(arg mount_height)"/>
+  </include>
+  <include file="$(find dracomancer)/launch/hardware.launch" if="$(eval arg('selected') == 'hardware')">
+    <arg name="robot_ns" value="$(arg robot_ns)"/>
+    <arg name="rviz" value="$(arg rviz)"/>
+    <arg name="panel" value="$(arg panel)"/>
+    <arg name="config" value="$(arg config)"/>
+    <arg name="spinal_ns" value="$(arg spinal_ns)"/>
+  </include>
   <include file="$(find dracomancer)/launch/teleoperation.launch" if="$(arg teleop_mode)">
-    <arg name="device_ns" value="$(arg robot_ns)" />
-    <arg name="robot_ns" value="$(arg controlled_robot_ns)" />
-    <arg name="teleop_mode" value="$(arg teleop_mode)" />
-    <arg name="enable_haptics" value="$(arg enable_haptics)" />
-    <arg name="enable_haptic_hardware" value="$(arg enable_haptic_hardware)" />
-    <arg name="enable_contact_haptics" value="$(arg enable_contact_haptics)" />
-    <arg name="enable_safety_haptics" value="$(arg enable_safety_haptics)" />
+    <arg name="device_ns" value="$(arg robot_ns)"/>
+    <arg name="device_joint_topic" value="/$(arg robot_ns)/measured_joint_states"/>
+    <arg name="teleop_mode" value="true"/>
+    <arg name="shape_config" value="$(arg shape_config)"/>
   </include>
-
-  ###########  Mobile Web Console  ###########
-  <include file="$(find aerial_robot_web)/launch/web_console.launch" if="$(arg launch_web_console)">
-    <arg name="robot_ns"        value="$(arg robot_ns)" />
-    <arg name="robot_type"      value="dracomancer" />
-    <arg name="web_port"        value="$(arg web_console_port)" />
-    <arg name="rosbridge_port"  value="$(arg web_console_rosbridge_port)" />
-    <arg name="launch_rosbridge" value="$(arg web_console_launch_rosbridge)" />
-  </include>
-
 </launch>

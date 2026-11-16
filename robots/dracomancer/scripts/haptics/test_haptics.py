@@ -12,7 +12,6 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from contact_feedback import ContactFeedback
-from current_conversion import XM430CurrentConverter
 from safety_feedback import SafetyFeedback, combine_torque, rate_limit
 
 
@@ -53,16 +52,6 @@ class SafetyFeedbackTest(unittest.TestCase):
             combine_torque([np.nan], [0.0], [0.0], [1.0])
 
 
-class XM430CurrentConverterTest(unittest.TestCase):
-    def test_conversion_sign_and_limit(self):
-        converter = XM430CurrentConverter(
-            [1.783, 1.783], [0.2, 0.2], [1.0, -1.0])
-        self.assertEqual(converter.current_limits_raw, [42, 42])
-        self.assertEqual(converter.torque_to_raw([0.1, 0.3]), [21, -42])
-
-    def test_invalid_calibration_is_rejected(self):
-        with self.assertRaises(ValueError):
-            XM430CurrentConverter([1.783], [0.2], [0.0])
 
 
 if __name__ == "__main__":

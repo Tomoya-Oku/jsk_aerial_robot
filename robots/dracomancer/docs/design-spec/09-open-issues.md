@@ -11,7 +11,7 @@
 7. LiDAR minimum clearance \(d_{safe}\)
 8. DRAGON安全joint velocity上限
 9. Position / attitude joystick allocation
-10. XM430-W350-R各関節の最大提示トルク、電流上限、符号、実トルク換算値と閉ループ安定性評価（壁押し実験の初期設定・停止方式は[4.6](04-hardware.md#46-actuator--sensor)と[5.7](05-software.md)を参照）
+10. XM430-W350-R各関節の最大提示トルク、電流上限、符号、実トルク換算値と閉ループ安定性評価（直結経路・校正ゲートは[4.6](04-hardware.md#46-actuator--sensor)を参照。shapeの接触Jacobianと力覚出力への接続は未実装）
 11. External wrench estimatorを使用可能か
 12. Reference linkの標準設定
 

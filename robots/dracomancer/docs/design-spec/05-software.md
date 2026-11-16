@@ -54,7 +54,7 @@ d_R(R_{robot,i}(q_i),R_{human,i})
 - Robot-specificな対応関係を必要とする
 - リンク数・関節構造が変わると再設計が必要
 
-本方式は**baseline / comparison method**として残す。
+本方式は研究上の**baseline / comparison method**とする。旧Mk-I実装は削除し、Mk-II用の実装・校正は別途行う。
 
 ---
 
@@ -111,7 +111,7 @@ q_R^{ref}
 `teleoperation.launch mapping_mode:=shape` で、Mk-II CAD URDFの右腕中心線と
 DRAGON URDFのLink4尾端→Link1中心線を等弧長・全長正規化して最小二乗で写像する。
 仮想体幹点は通常設定では未設定とし、有効化を拒否する。
-`shape_demo.launch` だけは、指示者が承認したbase_link原点のシミュレーション仮設定を使う。
+`shape_demo.launch`と`contact.launch`のシミュレーションでは、指示者が承認したbase_link原点の仮設定を使う。
 肩・肘・手首には設定されたCADフレーム、手先には手先リンクのCAD重心を代表点として使う。
 これは解剖学的な関節中心の校正ではない。
 
@@ -333,204 +333,52 @@ Clutch中：
 
 # 5.7 主要システム⑦：Haptic Feedback
 
-## 5.7.1 構成と出力条件
+## 5.7.1 接触・安全力覚の設計
 
-力覚提示は、接触力覚と安全力覚を独立に計算し、最後に合成する。
+接触点は指定EEに限定し、既存external wrench estimatorのRMSE・帯域・遅延・ノイズを検証する。
+不十分な場合に限りF/Tセンサを追加する。壁押しシミュレーションではGazebo ODEの接触真値を別の評価入力として使う。
+接触wrenchとJacobianは同一座標系・同一モーメント基準点で表す。
 
-```text
-external wrench ─ J_R ─┐
-                       ├─ contact feedback ─┐
-mapping Jacobian M ────┘                    │
-                                            ├─ limit / slew limit ─ XM430 current
-shape control error ─ safety feedback ──────┤
-external safety torque ─────────────────────┘
-```
-
-計算ノードは、実機へ出力しない状態でも各成分と合成結果をpublishできる。実機電流出力は明示的なlaunch引数でのみ有効化し、次の条件をすべて満たす場合に限りtorque enableと電流指令を出す。
-
-- teleoperation modeが有効
-- Dracomancerの全7関節状態がtimeout内
-- 有効な接触力覚、安全力覚、または外部安全力覚の入力がtimeout内
-- 出力ベクトルとJacobianが有限値かつ規定次元
-
-条件を外れた周期では、rate limiterの残留値を保持せず、電流ゼロとtorque disableを出力する。プロセス終了時も電流ゼロとtorque disableを複数回送る。
-
-## 5.7.2 Contact feedback
-
-初期実験では接触位置を指定EEに限定する。
-
-DRAGONの既存 external wrench estimator を最初に検証し、十分な
-
-- RMSE
-- bandwidth
-- delay
-- noise
-
-が得られる場合はそのまま使用する。
-
-不十分な場合のみEEに6-axis F/T sensorを追加する。
-
-これにより、センサ新規開発を避ける。
-
-壁押しシミュレーションではGazebo（ODE）の接触真値を力覚提示に使用する。
-この環境の構築とexternal wrench estimatorの精度検証は分けて実施する。
-接触wrenchは環境からDRAGONに作用する向きとし、リンク座標系およびモーメントの基準点を明示して変換する。
-
----
-
-## 5.7.3 Contact mapping
-
-Robot EE wrenchを
+人体7関節からDRAGON6関節への局所写像JacobianをM、ロボット関節速度から接触点twistへのJacobianをJ_Rとすると、
+接触力覚の基本式は次とする。
 
 \[
-w_R
+\tau_H^{contact}=M^TJ_R^Tw_R
 \]
 
-とし、Robot joint torqueを \(J_R^T w_R\) とする。
-
-Human–Robot morphology mapping の局所Jacobianを \(M\) とすれば、
+形態の生指令と可行指令の差をe_Rとし、安全力覚は次の抵抗・減衰を基本とする。
 
 \[
-\tau_H = M^T J_R^T w_R
+\tau_H^{safe}=-M^TKe_R-B\dot q_H
 \]
 
-を基本とする。
+接触・安全力覚を合成し、関節別のトルク上限・変化率制限を適用する。
+既存研究 [5][6][7] を踏まえ、これらの高度な理論化は研究の必須条件としない。
+汎用の計算部品は`scripts/haptics/contact_feedback.py`・`safety_feedback.py`に保持する。
 
-固定対応写像Aと全体形状写像Bでは \(M\) が異なるため、同じwrench feedback frameworkを利用しつつmappingのみ交換可能な設計とする。
+## 5.7.2 実機の出力経路
 
-\(J_R\) はRobot joint velocityから接触点twistへの \(6\times6\) Jacobian、\(M=\partial q_R/\partial q_H\) はHuman 7関節からRobot 6関節への局所Jacobianとする。wrenchと \(J_R\) は同一座標系で表す。固定対応写像用の初期 \(M\) は設定ファイルに持ち、非線形写像ではmapping実装が実行時の \(M\) をpublishする。
+Mk-IIの実機出力は`scripts/mkii/direct.py`を単一の所有者とする。
+`torque_cmd`のNm要求を校正済みの`dracomancer.xm430.CurrentScale`で電流へ変換し、
+Spinalの`direct_servo_mode`・`servo/direct_current`を使う。
+電流単位2.69 mAとXM430の仕様は [10] を参照する。
+実機設定は[4.6](04-hardware.md#46-actuator--sensor)、準備・HOLD・解放・復旧は[実機手順](../hardware.md)に従う。
 
-汎用の`haptic_controller.py`では、external wrench estimatorと \(J_R\) の座標系・符号・遅延を検証するまでContact feedbackは既定で無効とし、\(J_R\) 未入力時は必ずゼロ出力とする。
+同一ロボットPC・同一ユーザー・同じ一時ディレクトリとROS_MASTER_URIを使う直結ノードは、
+出力前に`dracomancer.output_lock`で電流トピックとモードサービスを排他取得する。
+後発ノードはpublish・終了処理の登録前に停止し、動作中の所有者へ0電流・OFFを送らない。
+MCU側の電流セッション・期限監視も維持する。複数PC間のファイルロックによる排他は実装しない。
 
-### 壁押し実験用の接触力覚
+## 5.7.3 現在の対応範囲
 
-壁押し実験では提示倍率を0.1、Dracomancerの7関節それぞれの提示トルク上限を±0.2 N·mとする。
-これらは実機検証済みの安全値を意味せず、調整可能な初期設定である。
+Mk-IIの角度表示・Gazeboの角度／トルク操作・直結実機の手動トルク操作を統合する。
+形態操作はCAD中心線を用いるshapeモードのみとし、旧Mk-Iの解剖学的関節名による写像・CAN力覚出力を削除する。
+主名前空間は`/dracomancer`、モデル・STL・Python部品・起動ファイルは同名の1パッケージへ集約する。
 
-`teleoperation.launch publish_mapping_jacobian:=true`により、形態制御ノードは
-`/dracomancer/mapping_state`（`dracomancer/MappingState`）を出力する。
-行列の行はメッセージ中のDRAGON関節順、列はDracomancer関節順、配列は行優先とする。
-時刻は入力の関節計測時刻を保持し、7関節がそろわない場合やロール基準未取得時には出力しない。
-実機入力の`convert_servo_to_joint_states.py`も、キャッシュの再配信時には最終受信時刻を保持し、未受信・7軸未完備の場合は時刻0で示す。
-局所Jacobianは既存の形態写像をそのまま対称差分で微分し、ロール角によるPitch/Yaw配分と角度制限を含む。
-非微分点では対称差分の値を用いる。飛行可能性ゲート・速度制限の微分は含めないため、この行列だけで双方向系の受動性を保証するものではない。
-既存起動時の挙動を維持するため、この出力は既定では無効とする。
-
-壁押し時の\(J_R\)は、現在の重心位置とFC姿勢を固定して内部6関節を変化させたときのLink 1原点の空間Jacobianとする。
-URDF内の全リンク質量・慣性原点および実測ジンバル角から重心を求め、形態変化に伴う重心移動を差し引く。
-Joystickによる並進・回転は別入力であり、浮遊ベースの6自由度を腕の7関節へ直接割り当てない。
-したがって、壁反力の大きさを全7関節へ一律に返す方式ではなく、その姿勢での局所写像に応じて提示する。
-
-`wall_contact`プラグインは壁とLink 1の接触のうち、既存先端面x=0から1 mm以内の接触点だけを選ぶ。
-Gazeboの固定関節縮約でLink 1が`root`へ統合されるモデルでは、保持されたLink 1の衝突形状から元の先端座標を復元する。
-1 mmはODEの面貫通・数値誤差の許容幅であり、側面・他リンク・ロータとの接触は力覚へ混ぜない。
-ODEのbody1/body2を識別してDRAGON側のwrenchを取得し、重心回りのモーメントをLink 1原点へ移す。
-`/dragon/contact/wrench`（`geometry_msgs/WrenchStamped`）の座標系は`dragon/link1`、モーメント基準点はLink 1原点とする。
-非接触時は0を送信する。反力は既に環境→ロボットの向きなので、力覚変換時に符号を再反転しない。
-
-`contact_haptics.py`は入力・Gazeboの時刻進行をwall clockで監視する。
-Dracomancerの関節時刻には既存の`ServoStates.stamp`を使い、ROS側のキャッシュ再配信では更新しない。
-入力が100 ms途絶、物理時刻が100 ms停止、時刻逆行、HOVER終了、teleop解除、無効な行列・関節値のいずれかで、
-ROSノードが既存の`/dracomancer/servo/target_current`へ0電流、`/dracomancer/servo/torque_enable`へTorque OFFを送る。
-復旧後もROSノードは自動再開せず、操作者が`/contact_haptics/enable`を明示的に呼び出す。
-有効化時は0電流とTorque ONを既存トピックへ送り、Spinalへの新規設定サービスは使わない。
-2026-10-28の仕様変更により、Spinal / Neuronの追加200 msタイムアウトと設定プロトコルを削除した。
-PCプロセス停止・通信断時にMCUが最終指令を自動解除する機能、およびCAN計測時刻の追加監視は本実装に含めない。
-
----
-
-## 5.7.4 Safety feedback
-
-接触とは別に、
-
-- joint limit
-- thrust saturation
-- flight feasibility margin
-- obstacle proximity
-- self collision
-
-への接近を提示する。
-
-ただし修士研究のコアはmapping + feasibilityであり、**Safety hapticの高度なnull-space設計は必須としない。**
-
-初期実装はdirectional resistanceとし、形態写像の生指令 \(q_R^{des}\) と安全制約通過後の指令 \(q_R^{cmd}\) の差を
-
-\[
-e_R=q_R^{des}-q_R^{cmd}
-\]
-
-として、
-
-\[
-\tau_H^{safe}=-M^T K e_R-B\dot q_H
-\]
-
-を提示する。これにより、安全制約で拒否された形態方向へ操作者が動かすと、その方向と逆向きの抵抗を返す。初期段階では既存のfeasibility gate、joint rate limit、link4 safetyが生じさせる `shape_control_error` を使用する。joint limit、thrust saturation、obstacle proximity、self collision等の別モジュールは、Human 7関節順の外部安全トルク入力へ接続できる。
-
-各成分は
-
-\[
-\tau_H=\operatorname{clip}(\tau_H^{contact}+\tau_H^{safe}+\tau_H^{external})
-\]
-
-として合成し、deadband、関節別トルク上限、トルク変化率上限を適用する。
-
-Aerial teleoperationではhaptic feedbackによってcontactやremote stateを提示する研究が存在し [5][6]、一般teleoperationでも触覚feedbackの安全性・情報提示能力が整理されている [7]。したがって、haptic interface全体を新規理論化するのではなく、多関節形態写像への適用部分のみを研究対象とする。
-
-## 5.7.5 ROS interfaceとXM430出力
-
-主要interfaceを次に示す。
-
-| 種別 | Topic | 型 | 内容 |
-|---|---|---|---|
-| Input | `/dracomancer/joint_states` | `sensor_msgs/JointState` | Human 7関節角・速度 |
-| Input | `/dracomancer/shape_control_error` | `std_msgs/Float64MultiArray` | \(q_R^{des}-q_R^{cmd}\)、Robot 6関節順 |
-| Input | `/dragon/estimated_external_wrench` | `geometry_msgs/WrenchStamped` | 接触wrench |
-| Input | `/dracomancer/haptic/mapping_jacobian` | `std_msgs/Float64MultiArray` | \(M\)、row-major \(6\times7\) |
-| Input | `/dracomancer/haptic/robot_jacobian` | `std_msgs/Float64MultiArray` | \(J_R\)、row-major \(6\times6\) |
-| Input | `/dracomancer/haptic/safety_torque_input` | `sensor_msgs/JointState` | 他制約からのHuman関節トルク |
-| Output | `/dracomancer/haptic/contact_torque` | `sensor_msgs/JointState` | 接触力覚成分 |
-| Output | `/dracomancer/haptic/safety_torque` | `sensor_msgs/JointState` | 安全力覚と外部安全力覚の和 |
-| Output | `/dracomancer/haptic_torque` | `sensor_msgs/JointState` | 制限後の合成力覚 |
-| Output | `/dracomancer/haptic/active` | `std_msgs/Bool` | 実機出力条件の成立状態 |
-| Output | `/dracomancer/servo/target_current` | `spinal/ServoControlCmd` | XM430 raw current指令 |
-| Output | `/dracomancer/servo/torque_enable` | `spinal/ServoTorqueCmd` | XM430 torque enable |
-
-XM430-W350-Rの電流指令値は [10] に基づき、関節 \(i\) について
-
-\[
-i_i^{raw}=\frac{s_i\tau_i}{K_{t,i}\times0.00269}
-\]
-
-で初期換算する。\(s_i\) は取付方向、\(K_{t,i}\) は実測で更新する関節別トルク定数である。raw currentはソフトウェア上限でclampし、サーボ側Current Limitを独立した最終上限とする。初期の0.2 Nm上限はMk-Iから引き継いだ仮値であり、Mk-IIの人体安全値として確定していない。
-
-実装は責務ごとに `scripts/haptics/` 以下へ分ける。
-
-- `haptic_controller.py`: ROS I/O、入力鮮度、モード、各成分の統合
-- `contact_feedback.py`: \(M^TJ_R^Tw_R\) の計算
-- `safety_feedback.py`: directional resistance、合成、制限
-- `current_conversion.py`: XM430電流換算と設定値検証
-- `servo_output.py`: ROS電流・torque enableのfail-safe出力
-- `output_lock.py`: 同一ロボットPCでの電流・torque enable出力の排他取得
-
-通常のteleoperation起動に `enable_haptics:=true` を加えると、実機出力なしで力覚計算とdebug topicを確認できる。実機電流は、4.6節の確認完了後に限り `enable_haptic_hardware:=true` で有効化する。Contact feedbackはwrenchと2種類のJacobianを検証後、さらに `enable_contact_haptics:=true` を指定して有効化する。
-
-## 5.7.6 統合後の起動排他とshapeモード
-
-汎用の`haptics.launch`と壁押し用の`contact.launch`は別の実装として保持する。
-`contact.launch`が内部で起動するteleoperationでは、汎用力覚ノードを起動しない。
-別々のlaunchから実機出力を要求した場合も、両実装はpublish・終了処理の登録前に共通のファイルロックを取得する。
-同じ電流またはTorque Enableトピックを使う後発ノードは起動を拒否し、動作中ノードへ0電流・OFFを送らない。
-実機出力を無効にした計算専用ノードはロックしない。ロックはプロセス終了時にOSが解放する。
-排他の対象は同一PC・同一ユーザー・同じ一時ディレクトリと`ROS_MASTER_URI`を使うノードであり、
-ハードウェア出力はそのロボットPCに集約する。複数PCにまたがる排他制御は実装しない。
-
-`mapping_mode:=shape`では、CAD関節入力と接触力覚用Jacobianの接続が未実装である。
-このため、shapeモードの形態制御は`MappingState`を配信せず、`contact.launch`は接触力覚ノードを起動しない。
-接触力覚ノードを直接shape指定で起動した場合も、出力前にエラーで停止する。
-汎用力覚へはteleoperationから`mapping_mode`を渡し、shape指定時は接触成分と実機出力を無効にする。
-固定対応用Jacobianをshapeに流用せず、計算・診断用ノードの起動だけを許容する。
-従来の`distal`・`geometric`・`joint_pairing`の写像と力覚設定は維持する。
+shapeの局所Jacobian Mと接触Jacobian J_Rから直結力覚へ送る経路は未実装である。
+このため、shapeから接触力覚を自動出力せず、旧MappingStateや固定対応行列をCAD関節へ流用しない。
+`contact.launch`はシミュレーションで接触wrenchを観測する構成に限定し、実機・力覚出力を起動しない。
+接触フィードバックの実装・校正・閉ループ安定性評価は後続作業とする。
 
 ---
 

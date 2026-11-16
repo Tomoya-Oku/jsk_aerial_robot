@@ -42,7 +42,7 @@ class ShapeRuntime:
         try:
             config = rospy.get_param("~shape")
             human = UrdfModel(rospy.get_param(rospy.get_param(
-                "~human_description", "/dracomancer_mkii/robot_description")))
+                "~human_description", "/dracomancer/robot_description")))
             dragon = UrdfModel(rospy.get_param("/" + self.robot_name + "/robot_description"))
             if self.joint_names != DRAGON_JOINTS:
                 raise ValueError("shape mode requires URDF DRAGON joint order")
