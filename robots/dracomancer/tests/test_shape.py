@@ -103,6 +103,14 @@ class ShapeTests(unittest.TestCase):
         for q, actual in zip(angles, points):
             np.testing.assert_allclose(actual, self.dragon.points(q), atol=1e-12)
 
+    def test_feedback_fk_can_describe_joint_limit_overshoot(self):
+        values = dict.fromkeys(DRAGON_JOINTS, 0.)
+        values["joint1_yaw"] = np.pi/2+.001
+        with self.assertRaises(ValueError):
+            self.dragon_model.pose("link1", "link4", values)
+        actual = self.dragon_model.pose("link1", "link4", values, enforce_limits=False)
+        self.assertTrue(np.all(np.isfinite(actual)))
+
     def test_reachable_shape(self):
         mapper = self.mapper(continuity=0., rest_weight=0., max_iterations=50, time_budget=2.)
         target = mapper.dragon_shape([.2, .3, -.2, .4, .1, -.3])

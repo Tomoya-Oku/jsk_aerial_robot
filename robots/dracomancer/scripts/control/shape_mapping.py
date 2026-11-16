@@ -79,7 +79,7 @@ class UrdfModel:
             tip = joint["parent"]
         return chain[::-1]
 
-    def pose(self, base, tip, values, cache=None):
+    def pose(self, base, tip, values, cache=None, enforce_limits=True):
         cache = {} if cache is None else cache
         result = np.eye(4)
         for joint in self.chain(base, tip):
@@ -95,7 +95,7 @@ class UrdfModel:
                     raise ValueError("non-finite joint angle")
                 motion[:3, :3] = joint_rotation(joint, angle)
                 limit = joint["limit"]
-                if joint["kind"] == "revolute" and limit is not None:
+                if enforce_limits and joint["kind"] == "revolute" and limit is not None:
                     if not float(limit.get("lower")) - 1e-8 <= angle <= float(limit.get("upper")) + 1e-8:
                         raise ValueError("input joint outside URDF limits")
             result = result.dot(joint["origin"]).dot(motion)

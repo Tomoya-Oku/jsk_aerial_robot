@@ -60,7 +60,9 @@ def main():
         for msg in messages[-35:-5:5]:
             for tip in tips:
                 tr = buffer.lookup_transform(prefix+base, prefix+tip, msg.header.stamp, rospy.Duration(.3))
-                p = model.pose(base, tip, dict(zip(msg.name, msg.position)))[:3, 3]
+                # Gazebo feedback can overshoot a nominal bound under contact.
+                # FK comparison must describe that measured state, not reject it.
+                p = model.pose(base, tip, dict(zip(msg.name, msg.position)), enforce_limits=False)[:3, 3]
                 t = tr.transform.translation
                 errors.append(float(np.linalg.norm(p-[t.x, t.y, t.z])))
         tf_errors[label] = dict(samples=len(errors), maximum_m=max(errors))
