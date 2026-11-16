@@ -1,0 +1,42 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Global Options:
+    Fixed Frame: world
+    Background Color: 38; 38; 38
+    Frame Rate: 15
+  Displays:
+    - Class: rviz/Grid
+      Name: Grid
+      Enabled: true
+      Plane Cell Count: 30
+      Cell Size: 0.25
+    - Class: rviz/RobotModel
+      Name: Dracomancer Mk-II
+      Enabled: true
+      Robot Description: /dracomancer_mkii/robot_description
+      Visual Enabled: true
+      Collision Enabled: false
+    - Class: rviz/RobotModel
+      Name: DRAGON Gazebo feedback
+      Enabled: true
+      Robot Description: /dragon/robot_description
+      TF Prefix: dragon
+      Visual Enabled: true
+      Collision Enabled: false
+    - Class: rviz/MarkerArray
+      Name: Human cyan and DRAGON orange centerlines
+      Enabled: true
+      Marker Topic: /dracomancer_mkii/shape/markers
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 6.0
+      Focal Point: {X: 0.2, Y: -0.2, Z: 0.8}
+      Pitch: 0.7
+      Yaw: 0.8
+Window Geometry:
+  Width: 1300
+  Height: 850

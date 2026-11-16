@@ -1,0 +1,42 @@
+<launch>
+  <!-- Ground-only simulation: no takeoff or fictitious HOVER state. -->
+  <arg name="gui" default="true"/>
+  <arg name="motion" default="false"/>
+  <arg name="panel" default="$(eval not arg('motion'))"/>
+  <arg name="rviz" default="true"/>
+  <arg name="shape_config" default="$(find dracomancer)/config/control/shape.yaml"/>
+  <arg name="torso_point" default="[0, 0, 0]"/>
+  <!-- Approved simulation proxy only; safety thresholds remain unchanged. -->
+  <include file="$(find dracomancer_mkii_ros)/launch/view.launch">
+    <arg name="rviz" value="false"/>
+    <arg name="panel" value="$(arg panel)"/>
+  </include>
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find aerial_robot_simulation)/gazebo_model/world/empty.world"/>
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="use_sim_time" value="true"/>
+  </include>
+  <include file="$(find dragon)/launch/bringup.launch">
+    <arg name="real_machine" value="false"/>
+    <arg name="simulation" value="true"/>
+    <arg name="headless" value="true"/>
+    <arg name="launch_gazebo" value="false"/>
+    <arg name="spawn_y" value="1.2"/>
+    <arg name="preflight_joint_control" value="true"/>
+  </include>
+  <node pkg="rviz" type="rviz" name="shape_rviz" if="$(arg rviz)"
+        args="-d $(find dracomancer)/config/control/shape.rviz"/>
+  <include file="$(find dracomancer)/launch/teleoperation.launch">
+    <arg name="device_ns" value="dracomancer_mkii"/>
+    <arg name="mapping_mode" value="shape"/>
+    <arg name="shape_config" value="$(arg shape_config)"/>
+    <arg name="teleop_mode" value="true"/>
+    <arg name="enable_link4_anchor" value="false"/>
+    <arg name="enable_baselink_roll_mapping" value="false"/>
+    <arg name="publish_joints_only_when_hovering" value="false"/>
+  </include>
+  <!-- Loaded after teleoperation's private YAML so the approved demo value wins. -->
+  <rosparam param="/dracomancer_mkii_control_joint_angle/shape/torso_point"
+            subst_value="true">$(arg torso_point)</rosparam>
+  <node pkg="dracomancer" type="shape_input.py" name="shape_input" if="$(arg motion)"/>
+</launch>
