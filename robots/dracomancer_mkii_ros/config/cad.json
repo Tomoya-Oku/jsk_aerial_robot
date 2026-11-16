@@ -1,0 +1,133 @@
+{
+  "links": 15,
+  "continuous_joints": 14,
+  "unique_meshes": 8,
+  "mannequin_included": false,
+  "total_mass_kg": 4.114091299408808,
+  "q0_cad_transform_max_error": 9.992007221626409e-15,
+  "joint_axis_max_line_error_m": 8.677433734251033e-15,
+  "mesh_stats": {
+    "meshes/base.stl": {
+      "triangles": 152993,
+      "min_m": [
+        -0.17999999225139618,
+        -0.003000000026077032,
+        0.24381399154663086
+      ],
+      "max_m": [
+        0.17999999225139618,
+        0.15199999511241913,
+        0.6738139986991882
+      ],
+      "sha256": "f8e52bfdea5641a0e7700ae59c1b1f4ac554c383b11b5e869b88f4d5739331e6"
+    },
+    "meshes/link1_shoulder.stl": {
+      "triangles": 57330,
+      "min_m": [
+        -0.02496281825006008,
+        -0.12974999845027924,
+        -0.019999999552965164
+      ],
+      "max_m": [
+        0.02496281825006008,
+        0.016249999403953552,
+        0.20499999821186066
+      ],
+      "sha256": "21cd37e6f6836c6d969f81b947b32576759755001d57399cf65fbc4da0fd5151"
+    },
+    "meshes/link2_upper_arm_upper.stl": {
+      "triangles": 31920,
+      "min_m": [
+        -0.020500000566244125,
+        -0.09075000137090683,
+        -0.019999999552965164
+      ],
+      "max_m": [
+        0.020500000566244125,
+        0.016249999403953552,
+        0.023399999365210533
+      ],
+      "sha256": "8ae94e57f1c94d60f264cdcb5b759d232d06a2a08aedd8077e0626f8695db94e"
+    },
+    "meshes/link3_upper_arm_lower.stl": {
+      "triangles": 46696,
+      "min_m": [
+        -0.03400000184774399,
+        -0.04024999961256981,
+        -0.11699999868869781
+      ],
+      "max_m": [
+        0.03400000184774399,
+        0.02496281825006008,
+        0.023399999365210533
+      ],
+      "sha256": "e593815006363b7f997e8075d2052e9184a079bf885259711b7b40dce61f98a3"
+    },
+    "meshes/link4_lower_arm_upper.stl": {
+      "triangles": 31920,
+      "min_m": [
+        -0.020500000566244125,
+        -0.09075000137090683,
+        -0.019999999552965164
+      ],
+      "max_m": [
+        0.020500000566244125,
+        0.016249999403953552,
+        0.023399999365210533
+      ],
+      "sha256": "9780855a365d33209c00b6cd39b3d464111996087d739a233e2af1a24a591666"
+    },
+    "meshes/link5_lower_arm_lower.stl": {
+      "triangles": 46696,
+      "min_m": [
+        -0.03400000184774399,
+        -0.04024999961256981,
+        -0.11699999868869781
+      ],
+      "max_m": [
+        0.03400000184774399,
+        0.02496281825006008,
+        0.023399999365210533
+      ],
+      "sha256": "79f85e478477c6136d186b21ce7d128b033754076f9327346bcb189b4f09caf6"
+    },
+    "meshes/link6_wrist_upper.stl": {
+      "triangles": 30176,
+      "min_m": [
+        -0.03400000184774399,
+        -0.08574999868869781,
+        -0.02496281825006008
+      ],
+      "max_m": [
+        0.03400000184774399,
+        0.016249999403953552,
+        0.02496281825006008
+      ],
+      "sha256": "49c7554e8d639f833519f6e9c060ed5279c45c0253e619e2109d724453cd46ee"
+    },
+    "meshes/link7_wrist_lower.stl": {
+      "triangles": 41706,
+      "min_m": [
+        -0.020500000566244125,
+        -0.12075000256299973,
+        -0.019999999552965164
+      ],
+      "max_m": [
+        0.14497575163841248,
+        0.016249999403953552,
+        0.023399999365210533
+      ],
+      "sha256": "c20aec877e2444d84b72712839c0ef506d9df6174c3fa0783a645b9e0e3a94cf"
+    }
+  },
+  "check_urdf_run": false,
+  "limitations": [
+    "joint limits/effort/velocity unknown",
+    "mirror axes inferred and geometrically checked",
+    "CAD material masses not measured",
+    "no physical robot or collision validation"
+  ],
+  "source_urdf_sha256": "b7daa308d0ab5e2484ca6980532c0f84f507df867256df83b3da92588909f428",
+  "baseline_urdf_sha256": "a417b8c0095601a8c773a149bb4fbfbb9f1ace0729debd6d269bd63ce9b6e6ef",
+  "baseline_note": "Only the mesh package URI was changed; CAD mass, inertia, axes, transforms and zero pose are unchanged."
+}

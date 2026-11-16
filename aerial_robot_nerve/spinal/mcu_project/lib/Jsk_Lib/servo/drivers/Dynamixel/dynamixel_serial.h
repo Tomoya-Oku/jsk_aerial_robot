@@ -9,6 +9,8 @@
 
 
 #include <inttypes.h>
+#include "current_session.h"
+#include "current_packet.h"
 #include <stdlib.h>
 #include <array>
 #include <algorithm>
@@ -283,6 +285,17 @@ class DynamixelSerial : public ServoBase
 public:
   DynamixelSerial(){}
 
+  struct CurrentResult {
+    bool success=false;
+    uint8_t status=spinal_current::DENIED;
+    spinal_current::Snapshot snapshot;
+    uint32_t token=0;
+  };
+  bool currentManaged(uint8_t index) const;
+  bool currentCommand(uint8_t index,uint32_t token,uint32_t sequence,int16_t raw);
+  bool currentRequest(uint8_t index,uint8_t id,uint8_t action,uint32_t token,uint16_t limit,CurrentResult& result);
+
+
   void init(UART_HandleTypeDef* huart, osMutexId* mutex = NULL) override;
   void pinReconfig() override;
   void ping() override;
@@ -303,6 +316,26 @@ public:
   uint8_t getServoIndex(uint8_t id);
 
 private:
+
+  struct CurrentBus {
+    DynamixelSerial& driver; uint8_t id;
+    CurrentBus(DynamixelSerial& d,uint8_t i):driver(d),id(i){}
+    uint32_t now() {return HAL_GetTick();}
+    bool read(uint16_t a,uint8_t n,uint32_t& v) {return driver.currentRead(id,a,n,v);}
+    bool write(uint16_t a,uint8_t n,uint32_t v) {return driver.currentWrite(id,a,n,v);}
+  };
+  struct CurrentCommand { bool pending=false; uint32_t token=0,sequence=0; int16_t raw=0; };
+  std::array<spinal_current::Session,MAX_SERVO_NUM> current_;
+  std::array<CurrentCommand,MAX_SERVO_NUM> current_commands_;
+  volatile bool current_pending_=false,current_busy_=false,current_done_=false,current_cancel_=false;
+  uint8_t current_index_=0,current_action_=0;
+  uint32_t current_token_=0,current_generation_=0;
+  uint16_t current_limit_=0;
+  CurrentResult current_result_;
+  bool currentRead(uint8_t id,uint16_t address,uint8_t size,uint32_t& value);
+  bool currentWrite(uint8_t id,uint16_t address,uint8_t size,uint32_t value);
+  void currentUpdate();
+
   bool direct_ttl_mode_;
 
   RingBufferDx<std::pair<uint8_t, uint8_t>, 64> instruction_buffer_;
@@ -312,7 +345,7 @@ private:
   std::pair<uint8_t, uint8_t> instruction_last_ = std::make_pair(255, 255);
 
 
-  void transmitInstructionPacket(uint8_t id, uint16_t len, uint8_t instruction, uint8_t* parameters);
+  bool transmitInstructionPacket(uint8_t id, uint16_t len, uint8_t instruction, uint8_t* parameters);
   int8_t readStatusPacket(uint8_t status_packet_instruction);
 
   void cmdPing(uint8_t id);

@@ -23,6 +23,7 @@ add_message_files(
   BoardInfo.msg
   ServoState.msg
   ServoStates.msg
+  DirectServoCurrent.msg
   ServoControlCmd.msg
   ServoTorqueCmd.msg
   ServoTorqueStates.msg
@@ -52,6 +53,7 @@ add_message_files(
 
 add_service_files(
   FILES
+  DirectServoMode.srv
   GetBoardInfo.srv
   SetBoardConfig.srv
   SetAttitudeGains.srv
@@ -66,6 +68,12 @@ generate_messages(
 )
 
 set(SPINAL_DIRS mcu_project/lib/Jsk_Lib)
+if(CATKIN_ENABLE_TESTING)
+  add_executable(spinal_current_test test/current_test.cpp)
+  target_include_directories(spinal_current_test PRIVATE ${SPINAL_DIRS}/servo/drivers/Dynamixel)
+  target_compile_options(spinal_current_test PRIVATE -UNDEBUG)
+  add_test(NAME spinal_current COMMAND spinal_current_test)
+endif()
 
 catkin_package(
   INCLUDE_DIRS  ${SPINAL_DIRS}
