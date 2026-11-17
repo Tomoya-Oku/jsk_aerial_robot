@@ -4,7 +4,8 @@
 
 ## 正本
 
-- Dracomancer Mk-IIの仕様・設計・研究計画の正本は、[docs/README.md](docs/README.md)を入口とする文書です。
+- 制御理論の正本は`C:/Users/tomoy/papers/master_thesis/chapters/03-device.typ`と`04-control.typ`です。論文を実装に合わせて変更せず、理論と実装・検証状況を区別してください。[対応表](docs/thesis.md)に参照時点と式ラベルを記録しています。
+- Dracomancer Mk-IIの操作・実装資料は、[docs/README.md](docs/README.md)を入口とする文書です。理論が旧資料と矛盾する場合は修論を優先します。
 - 作業開始時に、まず `docs/README.md` の一覧を確認し、対象に対応する `research.md`・`device.md`・`software.md`・`evaluation.md`・`roadmap.md`を必ず読んでください。各文書は`docs/`直下にあります。
 - 仕様判断では、README、旧実験資料、コード内コメントより正本を優先します。実装と正本が矛盾する場合は、独断で旧仕様へ合わせず、矛盾を報告してください。
 - 正本の内容をREADMEや別文書へ複製しません。補足文書が必要な場合は、正本の該当章へリンクしてください。
