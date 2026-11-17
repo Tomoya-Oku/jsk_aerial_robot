@@ -1,5 +1,6 @@
 #include "current_session.h"
 #include "current_packet.h"
+#include "../mcu_project/lib/Jsk_Lib/servo/drivers/servo_limits.h"
 #include <assert.h>
 #include <map>
 #include <tuple>
@@ -31,6 +32,43 @@ void arm(Session& s,Bus& b,uint32_t token=7) {
   assert(s.arm(b,token)); assert(s.armed && b.regs[64]==1 && b.regs[102]==0);
 }
 int main() {
+  {
+    static_assert(spinal_servo::MAX_SERVOS==14, "Both seven-axis arms must fit");
+    static_assert(spinal_servo::PERSISTED_SERVOS==10, "Keep flash offsets unchanged");
+    uint8_t packet[spinal_servo::PACKET_SIZE];
+    assert(encode(1,1,nullptr,0,packet,sizeof(packet))==10);
+    assert(packet[8]==0x19 && packet[9]==0x4e); // Protocol 2.0 reference Ping CRC.
+    std::vector<uint8_t> payload(4+14*5);
+    for (unsigned i=0;i<payload.size();++i) payload[i]=(i%4<2) ? 255 : 253;
+    const auto length=encode(254,0x83,payload.data(),payload.size(),packet,sizeof(packet));
+    assert(length>64 && length<=sizeof(packet));
+    assert((packet[5] | (packet[6]<<8))+7u==length);
+    assert(crc(packet,length-2)==(packet[length-2] | (packet[length-1]<<8)));
+    std::vector<uint8_t> body;
+    for (unsigned i=7;i<length-2;++i) {
+      body.push_back(packet[i]);
+      const unsigned n=body.size();
+      if (n>=3 && body[n-3]==255 && body[n-2]==255 && body[n-1]==253) assert(packet[++i]==253);
+    }
+    assert(body[0]==0x83 && std::vector<uint8_t>(body.begin()+1,body.end())==payload);
+    assert(!encode(1,1,nullptr,0,packet,9));
+    // A 14-servo four-byte position Sync Write no longer fits the old 64B TX
+    // buffer. Check the production bound, including conservative stuffing.
+    assert(spinal_servo::instructionFits(3+4+14*(1+4)));
+    assert(spinal_servo::instructionFits(3+4+14*(1+6)));
+    assert(!spinal_servo::instructionFits(2));
+    assert(!spinal_servo::instructionFits(256));
+    Session sessions[spinal_servo::MAX_SERVOS];
+    Bus buses[spinal_servo::MAX_SERVOS];
+    for (unsigned i=0;i<spinal_servo::MAX_SERVOS;++i) {
+      arm(sessions[i],buses[i],i+1);
+      assert(sessions[i].command(buses[i],i+1,1,10));
+    }
+    for (unsigned i=0;i<spinal_servo::MAX_SERVOS;++i) {
+      buses[i].time=250; sessions[i].tick(buses[i]);
+      assert(!sessions[i].armed && buses[i].regs[64]==0);
+    }
+  }
   {
     Bus b; Session s; arm(s,b);
     assert(s.command(b,7,1,-80)); b.time=20; s.tick(b); assert(b.regs[102]==uint16_t(-80));

@@ -2,8 +2,19 @@
 
 This extension is for Spinal → UART/RS485 → XM430-W350 (model 1020), Protocol 2.0,
 firmware >=38. Neuron/CAN firmware is unchanged. The direct UART implementation
-supports at most `MAX_SERVO_NUM` (currently 10) motors. Do not map all 14 CAD joints
-to one direct UART handler without a separate capacity change.
+supports at most `MAX_SERVO_NUM` (14) motors. The host adapter must use the same
+capacity. A previously built 10-axis MCU image does not support indexes 10–13.
+The instruction TX buffer is 256 bytes with a pre-encoding capacity check;
+the servo task stack is increased accordingly. Fourteen-axis timing, power,
+wiring and shutdown behavior still require hardware validation.
+The shared packet encoder bounds stuffing, updates the stuffed LENGTH field,
+and computes CRC after that update. CubeMX task settings match the larger stack.
+
+The existing ten-slot flash layout is preserved. Extra slots 10–13 do not
+persist per-slot driver settings in MCU flash: position PID/profile are read
+from the servo, while external-encoder/resolution settings use direct-drive
+defaults. Do not use those four slots for an unconfigured transmission or
+external encoder. Host anatomical/current calibration remains explicit.
 
 ## New interfaces (existing message/service MD5s unchanged)
 
@@ -51,7 +62,8 @@ The host and MCU must both include these new interfaces; existing interfaces are
 kept but an old MCU does not provide `direct_servo_mode`.
 
 `test/current_test.cpp` exercises the actual HAL-independent current-session and
-packet decoder headers with a fake register bus. Run `ctest -R spinal_current`
+packet encoder/decoder headers, including 14-axis sessions and stuffed Sync Write,
+with a fake register bus. Run `ctest -R spinal_current`
 in the package build directory. Real UART latency, RS485 direction wiring,
 servo behavior and failure timing require hardware testing before operation.
 
@@ -61,4 +73,5 @@ the stall-torque/current ratio. A commanded Nm value is not a torque measurement
 
 Direct UART API is linked on the H7/H7_v2 projects. The existing F7 main does not
 initialize DirectServo; an F7 build is a compatibility check, not direct-UART support.
-The GUI/ROS adapter and calibration instructions are in the Mk-II package Direct.ja.md.
+The GUI/ROS adapter and calibration instructions are in
+[Dracomancer hardware instructions](../../../robots/dracomancer/docs/hardware.md).

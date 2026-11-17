@@ -362,7 +362,7 @@ int main(void)
   canRxHandle = osThreadCreate(osThread(canRx), NULL);
 
   /* definition and creation of servoTask */
-  osThreadDef(servoTask, ServoTaskCallback, osPriorityRealtime, 0, 256);
+  osThreadDef(servoTask, ServoTaskCallback, osPriorityRealtime, 0, 512);
   servoTaskHandle = osThreadCreate(osThread(servoTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
