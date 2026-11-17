@@ -6,7 +6,7 @@ import sys
 import time
 import yaml
 import rospy
-from std_msgs.msg import Int16MultiArray, Float32MultiArray
+from std_msgs.msg import Int16MultiArray, Float32MultiArray, Bool
 
 class JoystickCalibPublisher:
     def __init__(self):
@@ -37,6 +37,7 @@ class JoystickCalibPublisher:
 
         # Publishers and Subscribers
         self.js_calibrated_pub = rospy.Publisher(self.js_calibrated_topic, Float32MultiArray, queue_size=10)
+        self.button_pub=rospy.Publisher(self.js_calibrated_topic+'/pressed',Bool,queue_size=1)
         self.js_raw_sub = rospy.Subscriber(self.js_raw_topic, Int16MultiArray, self.cb_raw, queue_size=10)
 
     def cb_raw(self, msg):
@@ -241,6 +242,8 @@ class JoystickCalibPublisher:
             msg = Float32MultiArray()
             msg.data = calib
             self.js_calibrated_pub.publish(msg)
+            if len(self.latest_raw)>2 and self.latest_raw[2] in (0,1):
+                self.button_pub.publish(Bool(self.latest_raw[2]==0))
 
             sys.stdout.write("\rraw={} calib={}".format([int(x) for x in axes],
                                                         [round(x, 3) for x in calib]))

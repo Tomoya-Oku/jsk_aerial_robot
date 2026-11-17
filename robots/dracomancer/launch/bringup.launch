@@ -13,6 +13,10 @@
   <arg name="fc_serial_baud" default="921600"/>
   <arg name="teleop_mode" default="false"/>
   <arg name="shape_config" default="$(find dracomancer)/config/control/shape.yaml"/>
+  <arg name="mapping_mode" default="shape"/>
+  <arg name="force_dimensions" default="2"/>
+  <arg name="enable_haptics" default="false"/>
+  <arg name="anchor_mode" default="$(eval 'mid' if arg('mapping_mode').startswith('dual_') else 'none')"/>
   <!-- Hardware stays opt-in and requires a calibrated actuator table. -->
   <group if="$(eval arg('selected') == 'hardware' and arg('connect_fc'))" ns="$(arg spinal_ns)">
     <include file="$(find spinal)/launch/bridge.launch">
@@ -46,5 +50,9 @@
     <arg name="device_joint_topic" value="/$(arg robot_ns)/measured_joint_states"/>
     <arg name="teleop_mode" value="true"/>
     <arg name="shape_config" value="$(arg shape_config)"/>
+    <arg name="mapping_mode" value="$(arg mapping_mode)"/>
+    <arg name="force_dimensions" value="$(arg force_dimensions)"/>
+    <arg name="enable_haptics" value="$(arg enable_haptics)"/>
+    <arg name="anchor_mode" value="$(arg anchor_mode)"/>
   </include>
 </launch>

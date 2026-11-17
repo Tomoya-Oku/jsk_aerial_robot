@@ -72,3 +72,35 @@ def reflect_wrench(mapping, robot_jacobian, wrench, gain, limits):
     if not np.all(np.isfinite(raw)):
         raise ValueError("reflected torque is not finite")
     return raw, np.clip(raw, -limits, limits)
+
+
+def anchor_position(reference, world_rotation, relative_point):
+    """Thesis eq:anchor-compensation / eq:bimanual-center-position.
+
+    The same command q_cmd used for the joints must produce relative_point.
+    This fixes the point's position; it does not command a fixed orientation.
+    """
+    reference, relative_point = (np.asarray(v, dtype=float) for v in (reference, relative_point))
+    world_rotation = np.asarray(world_rotation, dtype=float)
+    if (reference.shape != (3,) or relative_point.shape != (3,) or world_rotation.shape != (3, 3)
+            or not all(np.all(np.isfinite(v)) for v in (reference, relative_point, world_rotation))
+            or not np.allclose(world_rotation.T @ world_rotation, np.eye(3), atol=1e-7)
+            or not np.isclose(np.linalg.det(world_rotation), 1., atol=1e-7)):
+        raise ValueError("invalid anchor position or rotation")
+    return reference - world_rotation @ relative_point
+
+
+def required_wrench(mass, gravity, contact_wrench, contact_from_cog):
+    """Thesis eq:required-static-wrench; all components share one frame.
+
+    contact_wrench is environment-on-robot, about the contact point E.
+    """
+    mass = float(mass)
+    gravity, contact_from_cog = (np.asarray(v, dtype=float) for v in (gravity, contact_from_cog))
+    wrench = np.asarray(contact_wrench, dtype=float)
+    if (not np.isfinite(mass) or mass <= 0 or gravity.shape != (3,)
+            or contact_from_cog.shape != (3,) or wrench.shape != (6,)
+            or not all(np.all(np.isfinite(v)) for v in (gravity, contact_from_cog, wrench))):
+        raise ValueError("invalid static wrench inputs")
+    return np.r_[-mass * gravity - wrench[:3],
+                 -wrench[3:] - np.cross(contact_from_cog, wrench[:3])]

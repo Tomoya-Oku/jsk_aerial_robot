@@ -36,7 +36,8 @@ roslaunch dracomancer contact.launch
 ```
 
 Mk-II viewer、DRAGON Gazebo、固定壁を起動し、Link1先端面の接触を`/dragon/contact/wrench`へ配信する。
-壁の配置・寸法・摩擦は`config/contact.yaml`で設定する。実機へ接続せず、接触力覚を出力しない。
+壁の配置・寸法・摩擦は`config/contact.yaml`で設定する。実機へ接続せず、既定では接触力覚を出力しない。
+接触レンチを含む静的釣合いを判定し、`enable_haptics:=true`を明示した場合だけ力覚計算を追加する。
 形態操作にはシミュレーション用の体幹代理点を明示し、通常のHover・可行性条件を使う。
 移動は独立したJoystick速度入力。本起動だけでは離陸せず、必要な離着陸は既存DRAGONの手順で操作者が行う。
 Mk-II単体Gazebo、DRAGONの別Gazebo、重複する形態指令ノードを同じmasterへ同時起動しない。
@@ -53,10 +54,14 @@ python3 -B src/jsk_aerial_robot/robots/dracomancer/test/test_runtime.py
 python3 -B src/jsk_aerial_robot/robots/dracomancer/test/test_output.py
 python3 -B src/jsk_aerial_robot/robots/dracomancer/test/test_contact.py
 python3 -B src/jsk_aerial_robot/robots/dracomancer/test/test_haptics.py
+python3 -B src/jsk_aerial_robot/robots/dracomancer/test/test_theory.py
 python3 -B src/jsk_aerial_robot/robots/dracomancer/test/test_shape.py -v
 ```
 
 `test_runtime.py`はROSインターフェースを模擬した回帰テスト。`test_shape.py`にはROS・PyKDL依存の検証を含む。
+`ctest -R dracomancer_wrench`は固定Qの符号付き余裕と共通配分、`ctest -R spinal_current`は14軸のセッション・期限を確認する。
+修論対応で`ShapeFeasibility`サービス定義を拡張したため、`catkin build spinal dracomancer`を行い、
+依存クライアントも新しい生成済みサービス型で再起動する。14軸にはMCU側の再ビルドも必要。
 実際のROS・Qt・Gazeboでは、実機のmasterを再利用せず隔離環境で次を実行する。
 
 ```bash

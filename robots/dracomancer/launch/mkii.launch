@@ -12,6 +12,10 @@
   <arg name="fc_serial_baud" default="921600" />
   <arg name="teleop_mode" default="false" />
   <arg name="shape_config" default="$(find dracomancer)/config/control/shape.yaml" />
+  <arg name="mapping_mode" default="shape"/>
+  <arg name="force_dimensions" default="2"/>
+  <arg name="enable_haptics" default="false"/>
+  <arg name="anchor_mode" default="$(eval 'mid' if arg('mapping_mode').startswith('dual_') else 'none')"/>
   <include file="$(find dracomancer)/launch/bringup.launch">
     <arg name="backend" value="$(arg backend)"/>
     <arg name="robot_ns" value="$(arg robot_ns)"/>
@@ -26,5 +30,9 @@
     <arg name="fc_serial_baud" value="$(arg fc_serial_baud)"/>
     <arg name="teleop_mode" value="$(arg teleop_mode)"/>
     <arg name="shape_config" value="$(arg shape_config)"/>
+    <arg name="mapping_mode" value="$(arg mapping_mode)"/>
+    <arg name="force_dimensions" value="$(arg force_dimensions)"/>
+    <arg name="enable_haptics" value="$(arg enable_haptics)"/>
+    <arg name="anchor_mode" value="$(arg anchor_mode)"/>
   </include>
 </launch>

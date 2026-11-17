@@ -3,6 +3,7 @@
 XM430-W350-Rを用いるMk-IIのCADモデル、新STL、角度・トルクGUI、Spinal UART/RS485直結制御、
 DRAGONの形状操作を収録するCatkinパッケージ。標準名前空間は`/dracomancer`。
 Mk-Iと独立パッケージ`dracomancer_mkii_ros`は統合・廃止した。
+制御理論は修士論文を正本とする。[対応表と設定](docs/thesis.md)を参照する。
 
 ```bash
 catkin build spinal dracomancer

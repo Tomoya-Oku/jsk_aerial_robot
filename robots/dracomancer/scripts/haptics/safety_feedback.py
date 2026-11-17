@@ -13,6 +13,13 @@ class SafetyFeedback:
         self.robot_stiffness = np.asarray(robot_stiffness, dtype=float)
         self.human_damping = np.asarray(human_damping, dtype=float)
         self.gain = float(gain)
+        # Nonnegative gains are required by the thesis virtual potential.
+        if (self.robot_stiffness.ndim != 1 or self.human_damping.ndim != 1
+                or not self.robot_stiffness.size or not self.human_damping.size
+                or not all(np.all(np.isfinite(v)) for v in (self.robot_stiffness, self.human_damping))
+                or np.any(self.robot_stiffness < 0) or np.any(self.human_damping < 0)
+                or not np.isfinite(self.gain) or self.gain < 0):
+            raise ValueError("stiffness, damping, and safety gain must be finite and nonnegative")
 
     @property
     def robot_joint_count(self):
@@ -39,7 +46,7 @@ class SafetyFeedback:
                 np.all(np.isfinite(human_velocity))):
             raise ValueError("safety feedback input contains non-finite values")
 
-        # shape_error = q_ref - q_feasible.  The minus sign makes the cue resist
+        # shape_error = q_ref - q_cmd. The minus sign makes the cue resist
         # motion toward the rejected shape rather than push the operator into it.
         robot_resistance = -self.robot_stiffness * shape_error
         spring = mapping_jacobian.T.dot(robot_resistance)

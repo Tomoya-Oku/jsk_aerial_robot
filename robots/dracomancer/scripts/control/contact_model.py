@@ -72,24 +72,42 @@ class ContactModel:
             pending = remaining
         return frames
 
-    def tip_pose(self, positions):
+    def point_pose(self, positions, link, point=(0., 0., 0.)):
+        """Point pose relative to the CoG, expressed in the fixed FC orientation."""
+        point = np.asarray(point, dtype=float)
+        if point.shape != (3,) or not np.all(np.isfinite(point)):
+            raise ValueError("point must contain three finite coordinates")
         frames = self.transforms(positions)
         fc_inv = np.linalg.inv(frames[self.fc])
         cog = sum(m * (frames[name][:3, :3] @ p + frames[name][:3, 3])
                   for name, m, p in self.masses) / sum(m for _, m, _ in self.masses)
-        pose = fc_inv @ frames[self.tip]
+        pose = fc_inv @ frames[link]
+        pose[:3, 3] += pose[:3, :3] @ point
         cog_fc = fc_inv[:3, :3] @ cog + fc_inv[:3, 3]
         pose[:3, 3] -= cog_fc
         return pose
 
-    def jacobian(self, positions, names):
+    def tip_pose(self, positions):
+        return self.point_pose(positions, self.tip)
+
+    def jacobian(self, positions, names, point=(0., 0., 0.), anchor=None, link=None):
+        """Internal or anchored contact Jacobian, at one nominal configuration.
+
+        Thesis eq:anchored-jacobian: fixed base orientation makes base
+        compensation a pure translation, so subtract the anchor's linear
+        Jacobian. The angular contact rows are unchanged.
+        """
         missing = self.required_joints - positions.keys()
         if missing:
             raise ValueError("missing robot joints: " + ", ".join(sorted(missing)))
-        base_rotation = self.tip_pose(positions)[:3, :3]
+        link=self.tip if link is None else link
+        base_rotation = self.point_pose(positions, link, point)[:3, :3]
 
         def displacement(q):
-            pose = self.tip_pose(dict(positions, **dict(zip(names, q))))
+            values = dict(positions, **dict(zip(names, q)))
+            pose = self.point_pose(values, link, point)
+            if anchor is not None:
+                pose[:3, 3] -= self.point_pose(values, anchor['link'], anchor['xyz'])[:3, 3]
             delta = pose[:3, :3] @ base_rotation.T
             # Infinitesimal spatial rotation expressed in the FC orientation.
             omega = 0.5 * np.array([delta[2, 1] - delta[1, 2],
@@ -98,6 +116,6 @@ class ContactModel:
 
         return finite_jacobian(displacement, [positions[n] for n in names])
 
-    def wrench_in_fc(self, positions, wrench):
-        rotation_fc_tip = self.tip_pose(positions)[:3, :3]
+    def wrench_in_fc(self, positions, wrench, link=None):
+        rotation_fc_tip = self.point_pose(positions,self.tip if link is None else link)[:3, :3]
         return np.r_[rotation_fc_tip @ wrench[:3], rotation_fc_tip @ wrench[3:]]

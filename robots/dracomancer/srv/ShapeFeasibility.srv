@@ -3,8 +3,26 @@
 # angles. Gimbal handling depends on the server's prediction mode.
 string[] name        # candidate link joint names
 float64[] position   # candidate link joint angles [rad]
+# Empty starts a new evaluation; returned context freezes the gimbals and
+# model orientation for the rate-limited command recheck in the same cycle.
+float64[] evaluation_gimbals
+float64[] evaluation_rotation
+# Optional environment-on-robot wrench, about link1 origin (contact E).
+# false: FC axes; true: link1 axes. The server shifts the moment using the
+# same candidate geometry and frozen gimbal context as the allocation.
+float64[] external_wrench
+bool wrench_in_link1
+# Multiple contacts: each moment is about the configured local point.
+string[] contact_link
+float64[] contact_point   # flattened N x 3, link-local coordinates [m]
+float64[] contact_wrench  # flattened N x 6
+bool[] contact_local     # true: link axes; false: FC axes
 ---
 float64 fc_f_min     # predicted force volume inradius
 float64 fc_t_min     # predicted torque volume inradius
 bool stability_ok    # base stability gate: common hover-wrench allocation and thrust bounds
 bool valid           # false if the model could not be evaluated
+float64[] evaluation_gimbals
+float64[] evaluation_rotation
+uint8 force_dimensions
+float64[] fc_to_cog

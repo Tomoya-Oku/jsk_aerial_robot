@@ -7,6 +7,7 @@ import numpy as np
 import rospy
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Float64, Float64MultiArray, UInt8
+from geometry_msgs.msg import WrenchStamped
 from dracomancer.srv import ShapeFeasibility, ShapeFeasibilityRequest
 
 # Catkin installs the entrypoint in lib/ and these helpers under share/scripts.
@@ -17,6 +18,8 @@ if not (helper_dir / 'shape_mapping.py').is_file():
 sys.path.insert(0, str(helper_dir))
 from shape_mapping import DRAGON_JOINTS, limit_step, vector
 from shape_runtime import ShapeRuntime
+from contacts import ContactInputs
+from contact_model import ContactModel
 
 
 class ControlJoints(ShapeRuntime):
@@ -25,8 +28,8 @@ class ControlJoints(ShapeRuntime):
         self.robot_name = rospy.get_param('~robot_name', 'dragon')
         self.device_ns = rospy.get_param('~device_ns', '/dracomancer').rstrip('/')
         self.mapping_mode = rospy.get_param('~mapping_mode', 'shape')
-        if self.mapping_mode != 'shape':
-            raise ValueError('Mk-I mappings were removed; mapping_mode must be shape')
+        if self.mapping_mode not in ('shape', 'joint', 'dual_shape', 'dual_joint'):
+            raise ValueError('Mk-I mappings were removed; use shape, joint, dual_shape, or dual_joint')
         if rospy.get_param('~feasibility_gate_mode', 'hold') != 'hold':
             raise ValueError('Mk-II shape supports only the hold feasibility gate')
         self.rate_hz = float(rospy.get_param('~rate', 40.0))
@@ -56,12 +59,21 @@ class ControlJoints(ShapeRuntime):
         self.torque_radius_threshold = float(rospy.get_param('~torque_radius_threshold', .015400))
         self.force_radius_recover_threshold = float(rospy.get_param('~force_radius_recover_threshold', .249220))
         self.torque_radius_recover_threshold = float(rospy.get_param('~torque_radius_recover_threshold', .278159))
+        self.valid_thresholds(self.force_radius_threshold, self.force_radius_recover_threshold)
+        self.valid_thresholds(self.torque_radius_threshold, self.torque_radius_recover_threshold)
         self.feasibility_hysteresis_holding = False
         self.last_feasibility_eval_stamp = rospy.Time(0)
         self.last_gate_log_stamp = rospy.Time(0)
         self.last_gate_feasible = None
         self.gate_log_period = float(rospy.get_param('~gate_log_period', 1.))
         self.feasibility_srv = None
+        self.feasibility_context = None
+        self.use_contact_wrench = bool(rospy.get_param('~use_contact_wrench', False))
+        self.fc_to_cog = None
+        self.contacts=ContactInputs(rospy.get_param('~contacts',[{}]),self.robot_name)
+        self.contact_geometry=None
+        self.grasp_ok=False
+        self.grasp_received=0.
         self.joints_ctrl_pub = rospy.Publisher(rospy.get_param('~command_topic', '/' + self.robot_name + '/joints_ctrl'), JointState, queue_size=1)
         self.shape_error_pub = rospy.Publisher(self.device_ns + '/shape_control_error', Float64MultiArray, queue_size=1)
         self.candidate_target_pub = rospy.Publisher(self.device_ns + '/candidate/joint_target', JointState, queue_size=1)
@@ -70,12 +82,44 @@ class ControlJoints(ShapeRuntime):
         self.target_fc_f_pub = rospy.Publisher(self.device_ns + '/target/fc_f_min', Float64, queue_size=1)
         self.target_fc_t_pub = rospy.Publisher(self.device_ns + '/target/fc_t_min', Float64, queue_size=1)
         self.init_shape()
-        rospy.Subscriber(rospy.get_param('~device_joint_topic', self.device_ns + '/joint_states'), JointState, self.device_joint_cb, queue_size=1)
+        rospy.Subscriber(rospy.get_param('~device_joint_topic', self.device_ns + '/measured_joint_states'), JointState, self.device_joint_cb, queue_size=1)
         rospy.Subscriber('/' + self.robot_name + '/joint_states', JointState, self.robot_joint_cb, queue_size=1)
         rospy.Subscriber('/' + self.robot_name + '/flight_state', UInt8, self.robot_flight_state_cb, queue_size=1)
         rospy.Subscriber(self.device_ns + '/teleop_mode', Bool, self.mode_cb, queue_size=1)
         rospy.Subscriber(self.device_ns + '/force_volume_radius_threshold', Float64MultiArray, self.force_threshold_cb, queue_size=1)
         rospy.Subscriber(self.device_ns + '/torque_volume_radius_threshold', Float64MultiArray, self.torque_threshold_cb, queue_size=1)
+        if self.use_contact_wrench:
+            for i,spec in enumerate(self.contacts.specs):
+                rospy.Subscriber(spec['topic'],WrenchStamped,lambda msg,index=i:self.contact_cb(msg,index),queue_size=1)
+            if len(self.contacts.specs)>1:
+                rospy.Subscriber('/'+self.robot_name+'/contact/constraints_ok',Bool,self.grasp_cb,queue_size=1)
+
+    def contact_cb(self, msg, index=0):
+        self.contacts.update(index,msg,time.monotonic())
+        self.shape_validated_candidate = None
+
+    def grasp_cb(self,msg):
+        # Supplied by a contact-specific friction/joint-load validator. A
+        # whole-body wrench balance alone cannot certify a two-point grasp.
+        self.grasp_ok,self.grasp_received=bool(msg.data),time.monotonic()
+        self.shape_validated_candidate=None
+
+    def candidate_wrench(self, candidate):
+        if not getattr(self,'use_contact_wrench',False):
+            return [],[],[],[]
+        if len(self.contacts.specs)>1 and (not self.grasp_ok or time.monotonic()-self.grasp_received>.25):
+            raise ValueError('fresh friction/joint-load validation required for multiple contacts')
+        values=self.contacts.values(rospy.Time.now().to_sec(),time.monotonic())
+        if getattr(self,'contact_geometry',None) is None:
+            self.contact_geometry=ContactModel(rospy.get_param('/'+self.robot_name+'/robot_description'))
+        if not self.contact_geometry.required_joints.issubset(self.latest_robot_joints):
+            raise ValueError('measured geometry required to transform contact wrenches')
+        # Sensor link axes belong to the measured shape, not the hypothetical
+        # q_ref. Convert first; the server then evaluates moment arms at q_ref.
+        values=[(link,point,self.contact_geometry.wrench_in_fc(self.latest_robot_joints,np.asarray(wrench),link).tolist()
+                 if local else wrench,False) for link,point,wrench,local in values]
+        return ([v[0] for v in values],sum([v[1] for v in values],[]),
+                sum([v[2] for v in values],[]),[v[3] for v in values])
 
     def device_joint_cb(self, msg):
         self.shape_packet_valid = self.valid_joint_packet(msg)
@@ -85,7 +129,8 @@ class ControlJoints(ShapeRuntime):
             self.latest_device_joints = dict(zip(msg.name, msg.position))
 
     def robot_joint_cb(self, msg):
-        self.shape_robot_valid = self.valid_joint_packet(msg) and msg.header.stamp != rospy.Time(0)
+        self.shape_robot_valid = (self.valid_joint_packet(msg) and msg.header.stamp != rospy.Time(0)
+                                  and set(self.joint_names).issubset(msg.name))
         if self.shape_robot_valid:
             self.latest_robot_joints = dict(zip(msg.name, msg.position))
             self.latest_robot_joint_stamp = msg.header.stamp
@@ -114,6 +159,8 @@ class ControlJoints(ShapeRuntime):
 
     def make_joint_msg(self):
         start = time.perf_counter()
+        self.feasibility_context = None
+        self.cycle_previous = list(self.current_target)
         self.shape_cached = None
         target = self.desired_target()
         desired = self.mapped_target() if self.teleop_mode else target
@@ -154,17 +201,31 @@ class ControlJoints(ShapeRuntime):
             self.feasibility_srv = None
             return False
 
+    @staticmethod
+    def valid_thresholds(hard, recover):
+        # Thesis eq:gate-conditions requires strict hysteresis, not equal limits.
+        if not np.all(np.isfinite([hard, recover])) or not 0 <= hard < recover:
+            raise ValueError('feasibility thresholds require 0 <= hard < recover')
+
+    def update_thresholds(self, msg, kind):
+        hard_name, recover_name = kind + '_radius_threshold', kind + '_radius_recover_threshold'
+        hard = float(msg.data[0]) if msg.data else getattr(self, hard_name)
+        recover = float(msg.data[1]) if len(msg.data) > 1 else getattr(self, recover_name)
+        try:
+            self.valid_thresholds(hard, recover)
+        except ValueError as error:
+            rospy.logwarn_throttle(3., '%s thresholds ignored: %s', kind, str(error))
+            return
+        setattr(self, hard_name, hard)
+        setattr(self, recover_name, recover)
+        # A cached goal was checked against the previous thresholds.
+        self.shape_validated_candidate = None
+
     def force_threshold_cb(self, msg):
-        if len(msg.data) > 0:
-            self.force_radius_threshold = float(msg.data[0])
-        if len(msg.data) > 1:
-            self.force_radius_recover_threshold = max(self.force_radius_threshold, float(msg.data[1]))
+        self.update_thresholds(msg, 'force')
 
     def torque_threshold_cb(self, msg):
-        if len(msg.data) > 0:
-            self.torque_radius_threshold = float(msg.data[0])
-        if len(msg.data) > 1:
-            self.torque_radius_recover_threshold = max(self.torque_radius_threshold, float(msg.data[1]))
+        self.update_thresholds(msg, 'torque')
 
     def evaluate_feasibility(self, candidate):
         # Returns (feasible, fc_f_min, fc_t_min, stability_ok). On service
@@ -177,13 +238,29 @@ class ControlJoints(ShapeRuntime):
         req.name = list(self.joint_names)
         req.position = list(candidate)
         try:
+            req.contact_link,req.contact_point,req.contact_wrench,req.contact_local=self.candidate_wrench(candidate)
+        except (ValueError, KeyError):
+            return None, None, None, None
+        context = getattr(self, 'feasibility_context', None)
+        if context:
+            req.evaluation_gimbals, req.evaluation_rotation = context
+        try:
+            started=time.monotonic()
             res = self.feasibility_srv.call(req)
         except (rospy.ServiceException, TypeError):
             rospy.logwarn_throttle(5.0, "shape feasibility service call failed; reconnecting")
             self.feasibility_srv = None
             return None, None, None, None
-        if not res.valid:
-            return None, res.fc_f_min, res.fc_t_min, None
+        if time.monotonic()-started>min(.25,getattr(self,'shape_timeout',.5)):
+            return None,None,None,None
+        if not res.valid or not np.all(np.isfinite([res.fc_f_min, res.fc_t_min])):
+            return None, None, None, None
+        gimbals, orientation = getattr(res, 'evaluation_gimbals', []), getattr(res, 'evaluation_rotation', [])
+        if gimbals and len(orientation) == 9:
+            self.feasibility_context = (list(gimbals), list(orientation))
+        frame = getattr(res, 'fc_to_cog', [])
+        if len(frame) == 9:
+            self.fc_to_cog = list(frame)
         stability_ok = bool(res.stability_ok)
         feasible = (stability_ok and
                     res.fc_f_min >= self.force_radius_threshold and
@@ -191,7 +268,8 @@ class ControlJoints(ShapeRuntime):
         return feasible, res.fc_f_min, res.fc_t_min, stability_ok
 
     def feasibility_recovered(self, fc_f, fc_t, stability_ok):
-        if fc_f is None or fc_t is None or not stability_ok:
+        if (fc_f is None or fc_t is None or not stability_ok or
+                not np.all(np.isfinite([fc_f, fc_t]))):
             return False
         return (fc_f >= self.force_radius_recover_threshold and
                 fc_t >= self.torque_radius_recover_threshold)

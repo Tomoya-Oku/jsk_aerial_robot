@@ -10,8 +10,9 @@ from geometry_msgs.msg import Point
 from std_msgs.msg import String, Float64
 from visualization_msgs.msg import Marker, MarkerArray
 
-from shape_mapping import (UrdfModel, HumanChain, DragonChain, ShapeMapper,
+from shape_mapping import (UrdfModel, HumanChain, BimanualHumanChain, DragonChain, ShapeMapper,
                            DRAGON_JOINTS, vector)
+from joint_mapping import JointMapper
 
 
 class ShapeRuntime:
@@ -27,6 +28,9 @@ class ShapeRuntime:
             raise ValueError("shape_input_timeout must be positive")
         self.shape_cached = None
         self.shape_solution = None
+        self.shape_solution_human = None
+        self.shape_solution_stamp = None
+        self.shape_solution_previous = None
         self.shape_solve_stamp = None
         self.shape_validated_candidate = None
         self.shape_result = dict(ok=False, status="waiting")
@@ -51,7 +55,14 @@ class ShapeRuntime:
             length = dragon.joints["joint1_pitch"]["origin"][0, 3]
             if not np.allclose(chain.tail, [length, 0, 0], atol=1e-8):
                 raise ValueError("dragon_tail disagrees with loaded DRAGON model")
-            self.shape_mapper = ShapeMapper(HumanChain(human, config), chain, config, self.startup_pose)
+            bimanual = self.mapping_mode.startswith('dual_')
+            if self.mapping_mode in ('joint', 'dual_joint'):
+                if config.get('joint_mapping', {}).get('calibrated', False) is not True and not rospy.get_param('/use_sim_time', False):
+                    raise ValueError('joint mapping requires anatomical calibration outside simulation')
+                self.shape_mapper = JointMapper(human, chain, config, self.startup_pose, bimanual)
+            else:
+                human_chain = BimanualHumanChain(human, config) if bimanual else HumanChain(human, config)
+                self.shape_mapper = ShapeMapper(human_chain, chain, config, self.startup_pose)
             self.shape_update_rate = float(config.get("update_rate", 10.))
             if not np.isfinite(self.shape_update_rate) or self.shape_update_rate <= 0:
                 self.shape_mapper = None
@@ -115,7 +126,9 @@ class ShapeRuntime:
             robot_age = (rospy.Time.now()-self.latest_robot_joint_stamp).to_sec()
             if not self.shape_robot_valid or not 0 <= robot_age <= self.shape_timeout:
                 raise ValueError("robot JointState unavailable")
-            self.shape_human = self.shape_mapper.human_shape(dict(self.latest_device_joints))
+            values = dict(self.latest_device_joints)
+            input_stamp = self.shape_input_stamp.to_sec()
+            self.shape_human = self.shape_mapper.human_shape(values)
             now = rospy.Time.now()
             elapsed = None if self.shape_solve_stamp is None else (now-self.shape_solve_stamp).to_sec()
             updated = self.shape_solution is None or elapsed is None or elapsed < 0 or elapsed >= 1./self.shape_update_rate
@@ -124,9 +137,13 @@ class ShapeRuntime:
                 result["seconds"] = time.perf_counter() - start
                 if result["seconds"] > self.shape_mapper.budget:
                     result.update(ok=False, status="timeout", q=np.asarray(previous))
-                    result["rmse"] = float(np.linalg.norm((self.shape_mapper.dragon_shape(previous)
-                        - self.shape_human).ravel() * self.shape_mapper.sqrt_w))
+                    if self.shape_mapper.is_shape:
+                        result["rmse"] = float(np.linalg.norm((self.shape_mapper.dragon_shape(previous)
+                            - self.shape_human).ravel() * self.shape_mapper.sqrt_w))
                 self.shape_solution = dict(result)
+                self.shape_solution_human = values
+                self.shape_solution_stamp = input_stamp
+                self.shape_solution_previous = list(previous)
                 self.shape_solve_stamp = now
             else:
                 result = dict(self.shape_solution)
@@ -143,6 +160,8 @@ class ShapeRuntime:
         candidate = self.mapped_target()
         self.publish_candidate_target(candidate)
         if not self.shape_result.get("ok", False):
+            self.feasibility_hysteresis_holding = True
+            self.shape_validated_candidate = None
             return list(self.current_target)
         if not self.enable_feasibility_gate:
             self.shape_result["gate"] = "disabled"
@@ -154,8 +173,10 @@ class ShapeRuntime:
             if (self.shape_validated_candidate is not None and
                     np.array_equal(candidate, self.shape_validated_candidate)):
                 self.shape_result["gate"] = "cached"
+                self.feasibility_context = getattr(self, 'shape_validated_context', None)
                 return candidate
             self.shape_result["gate"] = "waiting"
+            self.feasibility_hysteresis_holding = True
             return list(self.current_target)
         self.last_feasibility_eval_stamp = now
         feasible, force, torque, stable = self.evaluate_feasibility(candidate)
@@ -164,14 +185,14 @@ class ShapeRuntime:
         accepted = feasible is True and (not self.feasibility_hysteresis_holding or recovered)
         self.feasibility_hysteresis_holding = not accepted
         self.shape_validated_candidate = list(candidate) if accepted else None
+        self.shape_validated_context = getattr(self, 'feasibility_context', None) if accepted else None
         self.shape_result["gate"] = "accepted" if accepted else "hold"
         self.log_gate(accepted, force, torque, stable)
         # Freeze at the last SENT command, not a previously accepted distant goal.
         return candidate if accepted else list(self.current_target)
 
     def shape_check_command(self, candidate):
-        if (not self.enable_feasibility_gate or not self.teleop_mode
-                or np.allclose(candidate, self.current_target, atol=1e-12, rtol=0)):
+        if not self.enable_feasibility_gate or not self.teleop_mode:
             return candidate
         feasible, force, torque, _ = self.evaluate_feasibility(candidate)
         if force is not None:
@@ -179,6 +200,9 @@ class ShapeRuntime:
         if torque is not None:
             self.target_fc_t_pub.publish(Float64(torque))
         if feasible is not True:
+            # Thesis eq:rechecked-command: h_k = 1 - a_k D_k. A rejected
+            # rate-limited command also requires recovery on the next cycle.
+            self.feasibility_hysteresis_holding = True
             self.shape_validated_candidate = None
             self.shape_result["gate"] = "command_hold"
             return list(self.current_target)
@@ -188,9 +212,22 @@ class ShapeRuntime:
         data = {k: v for k, v in self.shape_result.items() if k != "q"}
         data.update(q_command=list(self.current_target), stamp=rospy.Time.now().to_sec(),
                     teleop=self.teleop_mode)
+        # One immutable nominal packet for the feedback/anchor consumers.
+        data.update(q_previous=self.shape_solution_previous or getattr(self, 'cycle_previous', list(self.current_target)),
+                    human=self.shape_solution_human or dict(self.latest_device_joints), robot=dict(self.latest_robot_joints),
+                    input_stamp=self.shape_solution_stamp or self.shape_input_stamp.to_sec())
+        data['fc_to_cog'] = getattr(self, 'fc_to_cog', None)
+        context=getattr(self,'feasibility_context',None)
+        data['evaluation_gimbals']=context[0] if context else []
+        data['active'] = (self.teleop_mode and self.shape_initialized and self.shape_input_ready()
+                          and self.shape_robot_valid
+                          and 0 <= (rospy.Time.now()-self.latest_robot_joint_stamp).to_sec() <= self.shape_timeout
+                          and (not self.publish_only_when_hovering or self.robot_hovering))
         if self.shape_cached is not None:
             data["q_ref"] = list(self.shape_cached)
-        if self.shape_mapper is not None and self.shape_human is not None and self.shape_initialized:
+        data['mapping_mode'] = self.mapping_mode
+        if (self.shape_mapper is not None and self.shape_mapper.is_shape
+                and self.shape_human is not None and self.shape_initialized):
             robot = self.shape_mapper.dragon_shape(self.current_target)
             data["command_rmse"] = float(np.sqrt(np.sum(self.shape_mapper.weights * np.sum(
                 (robot-self.shape_human)**2, axis=1))/self.shape_mapper.weights.sum()))

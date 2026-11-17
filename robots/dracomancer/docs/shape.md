@@ -42,7 +42,12 @@ URDFを変更したら人体代表点と`dragon_tail`の整合を確認する。
 
 標準入力は`/dracomancer/measured_joint_states`、人体モデルは`/dracomancer/robot_description`。
 形態指令は`control_joint_angle.py`だけが発行する。別ノードから同じtopicへ指令しない。
-対応モードは`shape`、feasibility gateは`hold`のみ。Link4アンカーや腕全体からの機体移動へ接続しない。
+対応モードは`shape`（標準）・`joint`・`dual_shape`・`dual_joint`。feasibility gateは`hold`のみ。
+`shape_demo.launch mapping_mode:=dual_shape`等で選ぶ。関節角方式の既定の零点・符号はシミュレーション用。
+`teleoperation.launch anchor_mode:=tail`は尾側点、`mid`は中央関節の位置補償を有効化する。
+両腕方式の標準は`mid`。移動指令は単一の`control_position.py`が担当し、Joystick入力が零でも変形による位置差を補償する。
+`enable_position_control:=true`でJoystickによる基準位置の移動も有効化する。補償はHover中に限る。
+力覚は`enable_haptics:=true`で明示的に有効化し、実機のARMは自動実行しない。[修論対応](thesis.md)と[実機手順](hardware.md)を参照する。
 `teleop_mode=false`は最後の指令を保持する。現在のclutch解除は人体基準姿勢の再設定を行わない。
 
 ## 実装の入口

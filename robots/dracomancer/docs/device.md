@@ -5,7 +5,7 @@
 主デバイスは座位で使用する右腕7 DoFの上肢外骨格型Dracomancer Mk-II。
 人体関節状態・腕の相対形状を取得し、校正済みの関節にはトルクを提示する。
 CADには両腕の15リンク・14関節があり、新STL 8種類を`meshes/`から使用する。
-主な形態入力は`right_joint_1..7`。両腕操作は研究の必須条件に含めない。
+標準入力は`right_joint_1..7`。両腕方式では左腕も含め、入力ベクトルを左7軸・右7軸の順に並べる。
 
 モデルの正本は`urdf/cad.urdf`、world固定・transmission・Gazebo設定を加えたモデルは`urdf/mkii.urdf.xacro`。
 CADの慣性・軸・関節変換とSTLハッシュは`config/mkii/cad.json`と`test/mkii/model.py`で確認する。
@@ -27,8 +27,9 @@ continuous関節、CAD q=0、URDFのeffort・velocity、PID、減衰、箱collis
 | 標準名前空間 | `/dracomancer` |
 
 物理IDの既定値は`config/mkii/hardware.yaml`の`servo_ids`が管理する。
-Spinal scan indexは接続時に確認する0〜9の別番号で、物理IDから推定しない。
-1台のDirectServoは最大10軸。ID表が14軸分あっても、14軸の駆動設定を1台へ割り当てない。
+Spinal scan indexは接続時に確認する0〜13の別番号で、物理IDから推定しない。
+DirectServoの配列・送信バッファを14軸対応へ拡張した。旧10軸ファームウェアのまま14軸を設定しない。
+14軸での通信周期・電源・配線・停止動作は実機未検証。MCUの再ビルドと適合確認が必要。
 直結APIの対象はSTM32H7/H7 V2。F7の直結実機動作は確認できていない。
 
 12 Vのstall torque 4.1 Nm・stall current 2.3 Aから得る公称換算値は約1.783 Nm/A [10]。

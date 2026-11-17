@@ -19,6 +19,8 @@ class ContactFeedback:
         self.robot_joint_count = int(robot_joint_count)
         self.human_joint_count = int(human_joint_count)
         self.gain = float(gain)
+        if self.robot_joint_count <= 0 or self.human_joint_count <= 0 or not np.isfinite(self.gain) or self.gain < 0:
+            raise ValueError("joint counts must be positive and contact gain nonnegative")
 
     def compute(self, wrench, robot_jacobian, mapping_jacobian):
         wrench = np.asarray(wrench, dtype=float)

@@ -51,6 +51,7 @@ def ros_modules():
              'std_srvs', 'std_srvs.srv', 'geometry_msgs', 'geometry_msgs.msg',
              'visualization_msgs', 'visualization_msgs.msg', 'spinal', 'spinal.msg',
              'spinal.srv', 'dracomancer.srv', 'controller_manager_msgs', 'controller_manager_msgs.srv']
+    names += ['nav_msgs','nav_msgs.msg','aerial_robot_msgs','aerial_robot_msgs.msg']
     modules = {name: MagicMock() for name in names}
     modules['rospy'].Time = Stamp
     modules['rospy'].get_param.side_effect = lambda name, default=None: default
@@ -181,6 +182,22 @@ class RuntimeTest(unittest.TestCase):
             self.control.ControlJoints()
         self.rospy.Publisher.assert_not_called()
 
+    def test_fourteen_direct_axes_and_scan_index_boundary(self):
+        settings = yaml.safe_load((PACKAGE/'config/mkii/hardware.yaml').read_text(encoding='utf-8'))
+        common = dict(zero_tick=2048,radians_per_tick=.0015,direction=1,
+                      joint_nm_per_amp=2.,max_current_amp=.5,max_torque_nm=.2)
+        names = list(settings['servo_ids'])
+        actuators = {name:dict(common,index=i) for i,name in enumerate(names)}
+        params = {'joints':names,'~servo_ids':settings['servo_ids'],'~actuators':actuators}
+        self.rospy.get_param.side_effect = lambda name,default=None:params.get(name,default)
+        with patch.object(self.direct,'DaemonExecutor'),patch.object(self.direct.threading,'Thread'):
+            node = self.direct.SpinalControl()
+        self.assertEqual(len(node.config),14)
+        self.assertEqual(node.config[names[-1]]['index'],13)
+        actuators[names[-1]]['index']=14
+        with self.assertRaisesRegex(ValueError,'index/ID'):
+            self.direct.SpinalControl()
+
     def test_shape_is_default_and_clutch_holds_last_command(self):
         n = self.control.ControlJoints()
         self.assertEqual(n.mapping_mode, 'shape')
@@ -196,6 +213,207 @@ class RuntimeTest(unittest.TestCase):
         for previous, bound in [(None, 0), (Stamp(9), .0025), (Stamp(10), 0), (Stamp(11), 0)]:
             n.last_command_stamp = previous
             self.assertTrue(np.all(np.abs(n.rate_limit([1]*6)) <= bound+1e-12))
+
+    def test_recheck_rejection_requires_recovery_next_cycle(self):
+        n = self.control.ControlJoints.__new__(self.control.ControlJoints)
+        n.enable_feasibility_gate = n.teleop_mode = True
+        n.current_target = [.2]*6
+        n.shape_result = {'ok': True}
+        n.target_fc_f_pub = n.target_fc_t_pub = MagicMock()
+        n.feasibility_hysteresis_holding = False
+        n.shape_validated_candidate = [.4]*6
+        n.evaluate_feasibility = MagicMock(return_value=(False, .01, .01, False))
+        self.assertEqual(n.shape_check_command([.21]*6), [.2]*6)
+        self.assertTrue(n.feasibility_hysteresis_holding)
+        self.assertIsNone(n.shape_validated_candidate)
+
+        # A new reference passes hard limits but not recovery limits: it must
+        # stay held after the previous cycle's rate-limited trial was rejected.
+        n.mapped_target = MagicMock(return_value=[.4]*6)
+        n.publish_candidate_target = n.publish_candidate_fc = n.log_gate = MagicMock()
+        n.shape_result = {'ok': True}
+        n.feasibility_rate, n.last_feasibility_eval_stamp = 0, Stamp()
+        n.force_radius_recover_threshold = n.torque_radius_recover_threshold = .3
+        n.evaluate_feasibility.return_value = (True, .2, .2, True)
+        self.assertEqual(n.shape_gated_target(), [.2]*6)
+        n.evaluate_feasibility.return_value = (True, .4, .4, True)
+        self.assertEqual(n.shape_gated_target(), [.4]*6)
+        self.assertFalse(n.feasibility_hysteresis_holding)
+
+    def test_failed_mapping_enters_hold_and_invalidates_cached_goal(self):
+        n = self.control.ControlJoints.__new__(self.control.ControlJoints)
+        n.current_target = [.2]*6
+        n.shape_result = {'ok': False}
+        n.shape_validated_candidate = [.4]*6
+        n.feasibility_hysteresis_holding = False
+        n.mapped_target = MagicMock(return_value=[.4]*6)
+        n.publish_candidate_target = MagicMock()
+        self.assertEqual(n.shape_gated_target(), [.2]*6)
+        self.assertTrue(n.feasibility_hysteresis_holding)
+        self.assertIsNone(n.shape_validated_candidate)
+
+    def test_nonfinite_feasibility_is_unavailable(self):
+        n = self.control.ControlJoints.__new__(self.control.ControlJoints)
+        n.joint_names = self.control.DRAGON_JOINTS
+        n.feasibility_srv = MagicMock()
+        for force in [np.inf, np.nan]:
+            n.feasibility_srv.call.return_value = SimpleNamespace(valid=True, stability_ok=True, fc_f_min=force, fc_t_min=1.)
+            self.assertEqual(n.evaluate_feasibility([0.]*6), (None, None, None, None))
+
+    def test_threshold_update_is_atomic_and_strict(self):
+        n = self.control.ControlJoints.__new__(self.control.ControlJoints)
+        n.force_radius_threshold, n.force_radius_recover_threshold = .1, .3
+        for pair in [[.2, .2], [-.1, .4], [np.nan, .4], [.2, np.inf]]:
+            n.force_threshold_cb(SimpleNamespace(data=pair))
+            self.assertEqual((n.force_radius_threshold, n.force_radius_recover_threshold), (.1, .3))
+        n.force_threshold_cb(SimpleNamespace(data=[.15, .4]))
+        self.assertEqual((n.force_radius_threshold, n.force_radius_recover_threshold), (.15, .4))
+
+    def test_all_four_modes_are_selectable(self):
+        for mode in ['shape','joint','dual_shape','dual_joint']:
+            self.rospy.get_param.side_effect = lambda name,default=None:mode if name=='~mapping_mode' else default
+            self.assertEqual(self.control.ControlJoints().mapping_mode,mode)
+
+    def test_command_recheck_reuses_gimbal_and_orientation_context(self):
+        n = self.control.ControlJoints.__new__(self.control.ControlJoints)
+        n.joint_names = self.control.DRAGON_JOINTS
+        n.feasibility_context = None
+        n.force_radius_threshold=n.torque_radius_threshold=.1
+        n.feasibility_srv=MagicMock()
+        response=SimpleNamespace(valid=True,stability_ok=True,fc_f_min=.4,fc_t_min=.4,
+                                 evaluation_gimbals=[.2]*8,evaluation_rotation=np.eye(3).ravel().tolist(),
+                                 fc_to_cog=np.eye(3).ravel().tolist())
+        n.feasibility_srv.call.return_value=response
+        self.assertTrue(n.evaluate_feasibility([.2]*6)[0])
+        n.evaluate_feasibility([.21]*6)
+        request=n.feasibility_srv.call.call_args.args[0]
+        self.assertEqual(request.evaluation_gimbals,[.2]*8)
+        self.assertEqual(request.evaluation_rotation,response.evaluation_rotation)
+
+    def test_cached_solution_freezes_human_input_and_mapping_history(self):
+        n=self.control.ControlJoints.__new__(self.control.ControlJoints)
+        n.current_target=[0.]*6
+        n.latest_device_joints={'a':.1}
+        n.latest_robot_joint_stamp=Stamp(10)
+        n.shape_input_stamp=Stamp(10)
+        n.shape_robot_valid,n.shape_timeout=True,.5
+        n.shape_input_ready=MagicMock(return_value=True)
+        n.shape_mapper=MagicMock()
+        n.shape_mapper.human_shape.return_value=np.zeros((20,3))
+        n.shape_mapper.budget=10.
+        n.shape_mapper.solve.return_value=dict(q=np.full(6,.2),ok=True,status='success')
+        n.shape_cached=n.shape_solution=n.shape_solve_stamp=None
+        n.shape_update_rate=10.
+        n.shape_target()
+        n.latest_device_joints={'a':.4}
+        n.current_target=[.1]*6
+        n.shape_cached=None
+        with patch.object(Stamp,'now',return_value=Stamp(10.01)):
+            n.shape_target()
+        n.shape_mapper.solve.assert_called_once()
+        self.assertEqual(n.shape_solution_human,{'a':.1})
+        self.assertEqual(n.shape_solution_previous,[0.]*6)
+
+    def test_feedback_consumes_named_nominal_packet_and_rejects_stale(self):
+        feedback=load('runtime_feedback',PACKAGE/'scripts/control/feedback.py')
+        n=feedback.Feedback.__new__(feedback.Feedback)
+        n.names=[f'left_joint_{i}' for i in range(1,8)]+[f'right_joint_{i}' for i in range(1,8)]
+        n.mapper=SimpleNamespace(human=SimpleNamespace(names=n.names),
+                                 mapping_jacobian=lambda *args:np.eye(6,14))
+        n.contact_model=SimpleNamespace(jacobian=lambda *args,**kwargs:np.eye(6))
+        n.contact=feedback.ContactFeedback(6,14,0.)
+        n.safety=feedback.SafetyFeedback(np.ones(6),np.zeros(14))
+        n.limit=np.ones(14)
+        n.anchor,n.input_previous='none',None
+        n.received=feedback.time.monotonic()
+        n.data=dict(active=True,ok=True,stamp=10.,input_stamp=10.,human=dict.fromkeys(n.names,0.),
+                    robot={},q_ref=[.2]*6,q_previous=[0.]*6,q_command=[0.]*6)
+        np.testing.assert_allclose(n.torque(),[-.2]*6+[0.]*8)
+        n.data['stamp']=8.
+        with self.assertRaises(ValueError):n.torque()
+
+    def test_anchor_uses_sent_shape_and_preserves_world_reference(self):
+        anchor=load('runtime_anchor',PACKAGE/'scripts/control/anchor_runtime.py')
+        n=anchor.AnchorRuntime.__new__(anchor.AnchorRuntime)
+        n.anchor_mode,n.anchor_reference,n.anchor_last='tail',None,None
+        n.anchor_tail=[.474,0,0]
+        n.rate_hz,n.pos_limit=40.,False
+        n.anchor_received=n.odom_received=anchor.time.monotonic()
+        names=self.control.DRAGON_JOINTS
+        n.anchor_data=dict(active=True,stamp=10.,fc_to_cog=np.eye(3).ravel().tolist(),
+                           robot=dict.fromkeys(names,.1),q_command=[.2]*6)
+        pose=SimpleNamespace(position=SimpleNamespace(x=2.,y=0.,z=1.),
+                             orientation=SimpleNamespace(x=0.,y=0.,z=0.,w=1.))
+        n.anchor_odom=SimpleNamespace(header=SimpleNamespace(stamp=Stamp(10)),pose=SimpleNamespace(pose=pose))
+        n.anchor_base_odom=n.anchor_odom
+        n.base_received=anchor.time.monotonic()
+        def point(positions,*args):
+            result=np.eye(4);result[0,3]=positions[names[0]];return result
+        n.anchor_model=SimpleNamespace(required_joints=set(names),point_pose=point,
+                                       joints=[('fc_joint','fixed','link2','fc',np.eye(4),[1,0,0])],
+                                       transforms=lambda values:{'link2':np.eye(4),'fc':np.eye(4)})
+        nav=SimpleNamespace(COG=1,POS_MODE=2,target_vel_x=0.,target_vel_y=0.,target_vel_z=0.)
+        self.assertTrue(n.anchor_navigation(nav))
+        self.assertAlmostEqual(nav.target_pos_x,1.9)
+        n.anchor_data['q_command']=[.4]*6
+        self.assertTrue(n.anchor_navigation(nav))
+        self.assertAlmostEqual(nav.target_pos_x,1.7)
+
+    def test_multiple_contacts_require_fresh_grasp_validation(self):
+        from contacts import ContactInputs
+        n=self.control.ControlJoints.__new__(self.control.ControlJoints)
+        n.use_contact_wrench=True
+        n.contacts=ContactInputs([{'link':'link1','topic':'/head'},
+                                  {'link':'link4','topic':'/tail','point':[.474,0,0]}],'dragon')
+        for i,link in enumerate(['link1','link4']):
+            force=SimpleNamespace(x=1.-2*i,y=0.,z=0.)
+            torque=SimpleNamespace(x=0.,y=0.,z=0.)
+            msg=SimpleNamespace(header=SimpleNamespace(stamp=Stamp(10),frame_id='dragon/'+link),
+                                wrench=SimpleNamespace(force=force,torque=torque))
+            n.contacts.update(i,msg,self.control.time.monotonic())
+        n.grasp_ok=False
+        n.grasp_received=self.control.time.monotonic()
+        n.latest_robot_joints={}
+        n.contact_geometry=SimpleNamespace(required_joints=set(),wrench_in_fc=lambda positions,wrench,link:wrench)
+        with self.assertRaises(ValueError):n.candidate_wrench([0.]*6)
+        n.grasp_ok=True
+        links,points,wrenches,local=n.candidate_wrench([0.]*6)
+        self.assertEqual(links,['link1','link4'])
+        self.assertEqual(len(points),6)
+        self.assertEqual(wrenches[0],-wrenches[6])
+        self.assertEqual(local,[False,False])
+
+    def test_view_navigation_uses_full_cog_rotation_interface(self):
+        position=load('runtime_position',PACKAGE/'scripts/control/control_position.py')
+        position.FlightNav=SimpleNamespace(VEL_MODE=1,NO_NAVIGATION=0)
+        n=position.ControlPose.__new__(position.ControlPose)
+        n.flight_nav=SimpleNamespace()
+        n.view=position.ViewControl([0,0,0])
+        pose=SimpleNamespace(position=SimpleNamespace(x=1.,y=0.,z=.5),
+                             orientation=SimpleNamespace(x=0.,y=0.,z=0.,w=1.))
+        n.anchor_odom=SimpleNamespace(header=SimpleNamespace(stamp=Stamp(10)),pose=SimpleNamespace(pose=pose))
+        n.odom_received=n.last_joy_time=position.time.monotonic()
+        n.operator_dynamic=False
+        n.allow_joystick=True
+        n.view_last=None
+        n.rate_hz,n.joy_timeout=40.,.1
+        n.latest_axes=[.5,0.]
+        n.axis_x,n.axis_y,n.axis_z=0,1,2
+        n.scale_x=n.scale_y=n.scale_z=1.
+        n.deadzone=.05
+        n.view_dual,n.view_require_imu,n.pos_limit=False,False,False
+        n.anchor_mode='none'
+        n.imu_ready=MagicMock(return_value=False)
+        n.view_attitude_limits=[[-.5,.5],[-.5,.5],[-3.,3.]]
+        nav=n.view_nav()
+        self.assertAlmostEqual(nav.target_vel_y,-.15)
+        self.assertEqual(nav.roll_nav_mode,0)
+        self.assertEqual(nav.pitch_nav_mode,0)
+        n.rotation_pub=MagicMock()
+        n.publish_view_attitude()
+        msg=n.rotation_pub.publish.call_args.args[0]
+        self.assertEqual(msg.header.frame_id,'cog')
+        self.assertAlmostEqual(msg.pose.pose.orientation.w,1.)
 
 
 if __name__ == '__main__':

@@ -5,19 +5,10 @@
  * fc_t_min) and coupled static-wrench feasibility of a *candidate*
  * articulated-aerial-robot shape, before the shape command is actually sent.
  * It loads the controlled robot's model (e.g.
- * DRAGON) through pluginlib and evaluates getFeasibleControlF/TMin() for the
- * requested link joint angles. In legacy modes, gimbal joints are filled by the
- * model with its nominal (hovering) angles, so the result is an approximate
- * prediction.
- * For DRAGON full-vectoring models, optimized_gimbal mode explicitly evaluates
- * the full-vectoring Fxy/T metrics from the model's gimbal-processed joint
- * state after updateRobotModel().
- * Controller mode additionally uses the latest controller gimbal command and
- * baselink attitude feedback to approximate the conditions behind
- * /dragon/debug/fc_*_min.
- * Allocation mode predicts the controller-side gimbal rolls by running a local
- * static allocation for the candidate shape, then evaluates fc with those
- * allocated roll angles.
+ * DRAGON) through pluginlib. Prediction modes choose a gimbal/attitude context;
+ * all margins and the common bounded allocation then use the same fixed Q.
+ * This differs from the former variable-pitch Fxy metric. Context fields let
+ * the caller freeze gimbals and attitude for the rate-limited recheck.
  *
  * Run this node in the controlled robot's namespace (e.g. ns="dragon") so the
  * robot model reads <robot_ns>/robot_description and rotor rosparams.
@@ -42,6 +33,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "wrench_math.h"
 
 class ShapeFeasibilityServer
 {
@@ -75,6 +67,9 @@ public:
              plugin_name.c_str(), nh_.getNamespace().c_str());
 
     prediction_mode_ = nhp_.param<std::string>("prediction_mode", "allocation");
+    force_dimensions_ = nhp_.param<int>("force_dimensions", 2);
+    if (force_dimensions_ != 2 && force_dimensions_ != 3)
+      throw std::runtime_error("force_dimensions must be 2 or 3");
     if (prediction_mode_ != "model" && prediction_mode_ != "optimized_gimbal" &&
         prediction_mode_ != "controller" && prediction_mode_ != "allocation")
       {
@@ -162,10 +157,57 @@ private:
 
     try
       {
+        std::map<std::string, bool> names;
+        for (size_t i=0; i<req.name.size(); ++i) {
+          if (!std::isfinite(req.position[i]) || !names.emplace(req.name[i], true).second)
+            throw std::runtime_error("nonfinite or duplicate candidate joint");
+          const auto joint=robot_model_->getUrdfModel().getJoint(req.name[i]);
+          if (!joint) throw std::runtime_error("unknown candidate joint");
+          if (joint->type==urdf::Joint::REVOLUTE && joint->limits &&
+              (req.position[i]<joint->limits->lower-1e-8 || req.position[i]>joint->limits->upper+1e-8))
+            throw std::runtime_error("candidate joint outside URDF limits");
+        }
+        if (dynamic_cast<Dragon::FullVectoringRobotModel*>(robot_model_.get()))
+          for (int i=1;i<=3;++i)
+            for (const std::string axis:{"pitch","yaw"})
+              if (!names.count("joint"+std::to_string(i)+"_"+axis))
+                throw std::runtime_error("incomplete DRAGON candidate");
+        external_wrench_ = Eigen::VectorXd::Zero(6);
+        external_in_link1_ = req.wrench_in_link1;
+        contact_links_=req.contact_link;
+        contact_points_=req.contact_point;
+        contact_wrenches_=req.contact_wrench;
+        contact_local_.clear();
+        for (bool local:req.contact_local) contact_local_.push_back(local);
+        if (contact_points_.size()!=3*contact_links_.size() || contact_wrenches_.size()!=6*contact_links_.size()
+            || contact_local_.size()!=contact_links_.size()) throw std::runtime_error("invalid contact arrays");
+        for (double value:contact_points_) if (!std::isfinite(value)) throw std::runtime_error("invalid contact point");
+        for (double value:contact_wrenches_) if (!std::isfinite(value)) throw std::runtime_error("invalid contact wrench");
+        if (!req.external_wrench.empty()) {
+          if (req.external_wrench.size()!=6) throw std::runtime_error("external wrench requires 6 components");
+          external_wrench_ = Eigen::Map<const Eigen::VectorXd>(req.external_wrench.data(),6);
+          if (!external_wrench_.allFinite()) throw std::runtime_error("nonfinite external wrench");
+        }
         // Unspecified joints (e.g. gimbals) default to 0 and are overwritten by
         // the model's nominal-gimbal processing inside updateRobotModel().
         robot_model_->updateRobotModel(js);
-        if (prediction_mode_ == "allocation")
+        if (!req.evaluation_gimbals.empty() || !req.evaluation_rotation.empty()) {
+          auto* dragon = dynamic_cast<Dragon::FullVectoringRobotModel*>(robot_model_.get());
+          if (!dragon || req.evaluation_gimbals.size()!=size_t(2*dragon->getRotorNum()) || req.evaluation_rotation.size()!=9)
+            throw std::runtime_error("incomplete evaluation context");
+          KDL::JntArray joints=dragon->getGimbalProcessedJoint<KDL::JntArray>();
+          for (int i=0;i<dragon->getRotorNum();++i) {
+            setJointPosition(dragon->getJointIndexMap(),joints,"gimbal"+std::to_string(i+1)+"_roll",req.evaluation_gimbals[2*i]);
+            setJointPosition(dragon->getJointIndexMap(),joints,"gimbal"+std::to_string(i+1)+"_pitch",req.evaluation_gimbals[2*i+1]);
+          }
+          Eigen::Matrix3d orientation;
+          for (int i=0;i<9;++i) orientation(i/3,i%3)=req.evaluation_rotation[i];
+          if (!orientation.allFinite() || !(orientation.transpose()*orientation).isApprox(Eigen::Matrix3d::Identity(),1e-7)
+              || std::abs(orientation.determinant()-1.)>1e-7) throw std::runtime_error("invalid evaluation rotation");
+          auto plan=preparePlanModel(*dragon,joints,orientation);
+          res.stability_ok=evaluateFixedWrench(*plan,res.fc_f_min,res.fc_t_min);
+        }
+        else if (prediction_mode_ == "allocation")
           {
             res.stability_ok = evaluateAllocationFc(res.fc_f_min, res.fc_t_min);
           }
@@ -182,6 +224,10 @@ private:
             res.stability_ok = evaluateModelFc(res.fc_f_min, res.fc_t_min);
           }
         res.valid = true;
+        res.evaluation_gimbals = evaluated_gimbals_;
+        res.evaluation_rotation = evaluated_rotation_;
+        res.force_dimensions = force_dimensions_;
+        res.fc_to_cog = fc_to_cog_;
       }
     catch (std::exception& e)
       {
@@ -198,9 +244,7 @@ private:
       dynamic_cast<Dragon::FullVectoringRobotModel*>(robot_model_.get());
     if (!dragon_model)
       {
-        fc_f_min = robot_model_->getFeasibleControlFMin();
-        fc_t_min = robot_model_->getFeasibleControlTMin();
-        return robot_model_->aerial_robot_model::RobotModel::stabilityCheck(false);
+        return evaluateFixedWrench(*robot_model_, fc_f_min, fc_t_min);
       }
 
     const KDL::JntArray processed_joint =
@@ -208,9 +252,7 @@ private:
     const Eigen::Matrix3d cog_rot =
       dragon_model->getCogDesireOrientation<Eigen::Matrix3d>();
     const auto plan_model = preparePlanModel(*dragon_model, processed_joint, cog_rot);
-    fc_f_min = plan_model->getFeasibleControlFMin();
-    fc_t_min = plan_model->getFeasibleControlTMin();
-    return plan_model->stabilityCheck(false);
+    return evaluateFixedWrench(*plan_model, fc_f_min, fc_t_min);
   }
 
   bool evaluateOptimizedGimbalFc(double& fc_f_min, double& fc_t_min)
@@ -252,15 +294,7 @@ private:
         locked_roll_angles.push_back(processed_joint(it->second));
       }
 
-    const auto f_min_list =
-      dragon_model->calcFeasibleControlFxyDists(roll_locked_gimbal, locked_roll_angles,
-                                                rotor_num, link_rot);
-    const auto t_min_list =
-      dragon_model->calcFeasibleControlTDists(roll_locked_gimbal, locked_roll_angles,
-                                              rotor_num, rotor_pos, link_rot, cog_rot);
-    fc_f_min = f_min_list.minCoeff();
-    fc_t_min = t_min_list.minCoeff();
-    return plan_model->stabilityCheck(false);
+    return evaluateFixedWrench(*plan_model, fc_f_min, fc_t_min);
   }
 
   bool evaluateControllerFeedbackFc(double& fc_f_min, double& fc_t_min)
@@ -301,15 +335,7 @@ private:
     // locked at the current target roll angles. This is closer to
     // /dragon/debug/fc_*_min than the shape-only nominal-gimbal prediction.
     const std::vector<int> roll_locked_gimbal(rotor_num, 1);
-    const auto f_min_list =
-      dragon_model->calcFeasibleControlFxyDists(roll_locked_gimbal, locked_roll_angles,
-                                                rotor_num, link_rot);
-    const auto t_min_list =
-      dragon_model->calcFeasibleControlTDists(roll_locked_gimbal, locked_roll_angles,
-                                              rotor_num, rotor_pos, link_rot, cog_rot);
-    fc_f_min = f_min_list.minCoeff();
-    fc_t_min = t_min_list.minCoeff();
-    return plan_model->stabilityCheck(false);
+    return evaluateFixedWrench(*plan_model, fc_f_min, fc_t_min);
   }
 
   bool evaluateAllocationFc(double& fc_f_min, double& fc_t_min)
@@ -372,15 +398,54 @@ private:
       plan_model->getRotorsOriginFromCog<Eigen::Vector3d>();
     const std::vector<Eigen::Matrix3d> final_link_rot = linksRotationFromCog(*plan_model);
 
-    const auto f_min_list =
-      dragon_model->calcFeasibleControlFxyDists(all_roll_locked, locked_roll_angles,
-                                                rotor_num, final_link_rot);
-    const auto t_min_list =
-      dragon_model->calcFeasibleControlTDists(all_roll_locked, locked_roll_angles,
-                                              rotor_num, rotor_pos, final_link_rot, cog_rot);
-    fc_f_min = f_min_list.minCoeff();
-    fc_t_min = t_min_list.minCoeff();
-    return plan_model->stabilityCheck(false);
+    return evaluateFixedWrench(*plan_model, fc_f_min, fc_t_min);
+  }
+
+  bool evaluateFixedWrench(aerial_robot_model::RobotModel& model, double& force, double& torque)
+  {
+    const Eigen::MatrixXd q=model.calcWrenchMatrixOnCoG();
+    const auto frames=model.getSegmentsTf();
+    auto fc=frames.find("fc");
+    if (fc==frames.end()) throw std::runtime_error("missing FC frame");
+    const auto cog=model.getCog<KDL::Frame>();
+    const Eigen::Matrix3d c_fc=aerial_robot_model::kdlToEigen(cog.M.Inverse()*fc->second.M);
+    auto tip=frames.find("link1");
+    if (tip==frames.end()) throw std::runtime_error("missing contact link");
+    const Eigen::Matrix3d c_e=aerial_robot_model::kdlToEigen(cog.M.Inverse()*tip->second.M);
+    const KDL::Vector point=cog.M.Inverse()*(tip->second.p-cog.p);
+    const Eigen::Vector3d r(point.x(),point.y(),point.z());
+    const Eigen::Matrix3d wrench_rotation=external_in_link1_ ? c_e : c_fc;
+    Eigen::VectorXd required=Eigen::VectorXd::Zero(6);
+    dracomancer::subtractContact(required,wrench_rotation,r,external_wrench_);
+    for (size_t i=0;i<contact_links_.size();++i) {
+      auto contact=frames.find(contact_links_[i]);
+      if (contact==frames.end()) throw std::runtime_error("unknown contact link");
+      Eigen::Vector3d offset(contact_points_[3*i],contact_points_[3*i+1],contact_points_[3*i+2]);
+      KDL::Vector local(offset.x(),offset.y(),offset.z());
+      KDL::Vector point=cog.M.Inverse()*(contact->second*local-cog.p);
+      Eigen::Vector3d lever(point.x(),point.y(),point.z());
+      Eigen::Matrix3d axes=contact_local_[i] ? aerial_robot_model::kdlToEigen(cog.M.Inverse()*contact->second.M) : c_fc;
+      Eigen::VectorXd wrench=Eigen::Map<const Eigen::VectorXd>(&contact_wrenches_[6*i],6);
+      dracomancer::subtractContact(required,axes,lever,wrench);
+    }
+    // This model stores the upward gravity compensation vector, not physical g.
+    required.head(3) += model.getMass()*model.getGravity3d();
+    const double lower=model.getThrustLowerLimit(), upper=model.getThrustUpperLimit();
+    force=dracomancer::projectedMargin(q.topRows(force_dimensions_),required.head(force_dimensions_),lower,upper);
+    torque=dracomancer::projectedMargin(q.bottomRows(3),required.tail(3),lower,upper);
+    evaluated_gimbals_.clear(); evaluated_rotation_.clear();
+    const auto& index=model.getJointIndexMap();
+    const auto joints=model.getJointPositions();
+    for (int i=0;i<model.getRotorNum();++i)
+      for (const std::string axis : {"roll","pitch"}) {
+        auto it=index.find("gimbal"+std::to_string(i+1)+"_"+axis);
+        if (it!=index.end()) evaluated_gimbals_.push_back(joints(it->second));
+      }
+    Eigen::Matrix3d orientation=model.getCogDesireOrientation<Eigen::Matrix3d>();
+    for (int i=0;i<9;++i) evaluated_rotation_.push_back(orientation(i/3,i%3));
+    fc_to_cog_.clear();
+    for (int i=0;i<9;++i) fc_to_cog_.push_back(c_fc(i/3,i%3));
+    return dracomancer::commonAllocation(q,required,lower,upper);
   }
 
   Eigen::VectorXd allocationTargetAcc(const Dragon::FullVectoringRobotModel& dragon_model) const
@@ -689,6 +754,14 @@ private:
   ros::ServiceServer server_;
   ros::Subscriber gimbal_sub_, baselink_odom_sub_, baselink_rpy_sub_;
   std::string prediction_mode_;
+  int force_dimensions_;
+  Eigen::VectorXd external_wrench_ = Eigen::VectorXd::Zero(6);
+  bool external_in_link1_ = false;
+  std::vector<std::string> contact_links_;
+  std::vector<double> contact_points_, contact_wrenches_;
+  std::vector<bool> contact_local_;
+  std::vector<double> evaluated_gimbals_, evaluated_rotation_;
+  std::vector<double> fc_to_cog_;
   std::string gimbal_feedback_topic_, baselink_odom_topic_, baselink_rpy_topic_;
   bool use_gimbal_feedback_, use_baselink_odom_feedback_, use_baselink_rpy_feedback_;
   double feedback_timeout_;

@@ -10,14 +10,16 @@ ROS 1の`dracomancer`パッケージにモデル・GUI・直結制御・形状�
 | 表示・角度／トルク操作 | `scripts/mkii/control.py`・`panel.py`。viewerとGazebo |
 | 実機入出力 | `scripts/mkii/direct.py`、校正済み換算`src/dracomancer/xm430.py` |
 | 形状写像B | `scripts/control/shape_mapping.py`・`shape_runtime.py` |
-| 形態指令の所有者 | `scripts/control/control_joint_angle.py`。対応モードは`shape`のみ |
+| 関節角写像 | `scripts/control/joint_mapping.py`。修論の片腕・両腕方式 |
+| 形態指令の所有者 | `scripts/control/control_joint_angle.py`。`shape`・`joint`・`dual_shape`・`dual_joint` |
 | 飛行可能性評価 | `src/shape_feasibility_node.cpp`と`ShapeFeasibility.srv`。候補・発行形態の判定とhold |
-| 機体移動 | `control_position.py`による独立したJoystick速度入力。既定で無効 |
+| 機体移動・姿勢 | `control_position.py`と`navigation.py`。視点・体幹傾きによる2軸入力面。Joystick操作は既定無効 |
 | 壁接触の観測 | `wall.py`・`src/wall_contact.cpp`。シミュレーション用 |
-| 力覚の計算部品 | `scripts/haptics/contact_feedback.py`・`safety_feedback.py`。shapeから実機への経路は未接続 |
+| 力覚 | `feedback.py`からNmを送信。既定無効、自動ARMなし。4方式の局所Jacobianに対応 |
+| 基準点補償 | `anchor_runtime.py`。尾側点または中央関節を基準とし、`control_position.py`だけが移動指令を発行 |
 
-固定リンク対応A、可行集合への形態補正、LiDAR局所衝突制約、接触力覚、基準リンク固定は残る設計課題。
-既存のholdゲートを、これらが完成した制約付き最適化として説明しない。
+理論は[修論](thesis.md)を優先する。可行集合への射影やLiDAR制約を追加した最適化ではなく、
+修論のヒステリシス付きholdと速度制限・再判定を実装する。
 
 ## 上肢形状の取得
 
@@ -35,6 +37,8 @@ DRAGON chainは実URDFの関節列を計算してLink4尾端基準へ変換し�
 4本のリンクと3本のPitch/Yawスペーサを含む物理端点を使う。
 
 両中心線を開始点で並進除去し、総長で正規化して等弧長サンプルを取る。
+これは片腕の場合である。`dual_shape`では左手→左肩→右肩→右手をつなぎ、
+人体は左右肩の中点、機体は第2関節pitch軸の位置を引いてから全長で正規化する。
 固定装着姿勢の軸合わせには固定回転だけを使い、動く肩関節の回転を相殺しない。
 中心線サンプルを\(\hat p_H(s_k;q_H)\)、\(\hat p_D(s_k;q)\)とし、次を最小化する。
 
@@ -56,13 +60,13 @@ q_{ref}=\arg\min_{q\in\mathcal Q_{joint}}
 中心線は形状の表現次元を増やすが、人体の独立自由度を増やさない。
 純粋な軸回旋や手先姿勢が中心線に現れない場合があり、人体7軸をDRAGON6軸へ可逆に写せるとは扱わない。
 
-## 固定リンク対応Aの設計
+## 関節角方式
 
-比較手法Aは未実装。手先・前腕・上腕・肩〜体幹をDRAGON Link1・2・3・4へ対応させ、
-隣接リンクの相対姿勢からPitch/Yawを生成する設計とする。
-概念的な目的関数は\(q_i^{ref}=\arg\min_{q_i}d_R(R_{robot,i}(q_i),R_{human,i})\)。
-Mk-IIのCAD座標・軸・零点に対して実装・校正し、同じ入力・機体・安全条件でBと比較する。
-旧Mk-Iの解剖学的関節名や写像係数は流用しない。
+`joint`は修論の手首回転行列・肘のpitch/yaw配分・肩角の直接対応を用いる。
+`dual_joint`は右肘→第1関節、校正済み肩角の右−左→第2関節、左肘→第3関節。
+基準姿勢では`rest`と一致し、手首と前腕回内外を両腕の直接対応に使わない。
+`shape/joint_mapping`でCAD名、解剖学的角度への零点・符号尺度、両腕の基準角と対角係数を設定する。
+既定値はシミュレーション用の代理値で、実時間での関節角方式は`calibrated: true`を要求する。
 
 ## 飛行可能性と指令保持
 
@@ -75,12 +79,13 @@ Mk-IIのCAD座標・軸・零点に対して実装・校正し、同じ入力・
 既定0.1 rad/sは現行URDF由来で、実機の安全値ではない。
 時計停止・巻戻り・再開後に遅延分を加算しない。実関節の追従・外力下の速度は別に評価する。
 
-研究上の目標は、人間の希望形態を保ちつつ\((q_R^*,\alpha^*)\)を求める補正。
-\(\alpha\)は推力ベクトル角。優先順位はactuator safety、flight feasibility、collision avoidance、
-human shape similarity、joint velocity synchronizationとする。
-既存のモデル・制約・solver [2] を再利用し、関節角・推力ベクトル角・推力入力・関節トルクの制約を扱う設計とする。
-\(f_{min},\tau_{min}\)は主に安全余裕・制約として用いる。
-\(\tau_{min}\)は飛行制御のトルク余裕で、接触作業のトルクとは区別する。
+`force_dimensions:=2`が標準のXY評価で、`3`はXYZ評価。推力偏向角とモデル姿勢を固定した同一Qで、
+射影領域の面までの符号付き距離と、上下限内の共通推力配分を評価する。
+希望形態の評価コンテキストをサービスの応答から引き継ぎ、速度制限後の再判定でも用いる。
+再判定で拒否された場合も保持状態へ入り、次は復帰しきい値を要求する。
+配分計算は有界最小二乗の残差を検証し、反復上限時は保守的に拒否する。
+`use_contact_wrench:=true`では新鮮なlink1原点まわりの接触レンチを用い、重心へのモーメント移動を含めて静的釣合いを判定する。
+力・トルクの評価空間に応じた閾値は実測校正が必要で、XY用の値をXYZの検証済み値とは扱わない。
 
 現在の離散的な候補判定は、経路全体の安全・動的安定性・接触力学や、可行集合への最近点射影を保証しない。
 速度制限後の形態を再検査しても、全中間点の検査にはならない。
@@ -89,6 +94,10 @@ human shape similarity、joint velocity synchronizationとする。
 ## Joystick・モード
 
 主な複合操作は「右腕→内部形状、Joystick→機体移動」。通常の形態指令はHover条件を使う。
+修論の改稿に従い、視点座標とIMUの相対傾きから入力面を作り、2軸のスティックを3次元の速度候補へ写す。
+両腕では右スティックが並進、左が回転。片腕では押下後の中立確認で切り替える。
+姿勢は回転行列で積分し、位置・姿勢の目標を切替や体幹基準の再設定でリセットしない。
+操作者位置・左右トピック・旧入力経路は[修論対応](thesis.md#視点基準の並進回転)を参照する。
 `teleop_mode=false`は最後の発行形態を保持し、現在の実装はclutch解除時の人体基準の再設定を行わない。
 Joystickだけの長距離移動、機体位置を保つ形態操作、基準リンク固定を研究上の操作形態とし、
 現在の対応と未実装のモード遷移を[残作業](roadmap.md)で区別する。
@@ -112,8 +121,14 @@ point-cloud処理と多リンク幾何処理 [4] を再利用し、大域経路�
 \(\tau_H^{safe}=-M^TKe_R-B\dot q_H\)による抵抗・減衰を設計する。
 各成分を合成し、トルク・変化率上限とdeadbandを適用する。基本構造は既存研究 [5][6][7] を参考にする。
 
-汎用数理部品は存在するが、shapeの\(M\)と接触\(J_R\)から直結出力へ送る経路は未実装。
-`contact.launch`は接触wrenchの観測専用で、接触力覚・実機ノードを起動しない。
+`feedback.py`は同じ公称形態・入力・固定履歴でMとJを評価し、名前付きNm指令を`torque_cmd`へ送る。
+複数接触では各点のJとレンチを個別に合成する。静的釣合いに加え、外部の摩擦・関節荷重検証が必要。
+形状方式の数値差分は正負とも同一の公称解を初期値とし、保持・速度制限の微分は含めない。
+基準点補償中は接触Jの並進行から基準点のJacobianを引き、合成Jacobianを使う。
+`enable_haptics:=true`が必要。接触gainの既定値は0で、上限値も未校正のシミュレーション用設定。
+計算遅延・入力断では零出力とし、ARMはGUI等から別途明示する。閉ループ安定性・受動性は未検証。
+`contact.launch`は既定では接触wrenchの観測のみで、実機ノードを起動しない。
+明示した`enable_haptics:=true`で計算・Nm出力を追加する。サーボのARMは別操作。
 手動Nm出力は`direct.py`を所有者とし、校正済み`CurrentScale`、電流セッション、期限監視を使う。
 直結出力の準備・停止・復旧・排他条件は[実機手順](hardware.md)を参照する。
 

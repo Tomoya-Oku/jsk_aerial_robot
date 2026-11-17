@@ -46,6 +46,7 @@ class UrdfModel:
     """Small strict FK for fixed/revolute/continuous URDF trees."""
 
     def __init__(self, xml):
+        self.xml = xml
         root = ET.fromstring(xml)
         self.links = {link.get("name") for link in root.findall("link")}
         self.joints = {}
@@ -67,6 +68,10 @@ class UrdfModel:
             joint["skew2"] = joint["skew"].dot(joint["skew"])
             self.joints[name] = joint
             self.parents[joint["child"]] = joint
+        roots = self.links - self.parents.keys()
+        if len(roots) != 1:
+            raise ValueError("one URDF root required")
+        self.root = roots.pop()
 
     def chain(self, base, tip):
         chain, seen = [], set()
@@ -123,7 +128,7 @@ def joint_rotation(joint, angle):
     return np.eye(3) + np.sin(angle)*joint["skew"] + (1-np.cos(angle))*joint["skew2"]
 
 
-def centerline(points, samples=20, alignment=(0, 0, 0)):
+def centerline(points, samples=20, alignment=(0, 0, 0), origin=None):
     """Equal arc-length samples, translated and divided by total polyline length."""
     points = np.asarray(points, dtype=float)
     if points.ndim != 2 or points.shape[1] != 3 or len(points) < 2 or not np.all(np.isfinite(points)):
@@ -136,7 +141,8 @@ def centerline(points, samples=20, alignment=(0, 0, 0)):
     sampled = np.column_stack([np.interp(targets, arc, points[:, i]) for i in range(3)])
     align = np.asarray(alignment)
     align = align if align.shape == (3, 3) else rpy_matrix(alignment)
-    return ((sampled - points[0]) / arc[-1]).dot(align.T)
+    reference = points[0] if origin is None else vector(origin, 3)
+    return ((sampled - reference) / arc[-1]).dot(align.T)
 
 
 class HumanChain:
@@ -154,6 +160,7 @@ class HumanChain:
                                  if j["kind"] != "fixed")
         if len(self.required) != 7:
             raise ValueError("human centerline must use seven URDF joints")
+        self.names = [j['name'] for j in model.chain(self.base, self.nodes[-1]['link']) if j['kind'] != 'fixed']
 
     def points(self, values):
         points = [self.torso]
@@ -178,6 +185,16 @@ class DragonChain:
         if [j["name"] for j in self.chain if j["kind"] != "fixed"] != DRAGON_JOINTS:
             raise ValueError("unexpected DRAGON joint order")
         self.lower, self.upper, self.velocity = model.limits(DRAGON_JOINTS)
+
+    def points_mid(self, q):
+        """Tail-to-head polyline, in fixed FC axes about joint2_pitch."""
+        values = dict(zip(DRAGON_JOINTS, vector(q, 6)))
+        root_fc = self.model.pose(self.model.root, 'fc', values)
+        root_tail = self.model.pose(self.model.root, 'link4', values)
+        root_tail[:3, 3] += root_tail[:3, :3] @ self.tail
+        fc_tail = np.linalg.inv(root_fc) @ root_tail
+        fc_mid = np.linalg.inv(root_fc) @ self.model.pose(self.model.root, 'inter_joint2', values)
+        return self.points(q) @ fc_tail[:3, :3].T + fc_tail[:3, 3] - fc_mid[:3, 3]
 
     def points(self, q):
         q = vector(q, 6)
@@ -229,6 +246,7 @@ def limit_step(current, target, velocity, dt, max_step):
 
 
 class ShapeMapper:
+    is_shape = True
     def __init__(self, human, dragon, config, rest):
         self.human, self.dragon, self.config = human, dragon, config
         self.samples = int(config.get("samples", 20))
@@ -253,17 +271,20 @@ class ShapeMapper:
             raise ValueError("rest pose outside DRAGON limits")
 
     def dragon_shape(self, q):
+        if isinstance(self.human, BimanualHumanChain):
+            return centerline(self.dragon.points_mid(q), self.samples, self.dragon_alignment, origin=[0, 0, 0])
         return centerline(self.dragon.points(q), self.samples,
                           self.dragon_alignment)
 
     def human_shape(self, values):
         return centerline(self.human.points(values), self.samples,
-                          self.human_alignment)
+                          self.human_alignment,
+                          self.human.body(values) if isinstance(self.human, BimanualHumanChain) else None)
 
-    def solve(self, target, previous):
+    def solve(self, target, previous, initial=None):
         start = time.perf_counter()
         previous = vector(previous, 6)
-        q = previous.copy()  # warm start is the last actually accepted command
+        q = previous.copy() if initial is None else vector(initial, 6).copy()
         target = np.asarray(target, dtype=float)
         if target.shape != (self.samples, 3) or not np.all(np.isfinite(target)):
             raise ValueError("invalid target shape")
@@ -285,8 +306,10 @@ class ShapeMapper:
             steps = np.where(q+self.epsilon <= self.dragon.upper, self.epsilon, -self.epsilon)
             perturbed = np.tile(q, (6, 1))
             perturbed[np.arange(6), np.arange(6)] += steps
-            shapes = np.asarray([centerline(points, self.samples, self.dragon_alignment)
-                                 for points in self.dragon.point_batch(perturbed)])
+            shapes = (np.asarray([self.dragon_shape(v) for v in perturbed])
+                      if isinstance(self.human, BimanualHumanChain) else
+                      np.asarray([centerline(points, self.samples, self.dragon_alignment)
+                                  for points in self.dragon.point_batch(perturbed)]))
             residuals = (shapes-target).reshape(6, -1)*self.sqrt_w
             jac = ((residuals-residual_q)/steps[:, None]).T
             lhs = jac.T.dot(jac) + (self.lam + self.rho + self.damping) * np.eye(6)
@@ -327,3 +350,40 @@ class ShapeMapper:
             residual_q = residual(q)
         return dict(q=q, rmse=float(np.linalg.norm(residual_q)), seconds=elapsed,
                     iterations=n, ok=ok, status="success" if ok else "timeout")
+
+    def mapping_jacobian(self, values, previous, nominal=None):
+        """Freeze history/rest and warm-start both perturbations at one branch."""
+        from contact_math import finite_jacobian
+        names = self.human.names
+        if nominal is None:
+            result = self.solve(self.human_shape(values), previous)
+            if not result['ok']:
+                raise ValueError('nominal shape mapping unavailable')
+            nominal = result['q']
+        def reference(q):
+            target = self.human_shape(dict(values, **dict(zip(names, q))))
+            result = self.solve(target, previous, initial=nominal)
+            if not result['ok']:
+                raise ValueError('perturbed shape mapping unavailable')
+            return result['q']
+        return finite_jacobian(reference, [values[n] for n in names], self.epsilon)
+
+
+class BimanualHumanChain:
+    """eq:bimanual-centerline: left hand -> shoulders -> right hand."""
+    def __init__(self, model, config):
+        right_config = dict(config, torso_point=[0, 0, 0])
+        left_config = dict(right_config, human_points=config['left_human_points'])
+        self.left, self.right = HumanChain(model, left_config), HumanChain(model, right_config)
+        self.base = self.right.base
+        self.required = self.left.required | self.right.required
+        self.names = [f'{side}_joint_{i}' for side in ('left', 'right') for i in range(1, 8)]
+        if len(self.required) != 14 or set(self.names) != self.required:
+            raise ValueError('fourteen CAD arm joints required')
+
+    def points(self, values):
+        return np.r_[self.left.points(values)[1:][::-1], self.right.points(values)[1:]]
+
+    def body(self, values):
+        points = self.points(values)
+        return .5*(points[3]+points[4])

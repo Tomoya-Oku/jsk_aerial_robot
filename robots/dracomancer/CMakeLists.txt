@@ -22,6 +22,7 @@ add_dependencies(shape_feasibility_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${ca
 target_link_libraries(shape_feasibility_node ${catkin_LIBRARIES})
 catkin_install_python(PROGRAMS scripts/mkii/control.py scripts/mkii/panel.py scripts/mkii/direct.py
   scripts/control/wall.py scripts/control/control_joint_angle.py scripts/control/shape_input.py
+  scripts/control/control_position.py scripts/control/feedback.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(TARGETS wall_contact LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
 install(TARGETS shape_feasibility_node RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
@@ -31,10 +32,14 @@ install(DIRECTORY figures/scripts
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/figures USE_SOURCE_PERMISSIONS)
 install(FILES README.md DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 if(CATKIN_ENABLE_TESTING)
+  add_executable(wrench_test test/wrench.cpp)
+  target_compile_options(wrench_test PRIVATE -UNDEBUG)
+  add_test(NAME dracomancer_wrench COMMAND wrench_test)
   catkin_add_nosetests(test/test_contact.py)
   catkin_add_nosetests(test/test_output.py)
   catkin_add_nosetests(test/test_runtime.py)
   catkin_add_nosetests(test/test_haptics.py)
+  catkin_add_nosetests(test/test_theory.py)
   add_test(NAME mkii_current COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/mkii/current.py)
   add_test(NAME mkii_model COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/mkii/model.py)
 endif()

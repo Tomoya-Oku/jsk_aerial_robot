@@ -7,6 +7,8 @@
   <arg name="feasibility_service" default="/$(arg robot_ns)/shape_feasibility/check_shape" />
   <arg name="robot_model_plugin_name" default="dragon/full_vectoring_robot_model" />
   <arg name="shape_feasibility_prediction_mode" default="allocation" />
+  <arg name="force_dimensions" default="2" />
+  <arg name="use_contact_wrench" default="false" />
   <arg name="shape_feasibility_gimbal_feedback_topic" default="gimbals_ctrl" />
   <arg name="shape_feasibility_baselink_rpy_topic" default="final_target_baselink_rpy" />
   <arg name="shape_feasibility_baselink_odom_topic" default="uav/baselink/odom" />
@@ -38,6 +40,8 @@
   <arg name="max_step" default="0.015" />
   <arg name="max_joint_velocity" default="0.1" />
   <arg name="mapping_mode" default="shape" />
+  <arg name="anchor_mode" default="$(eval 'mid' if arg('mapping_mode').startswith('dual_') else 'none')" />
+  <arg name="enable_haptics" default="false" />
   <arg name="shape_config" default="$(find dracomancer)/config/control/shape.yaml" />
   <arg name="human_description" default="/$(arg device_ns)/robot_description" />
   <arg name="teleop_mode" default="false" />
@@ -69,6 +73,7 @@
   <node pkg="dracomancer" type="shape_feasibility_node" name="shape_feasibility" ns="$(arg robot_ns)" output="screen" if="$(arg enable_feasibility_gate)">
     <param name="robot_model_plugin_name" value="$(arg robot_model_plugin_name)" />
     <param name="prediction_mode" value="$(arg shape_feasibility_prediction_mode)" />
+    <param name="force_dimensions" value="$(arg force_dimensions)" />
     <param name="gimbal_feedback_topic" value="$(arg shape_feasibility_gimbal_feedback_topic)" />
     <param name="baselink_rpy_topic" value="$(arg shape_feasibility_baselink_rpy_topic)" />
     <param name="baselink_odom_topic" value="$(arg shape_feasibility_baselink_odom_topic)" />
@@ -90,6 +95,7 @@
     <param name="enable_feasibility_gate" value="$(arg enable_feasibility_gate)" />
     <param name="feasibility_gate_mode" value="$(arg feasibility_gate_mode)" />
     <param name="feasibility_service" value="$(arg feasibility_service)" />
+    <param name="use_contact_wrench" value="$(arg use_contact_wrench)" />
     <param name="feasibility_rate" value="$(arg feasibility_rate)" />
     <param name="force_radius_threshold" value="$(arg force_radius_threshold)" />
     <param name="torque_radius_threshold" value="$(arg torque_radius_threshold)" />
@@ -114,11 +120,23 @@
     <param name="use_saved_calibration" value="true" />
     <param name="yaml_path" value="$(find dracomancer)/config/joystick_calibration.yaml" />
   </node>
-  <node pkg="dracomancer" type="control_position.py" name="$(arg device_ns)_control_position" output="screen" if="$(arg enable_position_control)">
+  <node pkg="dracomancer" type="feedback.py" name="$(arg device_ns)_feedback" output="screen" if="$(arg enable_haptics)">
+    <param name="device_ns" value="/$(arg device_ns)" />
+    <param name="robot_name" value="$(arg robot_ns)" />
+    <param name="mapping_mode" value="$(arg mapping_mode)" />
+    <param name="anchor_mode" value="$(arg anchor_mode)" />
+    <rosparam command="load" file="$(arg shape_config)" />
+  </node>
+  <node pkg="dracomancer" type="control_position.py" name="$(arg device_ns)_control_position" output="screen" if="$(eval arg('enable_position_control') or arg('anchor_mode') != 'none')">
     <param name="velocity_only" value="$(arg position_velocity_only)" />
     <param name="joy_timeout" value="$(arg joy_timeout)" />
     <param name="device_ns" value="/$(arg device_ns)" />
+    <param name="anchor_mode" value="$(arg anchor_mode)" />
+    <param name="allow_joystick" value="$(arg enable_position_control)" />
+    <param name="mapping_mode" value="$(arg mapping_mode)" />
+    <rosparam command="load" file="$(arg shape_config)" />
     <param name="robot_name" value="$(arg robot_ns)" />
+    <param name="teleop_mode" value="$(arg teleop_mode)" />
     <param name="rate" value="40.0" />
     <param name="joy_topic" value="/$(arg device_ns)/joystick/calibrated" />
     <param name="direction_mode" value="none" />

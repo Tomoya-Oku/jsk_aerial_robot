@@ -9,6 +9,32 @@ shape:
     - {link: right_link6_wrist_upper, xyz: [0, 0, 0]}
     # CAD hand-link mass center: avoids discarding the last wrist rotation.
     - {link: right_link7_wrist_lower, xyz: [0.0397499858, -0.0627907132, 0.0001589676]}
+  # Bimanual centerline order is left hand -> left shoulder -> right hand.
+  left_human_points:
+    - {link: left_link1_shoulder, xyz: [0, 0, 0]}
+    - {link: left_link4_lower_arm_upper, xyz: [0, 0, 0]}
+    - {link: left_link6_wrist_upper, xyz: [0, 0, 0]}
+    - {link: left_link7_wrist_lower, xyz: [0.0397499858, -0.0627907132, 0.0001589676]}
+  # Anatomical order: shoulder abd/flex/rot, elbow flex, forearm pron,
+  # wrist flex/dev. Identity scales and zero neutral are simulation proxies.
+  # Outside sim time, joint/dual_joint require explicit measured calibration.
+  joint_mapping:
+    calibrated: false
+    single_gains: [1, 1, 1, 1, 1]
+    right:
+      names: [right_joint_1, right_joint_2, right_joint_3, right_joint_4, right_joint_5, right_joint_6, right_joint_7]
+      zero: [0, 0, 0, 0, 0, 0, 0]
+      scale: [1, 1, 1, 1, 1, 1, 1]
+      neutral: [0, 0, 0, 0, 0, 0, 0]
+      elbow_gain: [1, 1]
+      shoulder_gain: [1, 1]
+    left:
+      names: [left_joint_1, left_joint_2, left_joint_3, left_joint_4, left_joint_5, left_joint_6, left_joint_7]
+      zero: [0, 0, 0, 0, 0, 0, 0]
+      scale: [1, 1, 1, 1, 1, 1, 1]
+      neutral: [0, 0, 0, 0, 0, 0, 0]
+      elbow_gain: [1, 1]
+      shoulder_gain: [1, 1]
   # Static calibration in the fixed mounting / link4-tail frames [rad].
   # Identity is a simulation starting point, not a measured axis alignment.
   human_alignment: [0, 0, 0]
@@ -27,3 +53,30 @@ shape:
   update_rate: 10.0
   max_iterations: 1
   time_budget: 0.020
+
+# Output is opt-in via enable_haptics. These are simulation tuning values,
+# not measured safe torque limits. direct.py still requires explicit per-axis ARM.
+haptics:
+  contact_gain: 0.0
+  safety_gain: 1.0
+  stiffness: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  damping: 0.01
+  max_torque: 0.1
+  max_torque_rate: 0.5
+
+navigation:
+  # World-frame operator reference: must be measured/set before view input.
+  operator_position: []
+  require_imu: true
+  tilt_alignment: [0, 0, 0]
+  linear_scale: [0.3, 0.3]
+  angular_scale: [0.3, 0.3]
+  max_linear_speed: 0.3
+  max_angular_speed: 0.3
+  attitude_limits: [[-0.5, 0.5], [-0.5, 0.5], [-3.14159265359, 3.14159265359]]
+
+# Each wrench is about this link-local point, in link or FC axes.
+# Additional contacts require individual topics, plus fresh external
+# /dragon/contact/constraints_ok validation of friction and joint loads.
+contacts:
+  - {link: link1, point: [0, 0, 0]}
