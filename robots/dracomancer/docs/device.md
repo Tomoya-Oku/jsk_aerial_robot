@@ -27,9 +27,12 @@ continuous関節、CAD q=0、URDFのeffort・velocity、PID、減衰、箱collis
 | 標準名前空間 | `/dracomancer` |
 
 物理IDの既定値は`config/mkii/hardware.yaml`の`servo_ids`が管理する。
-Spinal scan indexは接続時に確認する0〜13の別番号で、物理IDから推定しない。
-DirectServoの配列・送信バッファを14軸対応へ拡張した。旧10軸ファームウェアのまま14軸を設定しない。
-14軸での通信周期・電源・配線・停止動作は実機未検証。MCUの再ビルドと適合確認が必要。
+Spinal scan indexは各通信系統の接続時に確認する別番号で、物理IDから推定しない。
+DirectServoは1系統最大10軸（index 0〜9）。1系統14軸への拡張は取り消した。
+両腕の実機構成は、Spinal 1台から独立したUART/RS485を2系統用意し、左右7軸ずつ接続する方針。
+各系統のscan indexは実測して設定する。同一バスの配線分岐は独立した2系統にはならない。
+現行MCUのDirectServo初期化は1系統だけで、2系統のドライバ・ROS経路・計測統合は未実装。
+第2 UARTの割当とRS485回路、左右の時刻整合、通信周期・電源・停止動作の実機検証が必要。
 直結APIの対象はSTM32H7/H7 V2。F7の直結実機動作は確認できていない。
 
 12 Vのstall torque 4.1 Nm・stall current 2.3 Aから得る公称換算値は約1.783 Nm/A [10]。

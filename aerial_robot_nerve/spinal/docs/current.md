@@ -4,6 +4,10 @@ This extension is for Spinal → UART/RS485 → XM430-W350 (model 1020), Protoco
 firmware >=38. Neuron/CAN firmware is unchanged. The direct UART implementation
 supports at most `MAX_SERVO_NUM` (currently 10) motors. Do not map all 14 CAD joints
 to one direct UART handler without a separate capacity change.
+The planned bimanual setup uses two independent UART/RS485 buses on one Spinal,
+with seven motors per bus. Current board entry points initialize one DirectServo
+only; a second driver, separate settings/ROS routing and host measurement merging
+still need implementation and hardware validation.
 
 ## New interfaces (existing message/service MD5s unchanged)
 
@@ -61,4 +65,5 @@ the stall-torque/current ratio. A commanded Nm value is not a torque measurement
 
 Direct UART API is linked on the H7/H7_v2 projects. The existing F7 main does not
 initialize DirectServo; an F7 build is a compatibility check, not direct-UART support.
-The GUI/ROS adapter and calibration instructions are in the Mk-II package Direct.ja.md.
+The GUI/ROS adapter and calibration instructions are in
+[Dracomancer hardware instructions](../../../robots/dracomancer/docs/hardware.md).

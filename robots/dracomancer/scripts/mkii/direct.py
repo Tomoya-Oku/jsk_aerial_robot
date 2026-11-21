@@ -18,6 +18,10 @@ from dracomancer.xm430 import CurrentScale
 from dracomancer.output_lock import claim_output
 
 
+# Match the restored Spinal MAX_SERVO_NUM for one direct-UART handler.
+MAX_DIRECT_SERVOS = 10
+
+
 class DaemonExecutor:
     """One bounded RPC worker; a disconnected rosserial call cannot hold process exit."""
     def __init__(self):
@@ -60,8 +64,8 @@ class SpinalControl:
         self.calibrated = rospy.get_param('~calibrated', False) is True
         self.config = rospy.get_param('~actuators', {})
         self.servo_ids = rospy.get_param('~servo_ids', {})
-        if not isinstance(self.config, dict) or len(self.config) > 14:
-            raise ValueError('actuators must map at most 14 direct-UART servo indexes')
+        if not isinstance(self.config, dict) or len(self.config) > MAX_DIRECT_SERVOS:
+            raise ValueError('actuators must map at most 10 direct-UART servo indexes')
         if not isinstance(self.servo_ids, dict):
             raise ValueError('servo_ids must map CAD joint names to physical bus IDs')
         indexes, ids = set(), set()
@@ -75,7 +79,7 @@ class SpinalControl:
             cfg.setdefault('id', self.servo_ids.get(name))
             self.config[name] = cfg
             index, servo_id = cfg['index'], cfg['id']
-            if (type(index) is not int or type(servo_id) is not int or not 0 <= index < 14
+            if (type(index) is not int or type(servo_id) is not int or not 0 <= index < MAX_DIRECT_SERVOS
                     or not 0 <= servo_id <= 252 or index in indexes or servo_id in ids):
                 raise ValueError('Invalid or duplicate servo index/ID')
             indexes.add(index)

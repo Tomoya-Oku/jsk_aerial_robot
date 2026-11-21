@@ -182,21 +182,30 @@ class RuntimeTest(unittest.TestCase):
             self.control.ControlJoints()
         self.rospy.Publisher.assert_not_called()
 
-    def test_fourteen_direct_axes_and_scan_index_boundary(self):
+    def test_ten_direct_axes_and_scan_index_boundary(self):
         settings = yaml.safe_load((PACKAGE/'config/mkii/hardware.yaml').read_text(encoding='utf-8'))
         common = dict(zero_tick=2048,radians_per_tick=.0015,direction=1,
                       joint_nm_per_amp=2.,max_current_amp=.5,max_torque_nm=.2)
-        names = list(settings['servo_ids'])
+        names = list(settings['servo_ids'])[:10]
         actuators = {name:dict(common,index=i) for i,name in enumerate(names)}
         params = {'joints':names,'~servo_ids':settings['servo_ids'],'~actuators':actuators}
         self.rospy.get_param.side_effect = lambda name,default=None:params.get(name,default)
         with patch.object(self.direct,'DaemonExecutor'),patch.object(self.direct.threading,'Thread'):
             node = self.direct.SpinalControl()
-        self.assertEqual(len(node.config),14)
-        self.assertEqual(node.config[names[-1]]['index'],13)
-        actuators[names[-1]]['index']=14
+        self.assertEqual(len(node.config),10)
+        self.assertEqual(node.config[names[-1]]['index'],9)
+        actuators[names[-1]]['index']=10
         with self.assertRaisesRegex(ValueError,'index/ID'):
             self.direct.SpinalControl()
+
+    def test_excess_direct_axes_are_rejected_before_output(self):
+        names = ['joint_'+str(i) for i in range(11)]
+        params = {'joints': names, '~actuators': dict.fromkeys(names, {})}
+        self.rospy.get_param.side_effect = lambda name, default=None: params.get(name, default)
+        with self.assertRaisesRegex(ValueError, 'at most 10'):
+            self.direct.SpinalControl()
+        self.rospy.Publisher.assert_not_called()
+        self.rospy.on_shutdown.assert_not_called()
 
     def test_shape_is_default_and_clutch_holds_last_command(self):
         n = self.control.ControlJoints()

@@ -42,6 +42,10 @@ roslaunch dracomancer bringup.launch backend:=hardware config:=/absolute/path/to
 既存bridgeの接続先は`spinal_ns`、表示・操作側は`robot_ns`。標準はともに`dracomancer`。
 bridgeを同時起動する場合の引数は[基本操作](usage.md#ビルドと基本操作)を参照する。
 
+現行の実機ノードは1つのSpinal直結経路を扱い、最大10軸・scan index 0〜9を受け付ける。
+左右7軸ずつの独立UART/RS485構成には、MCUの2系統化とホストの経路分離・計測統合が別途必要。
+配線の分割や本ノードの二重起動だけでは両腕構成にならない。
+
 実機のAnglesタブは読取り専用。未設定の関節は表示上のCAD q=0で、計測値にはしない。
 `joint_states`は全体表示用、形態操作は`measured_joint_states`を使う。
 後者は校正済み・新鮮・正常な計測関節だけを、最も古い有効関節計測時刻で配信する。

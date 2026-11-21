@@ -21,7 +21,7 @@ servo_ids:
 # Example schema (calibration/limits must come from measurements):
 # actuators:
 #   right_joint_1:
-#     index: <Spinal scan index, 0..13; requires the 14-axis MCU firmware>
+#     index: <Spinal scan index, 0..9 on one direct-UART handler; not the bus ID>
 #     id: <optional override; defaults to servo_ids for this joint>
 #     direction: <1 or -1>
 #     zero_tick: <servo/states.angle at CAD q=0>
