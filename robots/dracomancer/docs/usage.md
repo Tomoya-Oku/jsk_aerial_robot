@@ -3,6 +3,8 @@
 ## ビルドと基本操作
 
 ROS・外部依存は[リポジトリREADME](../../../README.md)に従う。以下はCatkin workspace直下で実行する。
+`shape_feasibility_node`はDRAGONのモデルヘッダー経由でNLoptのC++ヘッダーを使うため、
+Dracomancer自身も`nlopt`への依存とCMakeの検索・リンク設定を宣言する。
 
 ```bash
 catkin build spinal dracomancer
@@ -59,9 +61,11 @@ python3 -B src/jsk_aerial_robot/robots/dracomancer/test/test_shape.py -v
 ```
 
 `test_runtime.py`はROSインターフェースを模擬した回帰テスト。`test_shape.py`にはROS・PyKDL依存の検証を含む。
-`ctest -R dracomancer_wrench`は固定Qの符号付き余裕と共通配分、`ctest -R spinal_current`は14軸のセッション・期限を確認する。
+`ctest -R dracomancer_wrench`は固定Qの符号付き余裕と共通配分、`ctest -R spinal_current`は電流セッション・期限を確認する。
 修論対応で`ShapeFeasibility`サービス定義を拡張したため、`catkin build spinal dracomancer`を行い、
-依存クライアントも新しい生成済みサービス型で再起動する。14軸にはMCU側の再ビルドも必要。
+依存クライアントも新しい生成済みサービス型で再起動する。
+Spinalの14軸拡張を取り消したため、拡張済みイメージを使用している実機にはMCU側の再ビルド・書き込みも必要。
+独立した左右7軸の実機構成に必要な開発は[残作業](roadmap.md#第2優先・補助開発)を参照する。
 実際のROS・Qt・Gazeboでは、実機のmasterを再利用せず隔離環境で次を実行する。
 
 ```bash

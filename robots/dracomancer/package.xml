@@ -23,6 +23,7 @@
   <depend>aerial_robot_model</depend>
   <depend>aerial_robot_msgs</depend>
   <depend>dragon</depend>
+  <depend>nlopt</depend>
   <depend>pluginlib</depend>
   <exec_depend>message_runtime</exec_depend>
   <exec_depend>spinal</exec_depend>

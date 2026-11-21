@@ -8,6 +8,7 @@ find_package(catkin REQUIRED COMPONENTS
 )
 catkin_python_setup()
 find_package(Eigen3 REQUIRED)
+find_package(NLopt REQUIRED)
 find_package(gazebo REQUIRED)
 add_service_files(FILES ShapeFeasibility.srv)
 generate_messages(DEPENDENCIES std_msgs)
@@ -18,8 +19,10 @@ include_directories(${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIRS} ${GAZEBO_INCLU
 add_library(wall_contact SHARED src/wall_contact.cpp)
 target_link_libraries(wall_contact ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
 add_executable(shape_feasibility_node src/shape_feasibility_node.cpp)
+# DRAGON's public model header includes nlopt.hpp; catkin does not export its path.
+target_include_directories(shape_feasibility_node PRIVATE ${NLOPT_INCLUDE_DIRS})
 add_dependencies(shape_feasibility_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(shape_feasibility_node ${catkin_LIBRARIES})
+target_link_libraries(shape_feasibility_node ${catkin_LIBRARIES} ${NLOPT_LIBRARIES})
 catkin_install_python(PROGRAMS scripts/mkii/control.py scripts/mkii/panel.py scripts/mkii/direct.py
   scripts/control/wall.py scripts/control/control_joint_angle.py scripts/control/shape_input.py
   scripts/control/control_position.py scripts/control/feedback.py
