@@ -23,7 +23,7 @@ add_executable(shape_feasibility_node src/shape_feasibility_node.cpp)
 target_include_directories(shape_feasibility_node PRIVATE ${NLOPT_INCLUDE_DIRS})
 add_dependencies(shape_feasibility_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(shape_feasibility_node ${catkin_LIBRARIES} ${NLOPT_LIBRARIES})
-catkin_install_python(PROGRAMS scripts/mkii/control.py scripts/mkii/panel.py scripts/mkii/direct.py
+catkin_install_python(PROGRAMS scripts/mkii/control.py scripts/mkii/panel.py scripts/mkii/direct.py scripts/mkii/observe.py
   scripts/control/wall.py scripts/control/control_joint_angle.py scripts/control/shape_input.py
   scripts/control/control_position.py scripts/control/feedback.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})

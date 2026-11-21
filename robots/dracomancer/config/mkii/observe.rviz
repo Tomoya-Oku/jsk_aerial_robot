@@ -1,0 +1,31 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Global Options:
+    Fixed Frame: world
+    Background Color: 38; 38; 38
+    Frame Rate: 30
+  Displays:
+    - Class: rviz/Grid
+      Name: Grid
+      Enabled: true
+      Plane Cell Count: 20
+      Cell Size: 0.25
+    - Class: rviz/RobotModel
+      Name: "UNCALIBRATED - startup pose = zero"
+      Enabled: true
+      Robot Description: robot_description
+      Visual Enabled: true
+      Collision Enabled: false
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 2.0
+      Focal Point: {X: 0.35, Y: 0.0, Z: 1.0}
+      Pitch: 0.3
+      Yaw: 0.8
+Window Geometry:
+  Width: 1100
+  Height: 800

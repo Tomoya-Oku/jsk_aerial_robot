@@ -1,0 +1,19 @@
+<launch>
+  <!-- Read-only preview; startup pose is zero, not calibrated CAD coordinates. -->
+  <arg name="robot_ns" default="dracomancer_preview"/>
+  <arg name="spinal_ns" default="/"/>
+  <arg name="arm" default="right"/>
+  <arg name="servo_ids" default="[1, 2, 3, 4, 5, 6, 7]"/>
+  <arg name="rviz" default="true"/>
+  <group ns="$(arg robot_ns)">
+    <param name="robot_description" command="$(find xacro)/xacro '$(find dracomancer)/urdf/mkii.urdf.xacro' robot_ns:=$(arg robot_ns)"/>
+    <rosparam command="load" file="$(find dracomancer)/config/mkii/joints.yaml"/>
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher"/>
+    <node pkg="dracomancer" type="observe.py" name="observe" required="true" output="screen">
+      <param name="spinal_ns" value="$(arg spinal_ns)"/>
+      <param name="arm" value="$(arg arm)"/>
+      <rosparam param="servo_ids" subst_value="true">$(arg servo_ids)</rosparam>
+    </node>
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find dracomancer)/config/mkii/observe.rviz" if="$(arg rviz)"/>
+  </group>
+</launch>

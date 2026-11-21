@@ -76,6 +76,75 @@ class RuntimeTest(unittest.TestCase):
         self.direct = load('runtime_direct', PACKAGE / 'scripts/mkii/direct.py')
         self.control = load('runtime_shape', PACKAGE / 'scripts/control/control_joint_angle.py')
         self.simulation = load('runtime_simulation', PACKAGE / 'scripts/mkii/control.py')
+        self.observe = load('runtime_observe', PACKAGE / 'scripts/mkii/observe.py')
+
+    def observer_node(self, bus_ids=None):
+        names = [arm+'_joint_'+str(i) for arm in ('right', 'left') for i in range(1, 8)]
+        self.rospy.get_param.side_effect = lambda name, default=None: names if name == 'joints' else default
+        servos = [SimpleNamespace(id=i, external_encoder_flag=0, joint_resolution=1, servo_resolution=1)
+                  for i in (bus_ids if bus_ids is not None else range(1, 8))]
+        self.rospy.ServiceProxy.return_value.return_value.boards = [SimpleNamespace(slave_id=0, servos=servos)]
+        self.rospy.Publisher.side_effect = [MagicMock(), MagicMock()]
+        self.modules['std_msgs.msg'].String.side_effect = lambda data: SimpleNamespace(data=data)
+        return self.observe.Observer()
+
+    @staticmethod
+    def observer_sample(ticks, stamp=9.9, errors=None):
+        return SimpleNamespace(stamp=Stamp(stamp), servos=[
+            SimpleNamespace(index=i, angle=tick, error=(errors or {}).get(i, 0))
+            for i, tick in enumerate(ticks)])
+
+    def test_observer_discovers_scan_indexes_and_publishes_only_display_data(self):
+        node = self.observer_node([7, 6, 5, 4, 3, 2, 1])
+        self.assertEqual(node.indexes, [6, 5, 4, 3, 2, 1, 0])
+        self.assertEqual([call.args[0] for call in self.rospy.Publisher.call_args_list],
+                         ['joint_states', 'preview/status'])
+        self.rospy.ServiceProxy.assert_called_once_with('/get_board_info', self.observe.GetBoardInfo)
+        self.rospy.Service.assert_not_called()
+        self.assertEqual(self.rospy.Subscriber.call_args.args[0], '/servo/states')
+
+    def test_observer_starts_at_zero_and_tracks_relative_angles(self):
+        node = self.observer_node([7, 6, 5, 4, 3, 2, 1])
+        node.states(self.observer_sample([100]*7))
+        self.assertEqual(node.publisher.publish.call_args.args[0].position, [0.]*14)
+        node.states(self.observer_sample([100]*6+[1124], stamp=10))
+        state = node.publisher.publish.call_args.args[0]
+        self.assertAlmostEqual(state.position[0], np.pi/2)
+        self.assertEqual(state.position[1:], [0.]*13)
+        self.assertEqual(state.header.stamp, Stamp(10))
+
+    def test_observer_rejects_missing_duplicate_stale_and_replayed_samples(self):
+        node = self.observer_node()
+        duplicate = self.observer_sample([100]*7)
+        duplicate.servos[-1].index = 0
+        for sample in (self.observer_sample([100]*6), duplicate,
+                       self.observer_sample([100]*7, stamp=9),
+                       self.observer_sample([100]*7, stamp=11)):
+            node.states(sample)
+        self.assertIsNone(node.zero)
+        node.publisher.publish.assert_not_called()
+        node.states(self.observer_sample([100]*7))
+        node.publisher.publish.reset_mock()
+        node.states(self.observer_sample([200]*7))
+        node.publisher.publish.assert_not_called()
+
+    def test_observer_unwraps_signed_counts_reports_errors_and_freezes_when_stale(self):
+        node = self.observer_node()
+        node.states(self.observer_sample([32760]*7))
+        node.states(self.observer_sample([-32760]*7, stamp=10, errors={4: 64}))
+        self.assertAlmostEqual(node.publisher.publish.call_args.args[0].position[0], 16*2*np.pi/4096)
+        self.assertIn('5: 64', node.status.publish.call_args.args[0].data)
+        node.publisher.publish.reset_mock()
+        with patch.object(self.observe.time, 'monotonic', return_value=node.last_received+1):
+            node.watchdog(None)
+        self.assertIn('stale', node.status.publish.call_args.args[0].data)
+        node.publisher.publish.assert_not_called()
+
+    def test_observer_rejects_missing_or_duplicate_bus_ids_before_output(self):
+        for ids in ([0, 1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6, 6]):
+            with self.subTest(ids=ids), self.assertRaisesRegex(ValueError, 'missing or duplicated'):
+                self.observer_node(ids)
+        self.rospy.Publisher.assert_not_called()
 
     def test_installed_shape_entrypoint_resolves_shared_helpers(self):
         package_resolver = MagicMock()
