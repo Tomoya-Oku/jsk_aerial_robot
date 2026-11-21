@@ -193,7 +193,7 @@ void MX_FREERTOS_Init(void) {
   voltageHandle = osThreadCreate(osThread(voltage), NULL);
 
   /* definition and creation of servoTask */
-  osThreadDef(servoTask, servoTaskCallback, osPriorityNormal, 0, 512);
+  osThreadDef(servoTask, servoTaskCallback, osPriorityNormal, 0, 256);
   servoTaskHandle = osThreadCreate(osThread(servoTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */

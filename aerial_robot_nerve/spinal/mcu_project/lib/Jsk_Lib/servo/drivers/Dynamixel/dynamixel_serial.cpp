@@ -57,7 +57,7 @@ void DynamixelSerial::init(UART_HandleTypeDef* huart, osMutexId* mutex)
 	}
 	cmdSyncWriteLed();
 
-	for (unsigned i = 0; i < spinal_servo::PERSISTED_SERVOS; i++) {
+	for (int i = 0; i < MAX_SERVO_NUM; i++) {
 		FlashMemory::addValue(&(servo_[i].p_gain_), 2);
 		FlashMemory::addValue(&(servo_[i].i_gain_), 2);
 		FlashMemory::addValue(&(servo_[i].d_gain_), 2);
@@ -72,19 +72,8 @@ void DynamixelSerial::init(UART_HandleTypeDef* huart, osMutexId* mutex)
 
 	FlashMemory::read();
 
-  // Keep the old ten-slot flash map and offsets intact. New slots use device
-  // PID/profile values (read below), never guessed position-controller gains.
-  for (unsigned i=0;i<servo_num_;++i) {
-    if (i<spinal_servo::PERSISTED_SERVOS) {
-      cmdWritePositionGains(i);
-      cmdWriteProfileVelocity(i);
-    } else {
-      servo_[i].send_data_flag_=1;
-      servo_[i].external_encoder_flag_=0;
-      servo_[i].joint_resolution_=servo_[i].servo_resolution_=1;
-      servo_[i].joint_offset_=0;
-    }
-  }
+	cmdSyncWritePositionGains();
+	cmdSyncWriteProfileVelocity();
 
 	getHomingOffset(); // This operation always fails after the servo motor is ignited first
 	getHomingOffset(); // So this line is necessary
@@ -592,12 +581,62 @@ void DynamixelSerial::update()
 /* Transmit instruction packet to Dynamixel */
 bool DynamixelSerial::transmitInstructionPacket(uint8_t id, uint16_t len, uint8_t instruction, uint8_t* parameters)
 {
-  if (!spinal_servo::instructionFits(len)) return false;
   uint8_t transmit_data[INSTRUCTION_PACKET_SIZE];
-  const auto size=spinal_current::encode(id,instruction,parameters,len-3,transmit_data,sizeof(transmit_data));
-  if (!size) return false;
-  if (direct_ttl_mode_) HAL_HalfDuplex_EnableTransmitter(huart_);
-  return HAL_UART_Transmit(huart_,transmit_data,size,10)==HAL_OK;
+  /* headers */
+  transmit_data[0] = HEADER0;
+  transmit_data[1] = HEADER1;
+  transmit_data[2] = HEADER2;
+  transmit_data[3] = HEADER3;
+  /* servo id */
+  transmit_data[4] = id;
+  /* instruction len */
+  transmit_data[5] = len & 0xFF; //LEN_L
+  transmit_data[6] = (len >> 8) & 0xFF; //LEN_H
+  /* instruction */
+  transmit_data[7] = instruction;
+  /* parameters */
+  //process for exception
+  int header_match_count = 0;
+  int transmit_data_index = 8;
+  for (int i = 0; i < len - 3; i++) {
+    uint8_t tx_data = parameters[i];
+    if (header_match_count == 0) {
+      if (tx_data == HEADER0) header_match_count++;
+      else header_match_count = 0;
+      transmit_data[transmit_data_index] = tx_data;
+      transmit_data_index++;
+    } else if (header_match_count == 1) {
+      if (tx_data == HEADER1) header_match_count++;
+      else header_match_count = 0;
+      transmit_data[transmit_data_index] = tx_data;
+      transmit_data_index++;
+    } else if (header_match_count == 2) {
+      if (tx_data == HEADER2) {
+        //exception
+        transmit_data[transmit_data_index] = tx_data;
+        transmit_data_index++;
+        transmit_data[transmit_data_index] = EXCEPTION_ADDITIONAL_BYTE;
+        transmit_data_index++;
+      } else {
+        header_match_count = 0;
+        transmit_data[transmit_data_index] = tx_data;
+        transmit_data_index++;
+      }
+    }
+  }
+
+  /* checksum */
+  uint16_t chksum = calcCRC16(0, transmit_data, transmit_data_index);
+
+  transmit_data[transmit_data_index] = chksum & 0xFF; //CRC_L
+  transmit_data_index++;
+  transmit_data[transmit_data_index] = (chksum >> 8) & 0xFF; //CRC_H
+  transmit_data_index++;
+
+  /* send data */
+  if(direct_ttl_mode_)  HAL_HalfDuplex_EnableTransmitter(huart_);
+
+  return HAL_UART_Transmit(huart_, transmit_data, transmit_data_index, 10) == HAL_OK; //timeout: 10 ms. Although we found 2 ms is enough OK for our case by oscilloscope. Large value is better for UART async task in RTOS.
 }
 /* Receive status packet to Dynamixel */
 int8_t DynamixelSerial::readStatusPacket(uint8_t status_packet_instruction)
@@ -849,7 +888,6 @@ void DynamixelSerial::cmdRead(uint8_t id, uint16_t address, uint16_t byte_size)
 
 void DynamixelSerial::cmdWrite(uint8_t id, uint16_t address, uint8_t* param, int param_len)
 {
-  if (param_len<0 || unsigned(param_len)>INSTRUCTION_PACKET_SIZE-2) return;
 	uint8_t parameters[INSTRUCTION_PACKET_SIZE];
 	parameters[0] = address & 0xFF;
 	parameters[1] = (address >> 8) & 0xFF;
@@ -876,8 +914,6 @@ void DynamixelSerial::cmdSyncRead(uint16_t address, uint16_t byte_size, bool sen
 
 void DynamixelSerial::cmdSyncWrite(uint16_t address, uint8_t* param, int param_len)
 {
-  if (param_len<0 || servo_num_>MAX_SERVO_NUM ||
-      4u+servo_num_*(1u+unsigned(param_len))>INSTRUCTION_PACKET_SIZE) return;
 	uint8_t parameters[INSTRUCTION_PACKET_SIZE];
 	parameters[0] = address & 0xFF;
 	parameters[1] = (address >> 8) & 0xFF;

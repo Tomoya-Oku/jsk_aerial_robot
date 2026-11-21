@@ -11,7 +11,6 @@
 #include <inttypes.h>
 #include "current_session.h"
 #include "current_packet.h"
-#include "../servo_limits.h"
 #include <stdlib.h>
 #include <array>
 #include <algorithm>
@@ -152,7 +151,7 @@
 #define HEADER3 				0x00
 #define EXCEPTION_ADDITIONAL_BYTE 0xFD
 
-#define INSTRUCTION_PACKET_SIZE spinal_servo::PACKET_SIZE
+#define INSTRUCTION_PACKET_SIZE 64
 #define STATUS_PACKET_SIZE 		64
 #define PING_TRIAL_NUM			100
 

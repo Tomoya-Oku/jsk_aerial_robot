@@ -14,8 +14,7 @@
 
 #include <array>
 
-#include "servo_limits.h"
-#define MAX_SERVO_NUM spinal_servo::MAX_SERVOS
+#define MAX_SERVO_NUM 10
 
 class ServoData {
 public:
