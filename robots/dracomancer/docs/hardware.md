@@ -34,6 +34,27 @@ Gazeboとは別のROS masterを使い、`use_sim_time=true`の環境では起動
 
 ## 起動と表示
 
+### 未校正の動作確認だけを行う場合
+
+既存のSpinal bridgeで`servo/states`と`get_board_info`を利用できれば、
+電流制御APIやトルク校正なしで読み取り専用の仮表示を起動できる。
+
+```bash
+roslaunch dracomancer observe.launch
+```
+
+既定はルート名前空間のbridgeからID 1〜7を右腕の第1〜第7関節へ対応させる。
+`get_board_info`で物理IDとscan indexを照合し、起動後最初の新鮮な全7軸計測を0度とする。
+換算は直接駆動の4096 count/rev・全軸符号+1を仮定する。外部エンコーダ・異なる分解能比は拒否する。
+実機のCAD零点・回転方向を校正した表示ではなく、反対側の腕はモデルの0度で表示する。
+`arm:=left`、`servo_ids:="[10, 11, 12, 13, 14, 15, 16]"`、`spinal_ns:=/dracomancer`で接続先を変更できる。
+表示先は`/dracomancer_preview`で、未校正データを`measured_joint_states`へ配信しない。
+サーボへの指令、設定変更、Torque ON/OFF、ファームウェア書き込みは行わない。
+サーボのエラー値は`preview/status`と警告ログへ表示する。計測が途切れた場合は表示を保持し、
+新しい計測時刻を捏造しない。再起動するとその時点の姿勢を0度として取り直す。
+
+### 校正済みの実機表示とトルク操作
+
 ```bash
 source devel/setup.bash
 roslaunch dracomancer bringup.launch backend:=hardware config:=/absolute/path/to/hardware.yaml

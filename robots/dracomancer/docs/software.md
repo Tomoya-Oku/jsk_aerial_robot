@@ -9,6 +9,7 @@ ROS 1の`dracomancer`パッケージにモデル・GUI・直結制御・形状�
 |---|---|
 | 表示・角度／トルク操作 | `scripts/mkii/control.py`・`panel.py`。viewerとGazebo |
 | 実機入出力 | `scripts/mkii/direct.py`、校正済み換算`src/dracomancer/xm430.py` |
+| 未校正の実機仮表示 | `scripts/mkii/observe.py`。起動姿勢基準の読み取り専用表示。形態制御には使用しない |
 | 形状写像B | `scripts/control/shape_mapping.py`・`shape_runtime.py` |
 | 関節角写像 | `scripts/control/joint_mapping.py`。修論の片腕・両腕方式 |
 | 形態指令の所有者 | `scripts/control/control_joint_angle.py`。`shape`・`joint`・`dual_shape`・`dual_joint` |

@@ -18,6 +18,8 @@ roslaunch dracomancer shape_demo.launch
 ```
 
 実機は`backend:=hardware`を指定し、[直結制御の手順](docs/hardware.md)に従う。
+未校正で動きだけを見る場合は`roslaunch dracomancer observe.launch`で読み取り専用の仮表示を起動する。
+既定はID 1〜7の右腕で、起動姿勢を0度とする。[仮表示の条件](docs/hardware.md#未校正の動作確認だけを行う場合)を参照する。
 既定は`calibrated: false`・空の関節対応表で、サーボを駆動しない。
 `mkii.launch`も同じ引数で利用できる。
 
