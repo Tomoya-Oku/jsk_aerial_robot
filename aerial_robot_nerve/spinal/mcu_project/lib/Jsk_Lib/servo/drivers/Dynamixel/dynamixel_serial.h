@@ -301,6 +301,7 @@ public:
   bool initRs485(UART_HandleTypeDef* huart, osMutexId* mutex, uint8_t* rx_buffer,
                  uint8_t first_id, uint8_t count);
   bool positionReceived(unsigned index) const {return position_received_[index];}
+  uint32_t positionSweepStart() const {return poll_started_;}
   void pinReconfig() override;
   void ping() override;
   HAL_StatusTypeDef read(uint8_t* data,  uint32_t timeout) override;

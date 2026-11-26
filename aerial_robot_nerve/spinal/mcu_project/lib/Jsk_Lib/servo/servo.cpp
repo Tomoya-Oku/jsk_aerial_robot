@@ -111,7 +111,11 @@ void DirectServo::sendRs485Data()
     }
     // Do not timestamp cached positions as new measurements after a bus failure.
     if (length) {
+      // ServoStates has one stamp for the whole sweep. Use its start so early
+      // samples cannot appear newer while waiting for later, unresponsive axes.
+      const uint32_t age_ms = HAL_GetTick() - servo_handler_.positionSweepStart();
       servo_state_msg_.stamp = nh_->now();
+      servo_state_msg_.stamp -= ros::Duration(age_ms / 1000, (age_ms % 1000) * 1000000);
       servo_state_msg_.servos_length = length;
       servo_state_pub_.publish(&servo_state_msg_);
     }
