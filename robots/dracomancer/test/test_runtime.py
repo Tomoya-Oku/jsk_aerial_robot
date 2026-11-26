@@ -211,6 +211,7 @@ class RuntimeTest(unittest.TestCase):
         n = self.measured_node()
         n.config = {'right_joint_1': dict(index=2, zero_tick=2048, radians_per_tick=.01, direction=-1)}
         n.lock, n.error, n.last_state = threading.RLock(), {}, {}
+        n.measurement_stamp['right_joint_1'] = Stamp()
         sample = SimpleNamespace(stamp=Stamp(9.9), servos=[SimpleNamespace(index=2, angle=2050, error=0)])
         n.states(sample)
         self.assertAlmostEqual(n.position['right_joint_1'], -.02)
@@ -239,11 +240,49 @@ class RuntimeTest(unittest.TestCase):
         self.rospy.get_param.side_effect = lambda name, default=None: params.get(name, default)
         with patch.object(self.direct, 'DaemonExecutor'), patch.object(self.direct.threading, 'Thread'):
             node = self.direct.SpinalControl()
-        self.assertEqual(node.config['right_joint_7']['id'], 6)
-        self.assertEqual(node.config['left_joint_7']['id'], 16)
+        self.assertEqual(node.config['right_joint_7']['id'], 7)
+        self.assertEqual(node.config['left_joint_7']['id'], 17)
         self.assertEqual(node.config['right_joint_7']['index'], 2)
         self.assertEqual(node.config['left_joint_7']['index'], 3)
         self.assertFalse(node.calibrated)
+
+    def test_dual_routes_duplicate_scan_indexes_by_bus_and_checks_skew(self):
+        settings = yaml.safe_load((PACKAGE / 'config/mkii/hardware.yaml').read_text())
+        ids = settings['servo_ids']
+        right, left = 'right_joint_1', 'left_joint_1'
+        common = dict(index=0, zero_tick=100, radians_per_tick=.01, direction=1,
+                      joint_nm_per_amp=2., max_current_amp=.5, max_torque_nm=.2)
+        params = {'joints': list(ids), '~servo_ids': ids, '~dual_spinal': True,
+                  '~actuators': {right: common, left: common}}
+        self.rospy.get_param.side_effect = lambda name, default=None: params.get(name, default)
+        services = {}
+        for bus, first in [('right', 1), ('left', 11)]:
+            board = SimpleNamespace(slave_id=0, servos=[SimpleNamespace(id=i) for i in range(first, first+7)])
+            services['/'+bus+'/get_board_info'] = MagicMock(return_value=SimpleNamespace(boards=[board]))
+        self.rospy.ServiceProxy.side_effect = lambda path, _: services.get(path, MagicMock())
+        self.rospy.Publisher.side_effect = lambda *args, **kwargs: MagicMock()
+        self.modules['spinal.msg'].DirectServoCurrent.side_effect = lambda **fields: SimpleNamespace(**fields)
+        with patch.object(self.direct, 'DaemonExecutor'), patch.object(self.direct.threading, 'Thread'):
+            node = self.direct.SpinalControl()
+        self.assertEqual([call.args[0] for call in self.rospy.Subscriber.call_args_list][:2],
+                         ['/right/servo/states', '/left/servo/states'])
+        node.calibrated = True
+        node.states(self.observer_sample([150], 9.91), 'right')
+        node.states(self.observer_sample([220], 9.98), 'left')
+        self.assertEqual(node.measured_state().name, [left])
+        node.states(self.observer_sample([160], 9.97), 'right')
+        node.states(self.observer_sample([999], 9.96), 'right')
+        self.assertEqual(node.measured_state().name, [right, left])
+        self.assertAlmostEqual(node.position[right], .6)
+        self.assertAlmostEqual(node.position[left], 1.2)
+        self.assertEqual(node.measured_state().header.stamp, Stamp(9.97))
+        node.token.update({right: 99, left: 80})
+        node.raw.update({right: 12, left: -9})
+        node.publish_current([right, left])
+        for bus, value in [('right', 12), ('left', -9)]:
+            packet = node.current_pub[bus].publish.call_args.args[0]
+            self.assertEqual(packet.index, [0])
+            self.assertEqual(packet.current, [value])
 
     def test_removed_mki_mapping_is_rejected(self):
         self.rospy.get_param.side_effect = lambda name, default=None: 'distal' if name == '~mapping_mode' else default

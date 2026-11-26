@@ -1,4 +1,7 @@
 <launch>
+  <arg name="js_raw_topic" default="/joystick/raw"/>
+  <arg name="left_js_raw_topic" default="/joystick/left/raw"/>
+  <arg name="left_joystick_calibration" default="$(env HOME)/.ros/dracomancer-joystick-left.yaml"/>
   <arg name="device_ns" default="dracomancer" />
   <arg name="device_joint_topic" default="/$(arg device_ns)/measured_joint_states" />
   <arg name="robot_ns" default="dragon" />
@@ -110,7 +113,7 @@
     <rosparam param="axis_indices">[0, 1]</rosparam>
     <rosparam param="invert_axes">[]</rosparam>
     <param name="rate" value="40" />
-    <param name="js_raw_topic" value="/joystick/raw" />
+    <param name="js_raw_topic" value="$(arg js_raw_topic)" />
     <param name="js_calibrated_topic" value="/$(arg device_ns)/joystick/calibrated" />
     <param name="raw_timeout" value="$(arg joy_timeout)" />
     <param name="center_duration" value="2.0" />
@@ -119,6 +122,13 @@
     <param name="save_yaml" value="true" />
     <param name="use_saved_calibration" value="true" />
     <param name="yaml_path" value="$(find dracomancer)/config/joystick_calibration.yaml" />
+  </node>
+  <node pkg="dracomancer" type="calibrate_joystick.py" name="$(arg device_ns)_left_joystick"
+        output="screen" if="$(eval arg('enable_position_control') and arg('mapping_mode').startswith('dual_'))">
+    <param name="js_raw_topic" value="$(arg left_js_raw_topic)"/>
+    <param name="js_calibrated_topic" value="/$(arg device_ns)/joystick/left/calibrated"/>
+    <param name="raw_timeout" value="$(arg joy_timeout)"/>
+    <param name="yaml_path" value="$(arg left_joystick_calibration)"/>
   </node>
   <node pkg="dracomancer" type="feedback.py" name="$(arg device_ns)_feedback" output="screen" if="$(arg enable_haptics)">
     <param name="device_ns" value="/$(arg device_ns)" />

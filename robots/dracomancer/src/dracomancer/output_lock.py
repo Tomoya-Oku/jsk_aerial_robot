@@ -39,8 +39,8 @@ class OutputLock:
         # Never unlink a lock file: another process may already hold that inode.
 
 
-def claim_output(current_topic, torque_topic):
+def claim_output(current_topic, torque_topic, *extra_topics):
     import rospy
     return OutputLock(
-        [rospy.resolve_name(current_topic), rospy.resolve_name(torque_topic)],
+        [rospy.resolve_name(topic) for topic in (current_topic, torque_topic, *extra_topics)],
         os.environ.get('ROS_MASTER_URI', 'http://localhost:11311'))

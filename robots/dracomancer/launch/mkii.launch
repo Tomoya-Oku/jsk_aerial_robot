@@ -6,7 +6,8 @@
   <arg name="gui" default="true" />
   <arg name="mount_height" default="1.0" />
   <arg name="config" default="$(find dracomancer)/config/mkii/hardware.yaml" />
-  <arg name="spinal_ns" default="/dracomancer" />
+  <arg name="dual_spinal" default="true"/>
+  <arg name="spinal_ns" default="$(eval '/' if arg('dual_spinal') else '/dracomancer')"/>
   <arg name="connect_fc" default="false" />
   <arg name="fc_serial_port" default="/dev/ttyUSB0" />
   <arg name="fc_serial_baud" default="921600" />
@@ -15,6 +16,7 @@
   <arg name="mapping_mode" default="shape"/>
   <arg name="force_dimensions" default="2"/>
   <arg name="enable_haptics" default="false"/>
+  <arg name="enable_position_control" default="false"/>
   <arg name="anchor_mode" default="$(eval 'mid' if arg('mapping_mode').startswith('dual_') else 'none')"/>
   <include file="$(find dracomancer)/launch/bringup.launch">
     <arg name="backend" value="$(arg backend)"/>
@@ -25,6 +27,7 @@
     <arg name="mount_height" value="$(arg mount_height)"/>
     <arg name="config" value="$(arg config)"/>
     <arg name="spinal_ns" value="$(arg spinal_ns)"/>
+    <arg name="dual_spinal" value="$(arg dual_spinal)"/>
     <arg name="connect_fc" value="$(arg connect_fc)"/>
     <arg name="fc_serial_port" value="$(arg fc_serial_port)"/>
     <arg name="fc_serial_baud" value="$(arg fc_serial_baud)"/>
@@ -33,6 +36,7 @@
     <arg name="mapping_mode" value="$(arg mapping_mode)"/>
     <arg name="force_dimensions" value="$(arg force_dimensions)"/>
     <arg name="enable_haptics" value="$(arg enable_haptics)"/>
+    <arg name="enable_position_control" value="$(arg enable_position_control)"/>
     <arg name="anchor_mode" value="$(arg anchor_mode)"/>
   </include>
 </launch>

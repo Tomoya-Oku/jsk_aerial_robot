@@ -3,7 +3,8 @@
   <arg name="robot_ns" default="dracomancer_preview"/>
   <arg name="spinal_ns" default="/"/>
   <arg name="arm" default="right"/>
-  <arg name="servo_ids" default="[1, 2, 3, 4, 5, 6, 7]"/>
+  <arg name="dual_spinal" default="false"/>
+  <arg name="servo_ids" default="$(eval [11, 12, 13, 14, 15, 16, 17] if arg('arm') == 'left' else [1, 2, 3, 4, 5, 6, 7])"/>
   <arg name="rviz" default="true"/>
   <group ns="$(arg robot_ns)">
     <param name="robot_description" command="$(find xacro)/xacro '$(find dracomancer)/urdf/mkii.urdf.xacro' robot_ns:=$(arg robot_ns)"/>
@@ -11,6 +12,7 @@
     <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher"/>
     <node pkg="dracomancer" type="observe.py" name="observe" required="true" output="screen">
       <param name="spinal_ns" value="$(arg spinal_ns)"/>
+      <param name="dual_spinal" value="$(arg dual_spinal)"/>
       <param name="arm" value="$(arg arm)"/>
       <rosparam param="servo_ids" subst_value="true">$(arg servo_ids)</rosparam>
     </node>

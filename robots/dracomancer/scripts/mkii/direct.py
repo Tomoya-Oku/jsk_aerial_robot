@@ -13,13 +13,15 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import String
 from std_srvs.srv import SetBool, SetBoolResponse, Trigger, TriggerResponse
 from spinal.msg import DirectServoCurrent, ServoStates
-from spinal.srv import DirectServoMode, DirectServoModeRequest as Mode
+from spinal.srv import DirectServoMode, DirectServoModeRequest as Mode, GetBoardInfo
 from dracomancer.xm430 import CurrentScale
 from dracomancer.output_lock import claim_output
 
 
 # Match the restored Spinal MAX_SERVO_NUM for one direct-UART handler.
 MAX_DIRECT_SERVOS = 10
+ARMS = ("right", "left")
+MAX_ARM_SKEW = 0.05
 
 
 class DaemonExecutor:
@@ -64,26 +66,36 @@ class SpinalControl:
         self.calibrated = rospy.get_param('~calibrated', False) is True
         self.config = rospy.get_param('~actuators', {})
         self.servo_ids = rospy.get_param('~servo_ids', {})
-        if not isinstance(self.config, dict) or len(self.config) > MAX_DIRECT_SERVOS:
-            raise ValueError('actuators must map at most 10 direct-UART servo indexes')
+        self.dual = rospy.get_param('~dual_spinal', False)
+        self.buses = ARMS if self.dual else ('legacy',)
+        if not isinstance(self.config, dict) or (not self.dual and len(self.config) > MAX_DIRECT_SERVOS):
+            raise ValueError('actuators must map at most 10 direct-UART servo indexes per bus')
         if not isinstance(self.servo_ids, dict):
             raise ValueError('servo_ids must map CAD joint names to physical bus IDs')
         indexes, ids = set(), set()
+        self.joints_by_bus = {bus: [] for bus in self.buses}
         self.scales, self.limits, self.device_limits = {}, {}, {}
         for name, cfg in self.config.items():
             if name not in self.names:
                 raise ValueError('Unknown URDF joint '+name)
-            # An explicit calibrated configuration retains its ID override.
-            # Never derive a Spinal scan index from the physical bus ID.
+            # The physical ID and the scan index are independently verified on each bus.
             cfg = dict(cfg)
             cfg.setdefault('id', self.servo_ids.get(name))
             self.config[name] = cfg
+            bus = name.split('_', 1)[0] if self.dual else 'legacy'
+            if bus not in self.joints_by_bus:
+                raise ValueError('Dual Spinal requires a right or left CAD joint: '+name)
+            cfg['bus'] = bus
             index, servo_id = cfg['index'], cfg['id']
-            if (type(index) is not int or type(servo_id) is not int or not 0 <= index < MAX_DIRECT_SERVOS
-                    or not 0 <= servo_id <= 252 or index in indexes or servo_id in ids):
+            max_index = 7 if self.dual else MAX_DIRECT_SERVOS
+            expected = self.servo_ids.get(name) if self.dual else servo_id
+            if (type(index) is not int or type(servo_id) is not int or not 0 <= index < max_index
+                    or not 0 <= servo_id <= 252 or servo_id != expected
+                    or (bus, index) in indexes or (bus, servo_id) in ids):
                 raise ValueError('Invalid or duplicate servo index/ID')
-            indexes.add(index)
-            ids.add(servo_id)
+            indexes.add((bus, index))
+            ids.add((bus, servo_id))
+            self.joints_by_bus[bus].append(name)
             if (not math.isfinite(cfg['zero_tick']) or not math.isfinite(cfg['radians_per_tick'])
                     or cfg['radians_per_tick'] <= 0 or not math.isfinite(cfg['max_torque_nm'])
                     or cfg['max_torque_nm'] <= 0):
@@ -106,21 +118,34 @@ class SpinalControl:
         self.busy = set()
         self.alive = True
         self.timeout = 0.15  # Shorter than the independent MCU's fixed 250ms deadline.
-        service = rospy.get_param('~mode_service', '/dracomancer/direct_servo_mode')
-        # Own the output before creating publishers or shutdown callbacks.
-        self.output_lock = (claim_output(
-            rospy.get_param('~current_topic', '/dracomancer/servo/direct_current'), service)
-            if self.calibrated and self.config else None)
-        rospy.wait_for_service(service, timeout=30)
-        self.rpc = rospy.ServiceProxy(service, DirectServoMode)
-        self.executor = DaemonExecutor()
-        self.current_pub = rospy.Publisher(rospy.get_param('~current_topic', '/dracomancer/servo/direct_current'),
-                                           DirectServoCurrent, queue_size=1)
+        prefix = rospy.get_param('~spinal_ns', '/').rstrip('/')
+        if self.dual:
+            active = [bus for bus in self.buses if self.joints_by_bus[bus]]
+            mode_paths = {bus: prefix+'/'+bus+'/direct_servo_mode' for bus in active}
+            current_paths = {bus: prefix+'/'+bus+'/servo/direct_current' for bus in active}
+            state_paths = {bus: prefix+'/'+bus+'/servo/states' for bus in active}
+            for bus in active:
+                self.check_board(prefix+'/'+bus+'/get_board_info', bus)
+        else:
+            mode_paths = {'legacy': rospy.get_param('~mode_service', '/dracomancer/direct_servo_mode')}
+            current_paths = {'legacy': rospy.get_param('~current_topic', '/dracomancer/servo/direct_current')}
+            state_paths = {'legacy': rospy.get_param('~state_topic', '/dracomancer/servo/states')}
+
+        # Own all active outputs before creating publishers or shutdown callbacks.
+        paths = [*current_paths.values(), *mode_paths.values()]
+        self.output_lock = claim_output(*paths) if self.calibrated and self.config else None
+        self.rpc, self.executor, self.current_pub = {}, {}, {}
+        for bus, service in mode_paths.items():
+            rospy.wait_for_service(service, timeout=30)
+            self.rpc[bus] = rospy.ServiceProxy(service, DirectServoMode)
+            self.executor[bus] = DaemonExecutor()
+            self.current_pub[bus] = rospy.Publisher(current_paths[bus], DirectServoCurrent, queue_size=1)
         self.state_pub = rospy.Publisher('joint_states', JointState, queue_size=1)
         self.measured_pub = rospy.Publisher('measured_joint_states', JointState, queue_size=1)
         self.status_pub = rospy.Publisher('control/status', String, queue_size=1, latch=True)
-        self.state_sub = rospy.Subscriber(rospy.get_param('~state_topic', '/dracomancer/servo/states'),
-                                          ServoStates, self.states, queue_size=1)
+        self.state_sub = [rospy.Subscriber(topic, ServoStates, self.states, callback_args=bus, queue_size=1)
+                          if self.dual else rospy.Subscriber(topic, ServoStates, self.states, queue_size=1)
+                          for bus, topic in state_paths.items()]
         self.torque_sub = rospy.Subscriber('torque_cmd', JointState, self.torques, queue_size=1)
         self.services = [rospy.Service('control/'+n+'/torque_mode', SetBool,
                          lambda req, name=n: self.change_mode(name, req.data)) for n in self.names]
@@ -131,9 +156,25 @@ class SpinalControl:
         threading.Thread(target=self.loop, daemon=True).start()
         threading.Thread(target=self.monitor, daemon=True).start()
 
+    def check_board(self, service, bus):
+        rospy.wait_for_service(service, timeout=10)
+        boards = rospy.ServiceProxy(service, GetBoardInfo)().boards
+        if len(boards) != 1 or boards[0].slave_id != 0:
+            raise ValueError('Expected one direct-UART board on '+bus)
+        ids = [servo.id for servo in boards[0].servos]
+        first = 1 if bus == 'right' else 11
+        expected_ids = set(range(first, first+7))
+        if len(ids) != 7 or set(ids) != expected_ids:
+            raise ValueError('Unexpected DYNAMIXEL IDs on '+bus)
+        for name in self.joints_by_bus[bus]:
+            cfg = self.config[name]
+            if ids[cfg['index']] != cfg['id']:
+                raise ValueError('Spinal scan index and physical ID disagree for '+name)
+
     def request(self, name, action, session=0, cap=0):
         cfg = self.config[name]
-        future = self.executor.submit(self.rpc, Mode(index=cfg['index'], servo_id=cfg['id'],
+        bus = cfg['bus']
+        future = self.executor[bus].submit(self.rpc[bus], Mode(index=cfg['index'], servo_id=cfg['id'],
                                       action=action, session=session, current_limit=cap))
         try:
             result = future.result(timeout=2.0)
@@ -144,7 +185,7 @@ class SpinalControl:
             raise RuntimeError('Spinal refused action %s: status %s' % (action, result.status))
         return result
 
-    def states(self, msg):
+    def states(self, msg, bus=None):
         age = (rospy.Time.now()-msg.stamp).to_sec()
         if msg.stamp.to_sec() <= 0 or not -0.1 <= age <= 0.5:
             return
@@ -155,7 +196,8 @@ class SpinalControl:
         with self.lock:
             for name, cfg in self.config.items():
                 servo = by_index.get(cfg['index'])
-                if servo is None:
+                if (servo is None or (bus is not None and cfg['bus'] != bus) or
+                        msg.stamp.to_sec() <= self.measurement_stamp[name].to_sec()):
                     continue
                 self.position[name] = (servo.angle-cfg['zero_tick'])*cfg['radians_per_tick']*cfg['direction']
                 self.error[name] = servo.error
@@ -166,13 +208,18 @@ class SpinalControl:
         """Only calibrated, fresh measured axes may command DRAGON morphology."""
         msg = JointState()
         msg.name = [n for n in self.config if self.calibrated and self.fresh(n)]
+        if getattr(self, 'dual', False) and len({self.config[n]['bus'] for n in msg.name}) == 2:
+            newest = max(self.measurement_stamp[n] for n in msg.name)
+            msg.name = [n for n in msg.name
+                        if (newest-self.measurement_stamp[n]).to_sec() <= MAX_ARM_SKEW]
         msg.position = [self.position[n] for n in msg.name]
         # GUI placeholders and cache republishes must not look like new input.
         msg.header.stamp = min((self.measurement_stamp[n] for n in msg.name), default=rospy.Time(0))
         return msg
 
     def fresh(self, name):
-        return self.error[name] == 0 and time.monotonic()-self.last_state[name] < self.timeout
+        return (self.error[name] == 0 and time.monotonic()-self.last_state[name] < self.timeout
+                and -0.1 <= (rospy.Time.now()-self.measurement_stamp[name]).to_sec() < self.timeout)
 
     def change_mode(self, name, enabled):
         if name not in self.config:
@@ -267,9 +314,15 @@ class SpinalControl:
             msg.current.append(0 if zero else self.raw[name])
         return msg
 
+    def publish_current(self, names, zero=False):
+        for bus, publisher in self.current_pub.items():
+            message = self.packet([n for n in names if self.config[n]['bus'] == bus], zero=zero)
+            if message.index:
+                publisher.publish(message)
+
     def stop_joints(self, names):
         with self.lock:
-            self.current_pub.publish(self.packet(names, zero=True))
+            self.publish_current(names, zero=True)
             for name in names:
                 self.mode[name] = self.armed[name] = False
                 self.token[name] = self.raw[name] = 0
@@ -277,7 +330,9 @@ class SpinalControl:
                 self.busy.discard(name)
                 # STOP is queued after any in-flight ARM; the MCU deadline is independent.
                 cfg = self.config[name]
-                self.executor.submit(self.rpc, Mode(index=cfg['index'], servo_id=cfg['id'], action=Mode.STOP))
+                bus = cfg['bus']
+                self.executor[bus].submit(
+                    self.rpc[bus], Mode(index=cfg['index'], servo_id=cfg['id'], action=Mode.STOP))
 
     def stop(self, _request):
         self.stop_joints(list(self.config))
@@ -298,7 +353,7 @@ class SpinalControl:
                           (not self.fresh(n) or (self.armed[n] and time.monotonic()-self.last_command[n] >= self.timeout))]
                 if expire:
                     self.stop_joints(expire)
-                self.current_pub.publish(self.packet([n for n in self.config if self.armed[n]]))
+                self.publish_current([n for n in self.config if self.armed[n]])
                 state = JointState()
                 state.header.stamp = rospy.Time.now()
                 state.name = self.names
@@ -334,7 +389,8 @@ class SpinalControl:
     def shutdown(self):
         self.alive = False
         self.stop(None)
-        self.executor.shutdown()
+        for worker in self.executor.values():
+            worker.shutdown()
 
 
 if __name__ == '__main__':

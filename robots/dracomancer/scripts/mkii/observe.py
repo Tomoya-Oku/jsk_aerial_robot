@@ -16,7 +16,8 @@ class Observer:
             raise ValueError('Hardware preview requires real ROS time')
         self.names = rospy.get_param('joints')
         self.arm = rospy.get_param('~arm', 'right')
-        self.ids = rospy.get_param('~servo_ids', list(range(1, 8)))
+        default_ids = list(range(11, 18)) if self.arm == 'left' else list(range(1, 8))
+        self.ids = rospy.get_param('~servo_ids', default_ids)
         if (self.arm not in ('right', 'left') or not isinstance(self.ids, list)
                 or len(self.ids) != 7 or any(type(i) is not int or not 0 <= i <= 252 for i in self.ids)
                 or len(set(self.ids)) != 7):
@@ -25,6 +26,8 @@ class Observer:
         if any(name not in self.names for name in self.observed):
             raise ValueError('Observed joints must exist in the model')
         prefix = rospy.get_param('~spinal_ns', '/').rstrip('/')
+        if rospy.get_param('~dual_spinal', False):
+            prefix += '/'+self.arm
         service = prefix+'/get_board_info'
         rospy.wait_for_service(service, timeout=10)
         boards = rospy.ServiceProxy(service, GetBoardInfo)().boards
