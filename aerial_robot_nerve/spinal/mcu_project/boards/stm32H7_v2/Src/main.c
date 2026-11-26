@@ -125,6 +125,27 @@ Baro baro_;
 GPS gps_;
 BatteryStatus battery_status_;
 I2CJoystick i2c_joy_;
+#if DRACOMANCER_DUAL
+I2CJoystick left_joy_("joystick/left/raw");
+osMutexId i2c1_mutex_, i2c3_mutex_;
+struct JoystickBus {
+  I2CJoystick* joystick;
+  osMutexId* mutex;
+};
+JoystickBus right_joy_bus{&i2c_joy_, &i2c1_mutex_};
+JoystickBus left_joy_bus{&left_joy_, &i2c3_mutex_};
+
+static void joystickTask(void const* argument)
+{
+  const auto& bus = *static_cast<const JoystickBus*>(argument);
+  for (;;) {
+    const uint32_t start = HAL_GetTick();
+    bus.joystick->update(*bus.mutex);
+    const uint32_t elapsed = HAL_GetTick() - start;
+    osDelay(elapsed < 10 ? 10 - elapsed : 1);
+  }
+}
+#endif
 
 /* servo instance */
 #if DRACOMANCER_DUAL
@@ -272,6 +293,9 @@ int main(void)
   baro_.init(&hi2c1, &nh_, BAROCS_GPIO_Port, BAROCS_Pin);
   gps_.init(&huart3, &nh_, LED2_GPIO_Port, LED2_Pin);
   i2c_joy_.init(&hi2c1, &nh_);
+#if DRACOMANCER_DUAL
+  left_joy_.init(&hi2c3, &nh_);
+#endif
 
   DShot* dshotptr = nullptr;
 #if DSHOT
@@ -324,6 +348,10 @@ int main(void)
   osMutexId serialization_mutex = osRecursiveMutexCreate(osMutex(rosSerialization));
   if (!serialization_mutex) Error_Handler();
   nh_.setSerializationMutex(serialization_mutex);
+  osMutexDef(i2cBus);
+  i2c1_mutex_ = osMutexCreate(osMutex(i2cBus));
+  i2c3_mutex_ = osMutexCreate(osMutex(i2cBus));
+  if (!i2c1_mutex_ || !i2c3_mutex_) Error_Handler();
 #endif
   /* USER CODE END RTOS_MUTEX */
 
@@ -396,7 +424,11 @@ int main(void)
 #endif
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
+#if DRACOMANCER_DUAL
+  osThreadDef(joystick, joystickTask, osPriorityLow, 0, 256);
+  if (!osThreadCreate(osThread(joystick), &right_joy_bus) ||
+      !osThreadCreate(osThread(joystick), &left_joy_bus)) Error_Handler();
+#endif
   /* USER CODE END RTOS_THREADS */
 
   /* Start scheduler */
@@ -1255,17 +1287,31 @@ void coreTaskFunc(void const * argument)
 
       Spine::send();
 
+#if DRACOMANCER_DUAL
+      // The flight loop never waits for a disconnected joystick on a shared bus.
+      if (osMutexWait(i2c3_mutex_, 0) == osOK) {
+        imu_.update();
+        osMutexRelease(i2c3_mutex_);
+      }
+      if (osMutexWait(i2c1_mutex_, 0) == osOK) {
+        baro_.update();
+        osMutexRelease(i2c1_mutex_);
+      }
+#else
       imu_.update();
       baro_.update();
+#endif
       gps_.update();
       estimator_.update();
       controller_.update();
 
+#if !DRACOMANCER_DUAL
       static uint32_t joy_div = 0;
       if ((++joy_div % 10) == 0)
       {  // 1kHz / 10 = 100Hz
         i2c_joy_.update();
       }
+#endif
 
       Spine::update();
 

@@ -5,6 +5,7 @@
 #include <ros.h>
 #include <std_msgs/Int16MultiArray.h>
 
+#include "cmsis_os.h"
 #include "main.h"  // I2C_HandleTypeDef, HAL_I2C_*
 
 #ifndef M5JS2_I2C_ADDR_7BIT
@@ -32,7 +33,7 @@
 class I2CJoystick
 {
 public:
-  I2CJoystick() : pub_(M5JS2_TOPIC, &msg_)
+  explicit I2CJoystick(const char* topic = M5JS2_TOPIC) : pub_(topic, &msg_)
   {
   }
 
@@ -57,10 +58,9 @@ public:
 
     uint32_t sum_x = 0;
     uint32_t sum_y = 0;
-    uint16_t last_x = 0, last_y = 0;
 
     uint16_t x = 0, y = 0;
-    bool ok_cnt = 0;
+    unsigned ok_cnt = 0;
 
     for (int i = 0; i < M5JS2_CALIB_SAMPLES; ++i)
     {
@@ -68,42 +68,32 @@ public:
       {
         sum_x += x;
         sum_y += y;
-        last_x = x;
-        last_y = y;
-        ok_cnt = true;
+        ++ok_cnt;
       }
 #if M5JS2_CALIB_DELAY_MS > 0
       HAL_Delay(M5JS2_CALIB_DELAY_MS);
 #endif
     }
 
-    if (ok_cnt)
+    calibrated_ = ok_cnt >= (M5JS2_CALIB_SAMPLES + 1) / 2;
+    if (calibrated_)
     {
-      x0_ = static_cast<uint16_t>(sum_x / M5JS2_CALIB_SAMPLES);
-      y0_ = static_cast<uint16_t>(sum_y / M5JS2_CALIB_SAMPLES);
-      calibrated_ = true;
-    }
-    else
-    {
-      // 読めなかったら、とりあえず最後値（0のまま）扱い
-      x0_ = last_x;
-      y0_ = last_y;
-      calibrated_ = false;
+      x0_ = static_cast<uint16_t>(sum_x / ok_cnt);
+      y0_ = static_cast<uint16_t>(sum_y / ok_cnt);
     }
   }
 
-  void update()
+  void update(osMutexId bus_mutex = nullptr)
   {
-    if (!hi2c_ || !nh_)
+    if (!hi2c_ || !nh_ || !calibrated_)
       return;
 
     uint16_t x = 0, y = 0;
-    if (!readXY(x, y))
-      return;
-
     uint8_t b = 0xFF;
-    if (!readButton(b))
-      return;
+    if (bus_mutex && osMutexWait(bus_mutex, 0) != osOK) return;
+    const bool received = readXY(x, y) && readButton(b);
+    if (bus_mutex) osMutexRelease(bus_mutex);
+    if (!received) return;
 
     // dx,dy: 初期値を引いて0中心に
     int32_t dx = static_cast<int32_t>(x) - static_cast<int32_t>(x0_);
