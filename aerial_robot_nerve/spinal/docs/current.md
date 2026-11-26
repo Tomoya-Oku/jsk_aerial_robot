@@ -4,10 +4,12 @@ This extension is for Spinal → UART/RS485 → XM430-W350 (model 1020), Protoco
 firmware >=38. Neuron/CAN firmware is unchanged. The direct UART implementation
 supports at most `MAX_SERVO_NUM` (currently 10) motors. Do not map all 14 CAD joints
 to one direct UART handler without a separate capacity change.
-The planned bimanual setup uses two independent UART/RS485 buses on one Spinal,
-with seven motors per bus. Current board entry points initialize one DirectServo
-only; a second driver, separate settings/ROS routing and host measurement merging
-still need implementation and hardware validation.
+The H7 V2 Mk-II build (`DRACOMANCER_DUAL=1`) runs two dedicated RS485 workers.
+USART2 scans IDs 1–7 and USART6 scans IDs 11–17. The firmware exposes states,
+current commands, mode and board info under `right/` and `left/`. Each includes
+its own scan indexes and current sessions. The device uses its own servo
+register settings rather than adding scan-indexed data to Spinal Flash.
+Build with `DRACOMANCER_DUAL=0` to use the original single-port interfaces.
 
 ## New interfaces (existing message/service MD5s unchanged)
 
@@ -29,7 +31,7 @@ readback checks, and a verified zero Goal Current before torque ON.
 Every current message carries equal-length `index`, `session`, `sequence`,
 `current` arrays, with unique valid indexes. `current` is signed 2.69mA units.
 The sequence must increase per session. Replays do not renew the deadline.
-Commands are handed to the servo worker; ROS callbacks do not perform bus I/O.
+The Mk-II ROS callbacks hand commands to the bus worker responsible for UART I/O.
 
 250ms without an accepted new command causes zero current and torque OFF,
 invalidates the token, and requires another PREPARE/ARM. This deadline runs on

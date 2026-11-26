@@ -8,7 +8,10 @@
 `catkin build spinal dracomancer`でROS側とMCU用rosserialヘッダーを生成する。
 MCUはボード型式に合うプロジェクトで別途ビルドする。
 対応API・ビルド方法は[Spinalの文書](../../../aerial_robot_nerve/spinal/docs/current.md)を参照する。
-旧ファームウェアに直結サービスがなければ本ノードは接続できない。
+Mk-II用H7 V2では既定の`DRACOMANCER_DUAL=1`でビルドする。
+USART2/USART6とも1 Mbps、8N1、Protocol 2.0。バスごとのRS485変換回路が送受信方向を切り替える。
+USART6のPC6/PC7が実基板で引き出せることと、既存回路・外付け回路の方向切替を確認する。
+CubeIDEビルドには最新の生成済み`ros_lib`を使う。
 
 実機ノードは既存のrosserial bridgeを使い、自身でシリアルポートを開いたりファームウェアを書き込んだりしない。
 同じサーボを制御する他の位置・電流・設定ノードを停止してから使用する。
@@ -21,9 +24,9 @@ Gazeboとは別のROS masterを使い、`use_sim_time=true`の環境では起動
 | 設定 | 内容 |
 |---|---|
 | `servo_ids` | CAD関節名→物理DYNAMIXEL IDの既定表。IDの書換え処理ではない |
-| `actuators` | このノードが担当する実機関節。1台の直結経路の軸数制限内で定義する |
-| `index` | Spinalのscan index。物理IDから推定しない |
-| `id` | 物理IDの任意の上書き。省略時は同じ関節の`servo_ids`を使用 |
+| `actuators` | このノードが担当する実機関節。両腕構成ではCAD関節名の先頭の`right_`・`left_`でバスを選ぶ |
+| `index` | 各バスのscan index。起動時に`get_board_info`で照合する |
+| `id` | 物理ID。省略時は同じ関節の`servo_ids`を使用。両腕構成では`servo_ids`との一致が必要 |
 | `zero_tick`、`direction`、`radians_per_tick` | CAD q=0、正方向、関節rad/countの実測対応 |
 | `joint_nm_per_amp` | 校正済みの関節出力Nm/A |
 | `max_current_amp`、`max_torque_nm` | 承認した関節別上限 |
@@ -36,18 +39,18 @@ Gazeboとは別のROS masterを使い、`use_sim_time=true`の環境では起動
 
 ### 未校正の動作確認だけを行う場合
 
-既存のSpinal bridgeで`servo/states`と`get_board_info`を利用できれば、
-電流制御APIやトルク校正なしで読み取り専用の仮表示を起動できる。
+各腕の計測経路を読み取り、装着前に関節とIDの対応を確認できる。
 
 ```bash
-roslaunch dracomancer observe.launch
+roslaunch dracomancer observe.launch dual_spinal:=true arm:=right
+roslaunch dracomancer observe.launch dual_spinal:=true arm:=left
 ```
 
 既定はルート名前空間のbridgeからID 1〜7を右腕の第1〜第7関節へ対応させる。
 `get_board_info`で物理IDとscan indexを照合し、起動後最初の新鮮な全7軸計測を0度とする。
 換算は直接駆動の4096 count/rev・全軸符号+1を仮定する。外部エンコーダ・異なる分解能比は拒否する。
 実機のCAD零点・回転方向を校正した表示ではなく、反対側の腕はモデルの0度で表示する。
-`arm:=left`、`servo_ids:="[10, 11, 12, 13, 14, 15, 16]"`、`spinal_ns:=/dracomancer`で接続先を変更できる。
+`arm:=left`の既定IDは11〜17。bridgeを別の名前空間で起動した場合は`spinal_ns`を指定する。
 表示先は`/dracomancer_preview`で、未校正データを`measured_joint_states`へ配信しない。
 サーボへの指令、設定変更、Torque ON/OFF、ファームウェア書き込みは行わない。
 サーボのエラー値は`preview/status`と警告ログへ表示する。計測が途切れた場合は表示を保持し、
@@ -60,17 +63,32 @@ source devel/setup.bash
 roslaunch dracomancer bringup.launch backend:=hardware config:=/absolute/path/to/hardware.yaml
 ```
 
-既存bridgeの接続先は`spinal_ns`、表示・操作側は`robot_ns`。標準はともに`dracomancer`。
-bridgeを同時起動する場合の引数は[基本操作](usage.md#ビルドと基本操作)を参照する。
+既定のbridgeは`/right/servo/states`と`/left/servo/states`を配信する。
+`spinal_ns`でbridgeの名前空間、`robot_ns`で表示・操作の名前空間を指定できる。
+bridgeの同時起動は`connect_fc:=true`と`fc_serial_port`を指定する。
+従来の1バスファームウェアを使用する場合は`dual_spinal:=false`と、その機体の物理IDを設定する。
 
-現行の実機ノードは1つのSpinal直結経路を扱い、最大10軸・scan index 0〜9を受け付ける。
-左右7軸ずつの独立UART/RS485構成には、MCUの2系統化とホストの経路分離・計測統合が別途必要。
-配線の分割や本ノードの二重起動だけでは両腕構成にならない。
+左右バスの計測を関節名で集約し、両腕のサンプルがある場合は時刻差50 ms以内の計測を採用する。
+この閾値はホストの初期設定で、実測の通信周期に基づく評価は未実施。
 
 実機のAnglesタブは読取り専用。未設定の関節は表示上のCAD q=0で、計測値にはしない。
 `joint_states`は全体表示用、形態操作は`measured_joint_states`を使う。
 後者は校正済み・新鮮・正常な計測関節だけを、最も古い有効関節計測時刻で配信する。
 キャッシュ再配信で計測時刻を更新しない。
+
+### Joystickの左右校正
+
+右は`/joystick/raw`、左は`/joystick/left/raw`。Spinalの起動時は両方を中立にする。
+左は先にターミナルで校正し、左専用のファイルに保存する。
+
+```bash
+rosrun dracomancer calibrate_joystick.py _js_raw_topic:=/joystick/left/raw \
+  _js_calibrated_topic:=/dracomancer/joystick/left/calibrated \
+  _yaml_path:="$HOME/.ros/dracomancer-joystick-left.yaml"
+```
+
+保存後に校正ノードを終了し、両腕の操作を使う場合は`teleop_mode:=true`、
+`mapping_mode:=dual_joint`または`dual_shape`、`enable_position_control:=true`を指定する。
 
 ## トルク操作と停止
 

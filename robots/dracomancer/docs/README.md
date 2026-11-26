@@ -8,6 +8,7 @@
 | 文書 | 内容 |
 |---|---|
 | [usage.md](usage.md) | ビルド、viewer・Gazebo・実機の起動、検証コマンド |
+| [spinal.md](spinal.md) | H7 V2の2バス実装と事前調査 |
 | [hardware.md](hardware.md) | 実機の校正、トルク操作、停止・復旧 |
 | [shape.md](shape.md) | DRAGON形状操作の起動、設定、診断・ログ |
 
