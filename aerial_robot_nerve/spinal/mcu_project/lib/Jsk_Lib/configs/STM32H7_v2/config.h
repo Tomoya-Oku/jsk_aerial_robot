@@ -80,6 +80,14 @@
 //2.3 Flight Control
 #define FLIGHT_CONTROL_FLAG 1
 #define DSHOT 0
+
+// Set to 0 for the original single-port Spinal firmware.
+#ifndef DRACOMANCER_DUAL
+#define DRACOMANCER_DUAL 1
+#endif
+#if DRACOMANCER_DUAL && (DSHOT || !DYNAMIXEL || KONDO)
+#error "Mk-II requires USART6 and two DYNAMIXEL RS485 buses"
+#endif
 //* Do not change following code!!!
 ///////////////////////////////////
 #if !ATTITUDE_ESTIMATE_FLAG

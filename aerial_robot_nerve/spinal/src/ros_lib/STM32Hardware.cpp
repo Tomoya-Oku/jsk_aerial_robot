@@ -20,6 +20,7 @@ namespace
 
 #if SUPPORT_RTOS
   osSemaphoreId *tx_semaphore_;
+  UART_HandleTypeDef* rosserial_uart;
 #endif
 
 #if SUPPORT_LWIP
@@ -32,12 +33,12 @@ namespace
 // DMA + RTOS using in UART TX
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
-  osSemaphoreRelease (*tx_semaphore_);
+  if (huart == rosserial_uart && tx_semaphore_) osSemaphoreRelease(*tx_semaphore_);
 }
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
-  if ((huart->ErrorCode & HAL_UART_ERROR_DMA) != 0U)
+  if (huart == rosserial_uart && tx_semaphore_ && (huart->ErrorCode & HAL_UART_ERROR_DMA) != 0U)
     {
       osSemaphoreRelease (*tx_semaphore_); // force relase semaphore if DMA TX fails
     }
@@ -48,6 +49,7 @@ void STM32Hardware::init(UART_HandleTypeDef *huart, osMutexId *mutex, osSemaphor
   rtos_mode_ = true;
 
   huart_ = huart;
+  rosserial_uart = huart;
   __HAL_UART_DISABLE_IT(huart, UART_IT_PE);
   __HAL_UART_DISABLE_IT(huart, UART_IT_ERR);
   __HAL_UART_DISABLE_IT(huart, UART_IT_TXE);

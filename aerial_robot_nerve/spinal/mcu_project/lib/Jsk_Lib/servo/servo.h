@@ -37,22 +37,31 @@ namespace ValueType
 class DirectServo
 {
 public:
-  DirectServo():
+  enum class Arm {Legacy, Right, Left};
+  explicit DirectServo(Arm arm = Arm::Legacy):
     servo_ctrl_sub_("servo/target_states", &DirectServo::servoControlCallback,this),
     servo_torque_ctrl_sub_("servo/torque_enable", &DirectServo::servoTorqueControlCallback,this),
-    direct_current_sub_("servo/direct_current", &DirectServo::directCurrentCallback,this),
-    direct_mode_srv_("direct_servo_mode", &DirectServo::directModeCallback,this),
+    direct_current_sub_(endpoint(arm, "servo/direct_current", "right/servo/direct_current",
+                                 "left/servo/direct_current"), &DirectServo::directCurrentCallback,this),
+    direct_mode_srv_(endpoint(arm, "direct_servo_mode", "right/direct_servo_mode",
+                              "left/direct_servo_mode"), &DirectServo::directModeCallback,this),
     joint_profiles_sub_("joint_profiles", &DirectServo::jointProfilesCallback,this),
-    servo_state_pub_("servo/states", &servo_state_msg_),
-    servo_torque_state_pub_("servo/torque_states", &servo_torque_state_msg_),
+    servo_state_pub_(endpoint(arm, "servo/states", "right/servo/states", "left/servo/states"),
+                     &servo_state_msg_),
+    servo_torque_state_pub_(endpoint(arm, "servo/torque_states", "right/servo/torque_states",
+                                    "left/servo/torque_states"), &servo_torque_state_msg_),
     servo_config_srv_("direct_servo_config", &DirectServo::servoConfigCallback, this),
-    board_info_srv_("get_board_info", &DirectServo::boardInfoCallback,this)
+    board_info_srv_(endpoint(arm, "get_board_info", "right/get_board_info", "left/get_board_info"),
+                    &DirectServo::boardInfoCallback,this)
   {
-    connected_ = false;
   }
   ~DirectServo(){}
 
   bool init(UART_HandleTypeDef* huart, ros::NodeHandle* nh, osMutexId* mutex);
+#if DYNAMIXEL && !KONDO
+  bool initRs485(UART_HandleTypeDef* huart, ros::NodeHandle* nh, osMutexId* mutex,
+                 uint8_t* rx_buffer, uint8_t first_id, uint8_t count);
+#endif
   void update();
   bool connected() {return connected_;}
   void sendData(bool flag_send_asap);
@@ -69,6 +78,14 @@ public:
   }
 
 private:
+  static const char* endpoint(Arm arm, const char* legacy, const char* right, const char* left)
+  {
+    return arm == Arm::Right ? right : arm == Arm::Left ? left : legacy;
+  }
+  bool registerRos(ros::NodeHandle* nh);
+  void sendRs485Data();
+  bool fixed_rs485_ = false;
+
   /* ROS */
   ros::NodeHandle* nh_;
   ros::Subscriber<spinal::ServoControlCmd, DirectServo> servo_ctrl_sub_;
@@ -124,7 +141,7 @@ private:
   DynamixelSerial servo_handler_;
 #endif
 
-  bool connected_;
+  bool connected_ = false;
 
   friend class Initializer;
 };

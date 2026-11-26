@@ -39,17 +39,34 @@ bool DirectServo::init(UART_HandleTypeDef* huart,  ros::NodeHandle* nh, osMutexI
     return false;
   }
 
+  return registerRos(nh);
+}
+
+#if DYNAMIXEL && !KONDO
+bool DirectServo::initRs485(UART_HandleTypeDef* huart, ros::NodeHandle* nh, osMutexId* mutex,
+                          uint8_t* rx_buffer, uint8_t first_id, uint8_t count)
+{
+  fixed_rs485_ = true;
+  return servo_handler_.initRs485(huart, mutex, rx_buffer, first_id, count) && registerRos(nh);
+}
+#endif
+
+bool DirectServo::registerRos(ros::NodeHandle* nh)
+{
   nh_ = nh;
-  nh_->subscribe(servo_ctrl_sub_);
+  const unsigned int actual_servo_num = servo_handler_.getServoNum();
+  if (!fixed_rs485_) {
+    nh_->subscribe(servo_ctrl_sub_);
+    nh_->subscribe(servo_torque_ctrl_sub_);
+    nh_->subscribe(joint_profiles_sub_);
+    nh_->advertiseService(servo_config_srv_);
+  }
 #if !KONDO
   nh_->subscribe(direct_current_sub_);
   nh_->advertiseService(direct_mode_srv_);
 #endif
-  nh_->subscribe(servo_torque_ctrl_sub_);
-  nh_->subscribe(joint_profiles_sub_);
   nh_->advertise(servo_state_pub_);
   nh_->advertise(servo_torque_state_pub_);
-  nh_->advertiseService(servo_config_srv_);
   nh_->advertiseService(board_info_srv_);
 
   servo_state_msg_.servos_length = actual_servo_num;
@@ -72,7 +89,41 @@ bool DirectServo::init(UART_HandleTypeDef* huart,  ros::NodeHandle* nh, osMutexI
 void DirectServo::update()
 {
   servo_handler_.update();
-  sendData(true);
+  if (fixed_rs485_) sendRs485Data();
+  else sendData(true);
+}
+
+void DirectServo::sendRs485Data()
+{
+#if DYNAMIXEL && !KONDO
+  if (servo_handler_.getROSCommFlag()) {
+    servo_handler_.setROSCommFlag(false);
+    unsigned length = 0;
+    for (unsigned i = 0; i < servo_handler_.getServoNum(); ++i) {
+      if (!servo_handler_.positionReceived(i)) continue;
+      const ServoData& servo = servo_handler_.getServo()[i];
+      auto& state = servo_state_msg_.servos[length++];
+      state.index = i;
+      state.angle = servo.present_position_;
+      state.temp = servo.present_temp_;
+      state.load = servo.present_current_;
+      state.error = servo.hardware_error_status_;
+    }
+    // Do not timestamp cached positions as new measurements after a bus failure.
+    if (length) {
+      servo_state_msg_.stamp = nh_->now();
+      servo_state_msg_.servos_length = length;
+      servo_state_pub_.publish(&servo_state_msg_);
+    }
+  }
+  const uint32_t now = HAL_GetTick();
+  if (now - servo_torque_last_pub_time_ >= SERVO_TORQUE_PUB_INTERVAL) {
+    for (unsigned i = 0; i < servo_handler_.getServoNum(); ++i)
+      servo_torque_state_msg_.torque_enable[i] = servo_handler_.getServo()[i].torque_enable_;
+    servo_torque_state_pub_.publish(&servo_torque_state_msg_);
+    servo_torque_last_pub_time_ = now;
+  }
+#endif
 }
 
 void DirectServo::sendData(bool flag_send_asap)

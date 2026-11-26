@@ -127,7 +127,15 @@ BatteryStatus battery_status_;
 I2CJoystick i2c_joy_;
 
 /* servo instance */
+#if DRACOMANCER_DUAL
+DirectServo right_servo_(DirectServo::Arm::Right);
+DirectServo left_servo_(DirectServo::Arm::Left);
+osMutexId right_servo_mutex_, left_servo_mutex_;
+alignas(32) uint8_t servo_rx_left[RX_BUFFER_SIZE]
+  __attribute__((section(".ServoRxBufferSection")));
+#else
 DirectServo servo_;
+#endif
 DShot dshot_;
 
 
@@ -280,8 +288,18 @@ int main(void)
   FlashMemory::read(); //IMU calib data (including IMU in neurons)
 
   DirectServo* servoptr = nullptr;
+#if DRACOMANCER_DUAL
+  osMutexDef(rightServo);
+  osMutexDef(leftServo);
+  right_servo_mutex_ = osMutexCreate(osMutex(rightServo));
+  left_servo_mutex_ = osMutexCreate(osMutex(leftServo));
+  if (!right_servo_mutex_ || !left_servo_mutex_) Error_Handler();
+  right_servo_.initRs485(&huart2, &nh_, &right_servo_mutex_, nullptr, 1, 7);
+  left_servo_.initRs485(&huart6, &nh_, &left_servo_mutex_, servo_rx_left, 11, 7);
+#else
   bool servo_connect = servo_.init(&huart2, &nh_, NULL);
   if(servo_connect) servoptr = &servo_;
+#endif
 
   controller_.init(&htim1, &htim4, &estimator_, dshotptr, servoptr, &battery_status_, &nh_, &flightControlMutexHandle);
 
@@ -301,7 +319,12 @@ int main(void)
   flightControlMutexHandle = osMutexCreate(osMutex(flightControlMutex));
 
   /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
+#if DRACOMANCER_DUAL
+  osMutexDef(rosSerialization);
+  osMutexId serialization_mutex = osRecursiveMutexCreate(osMutex(rosSerialization));
+  if (!serialization_mutex) Error_Handler();
+  nh_.setSerializationMutex(serialization_mutex);
+#endif
   /* USER CODE END RTOS_MUTEX */
 
   /* Create the semaphores(s) */
@@ -362,8 +385,15 @@ int main(void)
   canRxHandle = osThreadCreate(osThread(canRx), NULL);
 
   /* definition and creation of servoTask */
+#if DRACOMANCER_DUAL
+  osThreadDef(servoTask, ServoTaskCallback, osPriorityAboveNormal, 0, 512);
+  for (DirectServo* servo : {&right_servo_, &left_servo_}) {
+    if (servo->connected() && !osThreadCreate(osThread(servoTask), servo)) Error_Handler();
+  }
+#else
   osThreadDef(servoTask, ServoTaskCallback, osPriorityRealtime, 0, 256);
   servoTaskHandle = osThreadCreate(osThread(servoTask), NULL);
+#endif
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -1368,14 +1398,19 @@ __weak void canRxTask(void const * argument)
 __weak void ServoTaskCallback(void const * argument)
 {
   /* USER CODE BEGIN ServoTaskCallback */
-  if (!servo_.connected()) {
+#if DRACOMANCER_DUAL
+  auto* servo = static_cast<DirectServo*>(const_cast<void*>(argument));
+#else
+  auto* servo = &servo_;
+#endif
+  if (!servo->connected()) {
     osThreadTerminate(NULL);  // remove
     return;
   }
   /* Infinite loop */
   for(;;)
   {
-    servo_.update();
+    servo->update();
     osDelay(1);
   }
   /* USER CODE END ServoTaskCallback */

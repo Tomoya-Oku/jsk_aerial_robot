@@ -76,6 +76,25 @@ const int SPIN_UNAVAILABLE = -3;
     }
 #endif
 
+#if SUPPORT_RTOS
+    // Serializing a message uses the shared rosserial message_out buffer.
+    // Use a separate recursive mutex because the base can publish a log on failure.
+    void setSerializationMutex(osMutexId mutex) {serialization_mutex_ = mutex;}
+#endif
+
+    int publish(int id, const Msg* msg) override
+    {
+#if SUPPORT_RTOS
+      if (serialization_mutex_) {
+        osRecursiveMutexWait(serialization_mutex_, osWaitForever);
+        const int result = parent::publish(id, msg);
+        osRecursiveMutexRelease(serialization_mutex_);
+        return result;
+      }
+#endif
+      return parent::publish(id, msg);
+    }
+
     /* This function goes in your loop() function, it handles
      *  serial tx data and ouput for publishers.
      */
@@ -93,6 +112,10 @@ const int SPIN_UNAVAILABLE = -3;
       if(has_data) return status;
       else return SPIN_UNAVAILABLE;
     }
+#if SUPPORT_RTOS
+  private:
+    osMutexId serialization_mutex_ = nullptr;
+#endif
   };
 }
 

@@ -5,7 +5,7 @@ namespace
 {
 
 #if STM32H7_V2
-  uint8_t legacy_rx_buf[RX_BUFFER_SIZE] __attribute__((section(".ServoRxBufferSection")));
+  alignas(32) uint8_t legacy_rx_buf[RX_BUFFER_SIZE] __attribute__((section(".ServoRxBufferSection")));
 #else
 #ifdef STM32H7
   uint8_t legacy_rx_buf[RX_BUFFER_SIZE] __attribute__((section(".GpsRxBufferSection")));
@@ -42,10 +42,10 @@ void DynamixelSerial::resetBus(UART_HandleTypeDef* huart, osMutexId* mutex, uint
 bool DynamixelSerial::initRs485(UART_HandleTypeDef* huart, osMutexId* mutex, uint8_t* rx_buffer,
                                uint8_t first_id, uint8_t count)
 {
-  if (!mutex || !*mutex || !rx_buffer || !count || count > MAX_SERVO_NUM ||
+  if (!mutex || !*mutex || !count || count > MAX_SERVO_NUM ||
       static_cast<unsigned>(first_id) + count > 253) return false;
   fixed_rs485_ = true;
-  resetBus(huart, mutex, rx_buffer);
+  resetBus(huart, mutex, rx_buffer ? rx_buffer : legacy_rx_buf);
   if (HAL_UART_DeInit(huart_) != HAL_OK) return false;
   huart_->Init.BaudRate = 1000000;
   huart_->Init.Mode = UART_MODE_TX_RX;
@@ -1356,14 +1356,20 @@ uint16_t DynamixelSerial::calcCRC16(uint16_t crc_accum, uint8_t *data_blk_ptr, i
 HAL_StatusTypeDef DynamixelSerial::read(uint8_t* data,  uint32_t timeout)
 {
   /* handle RX Overrun Error */
-  if ( __HAL_UART_GET_FLAG(huart_, UART_FLAG_ORE) )
+  if (__HAL_UART_GET_FLAG(huart_, UART_FLAG_ORE) ||
+      (fixed_rs485_ && huart_->RxState == HAL_UART_STATE_READY))
     {
       __HAL_UART_CLEAR_FLAG(huart_, UART_FLAG_RXNE);
       __HAL_UART_CLEAR_PEFLAG(huart_);
       __HAL_UART_CLEAR_OREFLAG(huart_);
       __HAL_UART_CLEAR_FEFLAG(huart_);
 
-      HAL_UART_Receive_DMA(huart_, rx_buf_, RX_BUFFER_SIZE);
+      if (fixed_rs485_) {
+        if (HAL_UART_AbortReceive(huart_) != HAL_OK) return HAL_TIMEOUT;
+        rd_ptr_ = 0;
+      }
+      if (HAL_UART_Receive_DMA(huart_, rx_buf_, RX_BUFFER_SIZE) != HAL_OK && fixed_rs485_)
+        return HAL_TIMEOUT;
     }
 
   uint32_t tick_start = HAL_GetTick();
