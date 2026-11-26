@@ -11,7 +11,8 @@ inline uint16_t crc(const uint8_t* data, size_t size) {
   }
   return value;
 }
-inline bool decode(const uint8_t* p, size_t length, uint8_t id, unsigned size, uint32_t& value) {
+inline bool decode(const uint8_t* p, size_t length, uint8_t id, unsigned size, uint32_t& value,
+                   bool allow_alert = false) {
   if (length<11 || length>32 || size<1 || size>4 || p[0]!=255 || p[1]!=255 ||
       p[2]!=253 || p[3]!=0 || p[4]!=id || (p[5] | (p[6]<<8))+7u!=length ||
       crc(p,length-2)!=(p[length-2] | (p[length-1]<<8))) return false;
@@ -24,7 +25,7 @@ inline bool decode(const uint8_t* p, size_t length, uint8_t id, unsigned size, u
       if (++i>=length-2 || p[i]!=253) return false;
     }
   }
-  if (count!=size+2 || body[0]!=0x55 || body[1]!=0) return false;
+  if (count!=size+2 || body[0]!=0x55 || (body[1] & (allow_alert ? 0x7f : 0xff))!=0) return false;
   value=0;
   for (unsigned i=0; i<size; ++i) value|=static_cast<uint32_t>(body[2+i])<<(8*i);
   return true;

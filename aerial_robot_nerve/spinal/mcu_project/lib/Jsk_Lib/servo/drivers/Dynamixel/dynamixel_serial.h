@@ -297,6 +297,10 @@ public:
 
 
   void init(UART_HandleTypeDef* huart, osMutexId* mutex = NULL) override;
+  // Dedicated XM430 RS485 buses use servo EEPROM and their own DMA storage.
+  bool initRs485(UART_HandleTypeDef* huart, osMutexId* mutex, uint8_t* rx_buffer,
+                 uint8_t first_id, uint8_t count);
+  bool positionReceived(unsigned index) const {return position_received_[index];}
   void pinReconfig() override;
   void ping() override;
   HAL_StatusTypeDef read(uint8_t* data,  uint32_t timeout) override;
@@ -332,7 +336,17 @@ private:
   uint32_t current_token_=0,current_generation_=0;
   uint16_t current_limit_=0;
   CurrentResult current_result_;
-  bool currentRead(uint8_t id,uint16_t address,uint8_t size,uint32_t& value);
+  bool currentRead(uint8_t id,uint16_t address,uint8_t size,uint32_t& value,
+                   bool allow_alert = false);
+  void resetBus(UART_HandleTypeDef* huart, osMutexId* mutex, uint8_t* rx_buffer);
+  void updateRs485();
+  uint8_t* rx_buf_ = nullptr;
+  bool fixed_rs485_ = false;
+  bool worker_running_ = false;
+  std::array<bool, MAX_SERVO_NUM> position_received_{};
+  uint8_t poll_index_ = 0;
+  uint32_t poll_started_ = 0;
+  uint32_t diagnostics_tick_[MAX_SERVO_NUM]{};
   bool currentWrite(uint8_t id,uint16_t address,uint8_t size,uint32_t value);
   void currentUpdate();
 

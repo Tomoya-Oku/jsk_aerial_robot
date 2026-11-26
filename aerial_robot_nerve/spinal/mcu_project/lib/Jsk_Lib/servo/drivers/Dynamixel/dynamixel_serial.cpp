@@ -5,17 +5,18 @@ namespace
 {
 
 #if STM32H7_V2
-  uint8_t rx_buf_[RX_BUFFER_SIZE] __attribute__((section(".ServoRxBufferSection")));
+  uint8_t legacy_rx_buf[RX_BUFFER_SIZE] __attribute__((section(".ServoRxBufferSection")));
 #else
 #ifdef STM32H7
-  uint8_t rx_buf_[RX_BUFFER_SIZE] __attribute__((section(".GpsRxBufferSection")));
+  uint8_t legacy_rx_buf[RX_BUFFER_SIZE] __attribute__((section(".GpsRxBufferSection")));
 #else
-  uint8_t rx_buf_[RX_BUFFER_SIZE];
+  uint8_t legacy_rx_buf[RX_BUFFER_SIZE];
 #endif
 #endif
 }
-void DynamixelSerial::init(UART_HandleTypeDef* huart, osMutexId* mutex)
+void DynamixelSerial::resetBus(UART_HandleTypeDef* huart, osMutexId* mutex, uint8_t* rx_buffer)
 {
+  rx_buf_ = rx_buffer;
 	huart_ = huart;
   mutex_ = mutex;
 	servo_num_ = 0;
@@ -32,9 +33,56 @@ void DynamixelSerial::init(UART_HandleTypeDef* huart, osMutexId* mutex)
 
         /* rx */
   rd_ptr_ = 0;
-  memset(rx_buf_, 0, sizeof(rx_buf_));
+  memset(rx_buf_, 0, RX_BUFFER_SIZE);
 
-	std::fill(servo_.begin(), servo_.end(), ServoData(255));
+  servo_.fill(ServoData{});
+  for (auto& servo : servo_) servo.id_ = 255;
+}
+
+bool DynamixelSerial::initRs485(UART_HandleTypeDef* huart, osMutexId* mutex, uint8_t* rx_buffer,
+                               uint8_t first_id, uint8_t count)
+{
+  if (!mutex || !*mutex || !rx_buffer || !count || count > MAX_SERVO_NUM ||
+      static_cast<unsigned>(first_id) + count > 253) return false;
+  fixed_rs485_ = true;
+  resetBus(huart, mutex, rx_buffer);
+  if (HAL_UART_DeInit(huart_) != HAL_OK) return false;
+  huart_->Init.BaudRate = 1000000;
+  huart_->Init.Mode = UART_MODE_TX_RX;
+  if (HAL_UART_Init(huart_) != HAL_OK || !huart_->hdmarx ||
+      HAL_UART_Receive_DMA(huart_, rx_buf_, RX_BUFFER_SIZE) != HAL_OK) return false;
+  __HAL_UART_DISABLE_IT(huart_, UART_IT_PE);
+  __HAL_UART_DISABLE_IT(huart_, UART_IT_ERR);
+
+  ping();
+  if (servo_num_ != count) return false;
+  // Use physical ID order so an absent or extra ID cannot shift the mapping.
+  std::sort(servo_.begin(), servo_.begin() + count,
+            [](const ServoData& a, const ServoData& b) {return a.id_ < b.id_;});
+  bool ready = true;
+  for (unsigned i = 0; i < count; ++i) {
+    ServoData& servo = servo_[i];
+    if (servo.id_ != first_id + i) return false;
+    servo.send_data_flag_ = 1;
+    servo.joint_resolution_ = servo.servo_resolution_ = 4096;
+    servo.resolution_ratio_ = 1;
+    servo.hardware_error_status_ = 255; // Unknown until the first successful diagnostic read.
+    CurrentBus bus(*this, servo.id_);
+    uint32_t limit = 0;
+    current_[i].managed = true;
+    const bool stopped = current_[i].stop(bus);
+    const bool limit_read = bus.read(CTRL_CURRENT_LIMIT, 2, limit);
+    servo.current_limit_ = limit;
+    ready = ready && stopped && limit_read;
+  }
+  // Mk-II does not register scan-indexed values in Spinal's legacy Flash layout.
+  return ready;
+}
+
+void DynamixelSerial::init(UART_HandleTypeDef* huart, osMutexId* mutex)
+{
+  resetBus(huart, mutex, legacy_rx_buf);
+  for (auto& servo : servo_) servo = ServoData(255);
 
         // scan to decide the comm (UART/ Half-duplex) mode
         pinReconfig();
@@ -335,8 +383,44 @@ uint8_t DynamixelSerial::getServoIndex(uint8_t id)
   return 0;
 }
 
+void DynamixelSerial::updateRs485()
+{
+  worker_running_ = true;
+  currentUpdate();
+  const uint32_t now = HAL_GetTick();
+  if (poll_index_ == 0) {
+    if (now - poll_started_ < GET_POS_DU) return;
+    poll_started_ = now;
+    position_received_.fill(false);
+  }
+  const unsigned index = poll_index_;
+  ServoData& servo = servo_[index];
+  uint32_t value;
+  if (now - diagnostics_tick_[index] >= 200 || servo.hardware_error_status_ == 255) {
+    diagnostics_tick_[index] = now;
+    servo.hardware_error_status_ = currentRead(servo.id_, CTRL_HARDWARE_ERROR_STATUS, 1, value, true)
+      ? static_cast<uint8_t>(value) : 255;
+    if (currentRead(servo.id_, CTRL_PRESENT_CURRENT, 2, value, true))
+      servo.present_current_ = static_cast<int16_t>(value);
+    if (currentRead(servo.id_, CTRL_PRESENT_TEMPERATURE, 1, value, true))
+      servo.present_temp_ = static_cast<uint8_t>(value);
+  }
+  if (currentRead(servo.id_, CTRL_PRESENT_POSITION, 4, value, true)) {
+    servo.setPresentPosition(static_cast<int32_t>(value));
+    position_received_[index] = true;
+  }
+  if (++poll_index_ == servo_num_) {
+    poll_index_ = 0;
+    setROSCommFlag(true);
+  }
+}
+
 void DynamixelSerial::update()
 {
+  if (fixed_rs485_) {
+    updateRs485();
+    return;
+  }
   /* skip if no servo is detected */
   if (servo_num_ == 0) return;
 
@@ -660,7 +744,9 @@ int8_t DynamixelSerial::readStatusPacket(uint8_t status_packet_instruction)
           HAL_HalfDuplex_EnableReceiver(huart_);
         }
 
-	while(!read_end_flag) {
+	const uint32_t packet_start = HAL_GetTick();
+  while(!read_end_flag) {
+    if (loop_count >= STATUS_PACKET_SIZE || HAL_GetTick() - packet_start >= 8) return -1;
 		HAL_StatusTypeDef receive_status = read(&rx_data, 1);
 		if(receive_status == HAL_TIMEOUT)
 			{
@@ -704,6 +790,7 @@ int8_t DynamixelSerial::readStatusPacket(uint8_t status_packet_instruction)
 			break;
 		case READ_LENH:
 			parameter_len |= ((rx_data << 8) & 0xFF00);
+      if (parameter_len < 5 || parameter_len > STATUS_PACKET_SIZE - 7) return -1;
 			status_stage++;
 			break;
 		case READ_INSTRUCTION:
@@ -781,7 +868,9 @@ int8_t DynamixelSerial::readStatusPacket(uint8_t status_packet_instruction)
 	/* read success */
 	switch (status_packet_instruction) {
 	case INST_PING:
-		if (servo_num_ < MAX_SERVO_NUM) servo_[servo_num_++].id_ = servo_id;
+		if (servo_num_ < MAX_SERVO_NUM &&
+        (!fixed_rs485_ || (parameter_index == 3 && s == servo_.end())))
+      servo_[servo_num_++].id_ = servo_id;
 	    return 0;
 	case INST_GET_PRESENT_POS:
 	{
@@ -1298,7 +1387,8 @@ HAL_StatusTypeDef DynamixelSerial::read(uint8_t* data,  uint32_t timeout)
 }
 
 // Direct UART current-control extension. Only the servo worker performs bus I/O.
-bool DynamixelSerial::currentRead(uint8_t id, uint16_t address, uint8_t size, uint32_t& value)
+bool DynamixelSerial::currentRead(uint8_t id, uint16_t address, uint8_t size, uint32_t& value,
+                                  bool allow_alert)
 {
   uint8_t byte;
   for (unsigned i=0; i<RX_BUFFER_SIZE && read(&byte,0)==HAL_OK; ++i) {}
@@ -1309,7 +1399,10 @@ bool DynamixelSerial::currentRead(uint8_t id, uint16_t address, uint8_t size, ui
   unsigned count=0, total=0;
   uint32_t start=HAL_GetTick();
   while (static_cast<uint32_t>(HAL_GetTick()-start)<8) {
-    if (read(&byte,0)!=HAL_OK) continue;
+    if (read(&byte,0)!=HAL_OK) {
+      if (worker_running_) osDelay(1);
+      continue;
+    }
     if (count<4) {
       if (byte==header[count]) packet[count++]=byte;
       else { count=(byte==255) ? 1 : 0; packet[0]=255; }
@@ -1321,7 +1414,7 @@ bool DynamixelSerial::currentRead(uint8_t id, uint16_t address, uint8_t size, ui
       if (total<11 || total>sizeof(packet)) { count=0; continue; }
     }
     if (total && count==total) {
-      if (spinal_current::decode(packet,count,id,size,value)) return true;
+      if (spinal_current::decode(packet,count,id,size,value,allow_alert)) return true;
       count=total=0;
     }
   }
@@ -1387,6 +1480,7 @@ void DynamixelSerial::currentUpdate()
   if (mutex_!=NULL && osMutexWait(*mutex_,100)!=osOK) return;
   if (current_pending_) {
     current_pending_=false; current_busy_=true;
+    if (mutex_!=NULL) osMutexRelease(*mutex_);
     const uint8_t index=current_index_;
     auto& session=current_[index];
     CurrentBus bus(*this,servo_[index].id_);
@@ -1412,6 +1506,7 @@ void DynamixelSerial::currentUpdate()
       }
     }
     if (current_cancel_) { session.stop(bus); success=false; }
+    if (mutex_!=NULL) osMutexWait(*mutex_,osWaitForever);
     current_result_.success=success;
     current_result_.status=session.status;
     current_result_.snapshot=session.snapshot;
@@ -1429,13 +1524,14 @@ void DynamixelSerial::currentUpdate()
   for (unsigned i=0; i<servo_num_; ++i) {
     if (!current_[i].managed) continue;
     CurrentBus bus(*this,servo_[i].id_);
-    if (current_commands_[i].pending) {
-      const auto command=current_commands_[i];
-      current_commands_[i].pending=false;
+    const auto command=current_commands_[i];
+    current_commands_[i].pending=false;
+    if (mutex_!=NULL) osMutexRelease(*mutex_);
+    if (command.pending)
       current_[i].command(bus,command.token,command.sequence,command.raw);
-    }
     current_[i].tick(bus);
     servo_[i].torque_enable_=current_[i].armed;
+    if (mutex_!=NULL) osMutexWait(*mutex_,osWaitForever);
   }
   if (mutex_!=NULL) osMutexRelease(*mutex_);
 }
