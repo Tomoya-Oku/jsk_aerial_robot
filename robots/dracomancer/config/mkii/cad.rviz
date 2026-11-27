@@ -4,7 +4,7 @@ Panels:
 Visualization Manager:
   Class: ""
   Global Options:
-    Fixed Frame: cad_view
+    Fixed Frame: world
     Background Color: 38; 38; 38
     Frame Rate: 30
   Displays:

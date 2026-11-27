@@ -4,14 +4,21 @@
   <arg name="motion" default="false"/>
   <arg name="panel" default="$(eval not arg('motion'))"/>
   <arg name="rviz" default="true"/>
-  <arg name="shape_config" default="$(find dracomancer)/config/control/shape.yaml"/>
+  <arg name="stock_shape_config" value="$(find dracomancer)/config/control/shape.yaml"/>
+  <arg name="shape_config" default="$(arg stock_shape_config)"/>
+  <arg name="assembly" default="false"/>
+  <arg name="geometry_only" default="false" doc="Preview geometric mapping in the ground simulator without flight feasibility gating."/>
+  <arg name="assembly_defaults" value="$(eval arg('assembly') and arg('shape_config') == arg('stock_shape_config'))"/>
   <arg name="mapping_mode" default="shape"/>
+  <arg name="assembly_alignment" value="$(eval [0.0, 0.0, -pi / 2 if arg('mapping_mode') == 'dual_shape' else pi])"/>
   <arg name="force_dimensions" default="2"/>
   <arg name="torso_point" default="[0, 0, 0]"/>
   <!-- Approved simulation proxy only; safety thresholds remain unchanged. -->
   <include file="$(find dracomancer)/launch/view.launch">
     <arg name="rviz" value="false"/>
     <arg name="panel" value="$(arg panel)"/>
+    <arg name="assembly" value="$(arg assembly)"/>
+    <arg name="mount_height" value="$(eval 0.35 if arg('assembly') else 1.0)"/>
   </include>
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(find aerial_robot_simulation)/gazebo_model/world/empty.world"/>
@@ -35,8 +42,19 @@
     <arg name="shape_config" value="$(arg shape_config)"/>
     <arg name="teleop_mode" value="true"/>
     <arg name="publish_joints_only_when_hovering" value="false"/>
+    <arg name="enable_feasibility_gate" value="$(eval not arg('geometry_only'))"/>
+    <arg name="enable_volume_radius_monitor" value="$(eval not arg('geometry_only'))"/>
+    <arg name="enable_fc_min_lowpass" value="$(eval not arg('geometry_only'))"/>
   </include>
-  <!-- Loaded after teleoperation's private YAML so the approved demo value wins. -->
+  <!-- Match the hand points to this assembly's left and right parts. -->
+  <rosparam command="load" ns="/dracomancer_control_joint_angle/shape"
+            file="$(find dracomancer)/config/control/assembly.yaml" if="$(arg assembly_defaults)"/>
+  <!-- Align the torso-to-shoulder (+X) or left-to-right (-Y) direction with DRAGON's -X. -->
+  <rosparam param="/dracomancer_control_joint_angle/shape/human_alignment" subst_value="true"
+            if="$(eval arg('assembly_defaults') and arg('mapping_mode') in ['shape', 'dual_shape'])">
+    $(arg assembly_alignment)
+  </rosparam>
+  <!-- Loaded after teleoperation's private YAML so the demo value wins. -->
   <rosparam param="/dracomancer_control_joint_angle/shape/torso_point"
             subst_value="true">$(arg torso_point)</rosparam>
   <node pkg="dracomancer" type="shape_input.py" name="shape_input" if="$(arg motion)"/>

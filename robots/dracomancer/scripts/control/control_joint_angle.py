@@ -142,7 +142,8 @@ class ControlJoints(ShapeRuntime):
 
     def robot_flight_state_cb(self, msg):
         self.robot_hovering = int(msg.data) == self.hover_flight_state
-        if not self.robot_hovering:
+        # Ground demos keep publishing with the same rate limiter.
+        if self.publish_only_when_hovering and not self.robot_hovering:
             self.last_command_stamp = None
 
     def mapped_target(self):

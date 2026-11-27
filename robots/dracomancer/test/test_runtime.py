@@ -292,6 +292,18 @@ class RuntimeTest(unittest.TestCase):
             n.last_command_stamp = previous
             self.assertTrue(np.all(np.abs(n.rate_limit([1]*6)) <= bound+1e-12))
 
+    def test_ground_flight_state_preserves_demo_rate_limit_history(self):
+        n = self.control.ControlJoints.__new__(self.control.ControlJoints)
+        n.hover_flight_state = 5
+        ground = SimpleNamespace(data=0)
+        for hover_required in (False, True):
+            with self.subTest(hover_required=hover_required):
+                n.publish_only_when_hovering = hover_required
+                n.last_command_stamp = Stamp(9.975)
+                n.robot_flight_state_cb(ground)
+                self.assertFalse(n.robot_hovering)
+                self.assertEqual(n.last_command_stamp, None if hover_required else Stamp(9.975))
+
     def test_recheck_rejection_requires_recovery_next_cycle(self):
         n = self.control.ControlJoints.__new__(self.control.ControlJoints)
         n.enable_feasibility_gate = n.teleop_mode = True

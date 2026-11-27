@@ -1,0 +1,11 @@
+# Simulation points in assembly.urdf link frames. Each hand uses its CAD mass center.
+human_points:
+  - {link: right_link1_shoulder, xyz: [0, 0, 0]}
+  - {link: right_link4_lower_arm_upper, xyz: [0, 0, 0]}
+  - {link: right_link6_wrist_upper, xyz: [0, 0, 0]}
+  - {link: right_link7_wrist_lower, xyz: [-0.0606174417, -0.0146671814, 0.0442306802]}
+left_human_points:
+  - {link: left_link1_shoulder, xyz: [0, 0, 0]}
+  - {link: left_link4_lower_arm_upper, xyz: [0, 0, 0]}
+  - {link: left_link6_wrist_upper, xyz: [0, 0, 0]}
+  - {link: left_link7_wrist_lower, xyz: [0.0606160647, -0.0146671960, 0.0442306802]}

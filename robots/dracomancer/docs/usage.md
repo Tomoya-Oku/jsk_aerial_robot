@@ -24,6 +24,8 @@ roslaunch dracomancer bringup.launch backend:=gazebo
 マネキンを除いた両腕モデルを表示する。[表示用URDF](../urdf/assembly.urdf)の全関節角が
 ゼロのとき、関節姿勢はCADの保存状態と一致する。RVizでは肩が上になるよう
 モデル全体を90度回転して表示する。表示用の名前空間は`/dracomancer_cad`。
+別ウィンドウの`Angles [rad]`タブで、左右14関節を個別に操作できる。
+DRAGONと組み合わせる場合は[地上デモ](shape.md#地上デモ)を参照。
 
 実機は`backend:=hardware config:=/absolute/path/to/hardware.yaml`を指定し、[実機手順](hardware.md)に従う。
 bridgeも起動する場合だけ`connect_fc:=true fc_serial_port:=/dev/ttyUSB0`を加える。
