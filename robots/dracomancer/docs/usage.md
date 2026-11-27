@@ -22,7 +22,8 @@ roslaunch dracomancer bringup.launch backend:=gazebo
 
 `roslaunch dracomancer cad.launch`で、2026年11月27日保存のSolidWorksアセンブリから
 マネキンを除いた両腕モデルを表示する。[表示用URDF](../urdf/assembly.urdf)の全関節角が
-ゼロのとき、CADの保存姿勢と一致する。表示用の名前空間は`/dracomancer_cad`。
+ゼロのとき、関節姿勢はCADの保存状態と一致する。RVizでは肩が上になるよう
+モデル全体を90度回転して表示する。表示用の名前空間は`/dracomancer_cad`。
 
 実機は`backend:=hardware config:=/absolute/path/to/hardware.yaml`を指定し、[実機手順](hardware.md)に従う。
 bridgeも起動する場合だけ`connect_fc:=true fc_serial_port:=/dev/ttyUSB0`を加える。

@@ -4,7 +4,7 @@ Panels:
 Visualization Manager:
   Class: ""
   Global Options:
-    Fixed Frame: base_link
+    Fixed Frame: cad_view
     Background Color: 38; 38; 38
     Frame Rate: 30
   Displays:
@@ -13,7 +13,7 @@ Visualization Manager:
       Enabled: true
       Plane Cell Count: 12
       Cell Size: 0.15
-      Offset: {X: 0.35, Y: 0.0, Z: -0.22}
+      Offset: {X: 0.0, Y: 0.0, Z: 0.08}
     - Class: rviz/RobotModel
       Name: Dracomancer Mk-II
       Enabled: true
@@ -24,9 +24,9 @@ Visualization Manager:
     Current:
       Class: rviz/Orbit
       Distance: 1.65
-      Focal Point: {X: 0.39, Y: 0.0, Z: -0.02}
-      Pitch: 0.40
-      Yaw: 3.60
+      Focal Point: {X: 0.025, Y: 0.0, Z: 0.39}
+      Pitch: 0.18
+      Yaw: 3.45
 Window Geometry:
   Width: 1100
   Height: 800
