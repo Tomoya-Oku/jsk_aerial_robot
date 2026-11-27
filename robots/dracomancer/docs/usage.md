@@ -20,6 +20,10 @@ roslaunch dracomancer bringup.launch backend:=gazebo
 個別の`view.launch`・`gazebo.launch`・`hardware.launch`も利用できる。
 標準名前空間は`/dracomancer`。右腕・左腕のCAD関節名と通信仕様は[デバイス設計](device.md)を参照する。
 
+`roslaunch dracomancer cad.launch`で、2026年11月27日保存のSolidWorksアセンブリから
+マネキンを除いた両腕モデルを表示する。[表示用URDF](../urdf/assembly.urdf)の全関節角が
+ゼロのとき、CADの保存姿勢と一致する。表示用の名前空間は`/dracomancer_cad`。
+
 実機は`backend:=hardware config:=/absolute/path/to/hardware.yaml`を指定し、[実機手順](hardware.md)に従う。
 bridgeも起動する場合だけ`connect_fc:=true fc_serial_port:=/dev/ttyUSB0`を加える。
 通常は既存のSpinal rosserial bridgeへ接続し、ファームウェアを書き込まない。

@@ -1,0 +1,32 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Global Options:
+    Fixed Frame: base_link
+    Background Color: 38; 38; 38
+    Frame Rate: 30
+  Displays:
+    - Class: rviz/Grid
+      Name: Grid
+      Enabled: true
+      Plane Cell Count: 12
+      Cell Size: 0.15
+      Offset: {X: 0.35, Y: 0.0, Z: -0.22}
+    - Class: rviz/RobotModel
+      Name: Dracomancer Mk-II
+      Enabled: true
+      Robot Description: robot_description
+      Visual Enabled: true
+      Collision Enabled: false
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 1.65
+      Focal Point: {X: 0.39, Y: 0.0, Z: -0.02}
+      Pitch: 0.40
+      Yaw: 3.60
+Window Geometry:
+  Width: 1100
+  Height: 800
