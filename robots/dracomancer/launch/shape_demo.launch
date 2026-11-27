@@ -9,6 +9,9 @@
   <arg name="assembly" default="false"/>
   <arg name="geometry_only" default="false" doc="Preview geometric mapping in the ground simulator without flight feasibility gating."/>
   <arg name="assembly_defaults" value="$(eval arg('assembly') and arg('shape_config') == arg('stock_shape_config'))"/>
+  <arg name="display_gap" default="2.0" doc="Distance between the two model origins in RViz, in metres."/>
+  <arg name="display_height" value="$(eval 0.35 if arg('assembly') else 1.0)"/>
+  <arg name="comparison_origin" value="$(eval [0.0, arg('display_gap') / 2.0, 1.55])"/>
   <arg name="mapping_mode" default="shape"/>
   <arg name="assembly_alignment" value="$(eval [0.0, 0.0, -pi / 2 if arg('mapping_mode') == 'dual_shape' else pi])"/>
   <arg name="force_dimensions" default="2"/>
@@ -18,7 +21,7 @@
     <arg name="rviz" value="false"/>
     <arg name="panel" value="$(arg panel)"/>
     <arg name="assembly" value="$(arg assembly)"/>
-    <arg name="mount_height" value="$(eval 0.35 if arg('assembly') else 1.0)"/>
+    <arg name="mount_height" value="$(arg display_height)"/>
   </include>
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(find aerial_robot_simulation)/gazebo_model/world/empty.world"/>
@@ -33,6 +36,17 @@
     <arg name="spawn_y" value="1.2"/>
     <arg name="preflight_joint_control" value="true"/>
   </include>
+  <!-- Reuse measured DRAGON joints with a fixed root for the comparison view. -->
+  <group ns="dragon">
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="display_state">
+      <param name="tf_prefix" value="dragon_view"/>
+    </node>
+    <node pkg="aerial_robot_model" type="rotor_tf_publisher" name="display_rotors">
+      <param name="tf_prefix" value="dragon_view"/>
+    </node>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="display_mount"
+          args="0 $(arg display_gap) $(arg display_height) 0 0 0 world dragon_view/root"/>
+  </group>
   <node pkg="rviz" type="rviz" name="shape_rviz" if="$(arg rviz)"
         args="-d $(find dracomancer)/config/control/shape.rviz"/>
   <include file="$(find dracomancer)/launch/teleoperation.launch">
@@ -57,5 +71,8 @@
   <!-- Loaded after teleoperation's private YAML so the demo value wins. -->
   <rosparam param="/dracomancer_control_joint_angle/shape/torso_point"
             subst_value="true">$(arg torso_point)</rosparam>
+  <param name="/dracomancer_control_joint_angle/dragon_marker_frame" value="dragon_view/link4"/>
+  <rosparam param="/dracomancer_control_joint_angle/shape_marker_origin"
+            subst_value="true">$(arg comparison_origin)</rosparam>
   <node pkg="dracomancer" type="shape_input.py" name="shape_input" if="$(arg motion)"/>
 </launch>

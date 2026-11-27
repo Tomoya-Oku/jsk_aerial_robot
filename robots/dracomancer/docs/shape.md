@@ -27,6 +27,8 @@ Mk-II viewerとDRAGON Gazeboを起動する。離陸も偽のHOVER配信も行�
 
 手動入力は右腕`right_joint_1..7`。左腕は写像入力に使用しない。
 RVizには両モデル、物理端点、等弧長点、重ねた正規化中心線を表示する。水色が人体、橙色がDRAGON。
+RVizでは両モデルの基準位置を2 m離して固定する。`display_gap:=2.5`のように間隔を変更できる。
+DRAGONの表示にはGazeboの関節角を使う。
 両腕を写像入力にするには`mapping_mode:=dual_shape`を指定する。
 `assembly:=true`の標準設定では、左右それぞれの手先点に新しいCADの手先リンク重心を使う。
 片腕では体幹から肩への正方向を、両腕では左から右への方向を、DRAGONの尾側座標系に合わせる。

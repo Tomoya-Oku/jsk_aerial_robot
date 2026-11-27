@@ -36,6 +36,8 @@ class ShapeRuntime:
         self.shape_result = dict(ok=False, status="waiting")
         self.shape_human = None
         self.shape_marker_stamp = None
+        self.dragon_marker_frame = rospy.get_param("~dragon_marker_frame", self.robot_name + "/link4")
+        self.shape_marker_origin = vector(rospy.get_param("~shape_marker_origin", [0, -2, 1.5]), 3)
         self.shape_diagnostic_pub = rospy.Publisher(self.device_ns + "/shape/diagnostics", String, queue_size=1)
         self.shape_rmse_pub = rospy.Publisher(self.device_ns + "/shape/rmse", Float64, queue_size=1)
         self.shape_markers_pub = rospy.Publisher(self.device_ns + "/shape/markers", MarkerArray, queue_size=1)
@@ -243,10 +245,10 @@ class ShapeRuntime:
         self.shape_marker_stamp = now
         markers = []
         human_points = self.shape_mapper.human.points(self.latest_device_joints) if self.shape_input_ready() else None
-        series = [(self.shape_human, "world", [0, -2, 1.5], (0.1, .8, 1.)),
-                  (robot, "world", [0, -2, 1.5], (1., .5, .1)),
+        series = [(self.shape_human, "world", self.shape_marker_origin, (0.1, .8, 1.)),
+                  (robot, "world", self.shape_marker_origin, (1., .5, .1)),
                   (human_points, self.shape_mapper.human.base, [0, 0, 0], (.1, .8, 1.)),
-                  (self.shape_mapper.dragon.points(self.current_target), self.robot_name + "/link4",
+                  (self.shape_mapper.dragon.points(self.current_target), self.dragon_marker_frame,
                    self.shape_mapper.dragon.tail, (1., .5, .1))]
         for index, (points, frame, offset, color) in enumerate(series):
             if points is None:
