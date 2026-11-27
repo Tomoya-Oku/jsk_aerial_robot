@@ -25,6 +25,7 @@ roslaunch dracomancer bringup.launch backend:=gazebo
 ゼロのとき、関節姿勢はCADの保存状態と一致する。RVizでは肩が上になるよう
 モデル全体を90度回転して表示する。表示用の名前空間は`/dracomancer_cad`。
 別ウィンドウの`Angles [rad]`タブで、左右14関節を個別に操作できる。
+同番号の左右関節に同じ角度を入れると、それぞれのCAD基準姿勢から鏡像方向へ回転する。
 DRAGONと組み合わせる場合は[地上デモ](shape.md#地上デモ)を参照。
 
 実機は`backend:=hardware config:=/absolute/path/to/hardware.yaml`を指定し、[実機手順](hardware.md)に従う。
