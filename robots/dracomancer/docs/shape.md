@@ -13,6 +13,8 @@ roslaunch dracomancer shape_demo.launch
 roslaunch dracomancer shape_demo.launch assembly:=true geometry_only:=true
 # 同じ肩・肘入力を繰り返す。スライダを同時操作しない。
 roslaunch dracomancer shape_demo.launch motion:=true
+# 新CADの左右の腕を、肩・肘・手首を連動させたランダム軌道で動かす。
+roslaunch dracomancer shape_demo.launch assembly:=true geometry_only:=true motion:=true motion_pattern:=natural
 # 画面なし
 roslaunch dracomancer shape_demo.launch motion:=true gui:=false rviz:=false
 ```
@@ -27,6 +29,7 @@ Mk-II viewerとDRAGON Gazeboを起動する。離陸も偽のHOVER配信も行�
 
 `assembly:=true`では、左右14関節を使う両腕形状写像（`dual_shape`）が標準。
 `mapping_mode:=shape`を指定すると右腕7関節を使う。
+`motion_pattern:=natural`の動きは`motion_seed`（既定は27）で再現できる。
 RVizには両モデル、物理端点、等弧長点、重ねた正規化中心線を表示する。水色が人体、橙色がDRAGON。
 RVizでは両モデルの基準位置を2 m離して固定する。`display_gap:=2.5`のように間隔を変更できる。
 DRAGONの表示にはGazeboの関節角を使う。

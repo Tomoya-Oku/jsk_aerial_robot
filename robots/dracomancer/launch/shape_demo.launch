@@ -2,6 +2,8 @@
   <!-- Ground-only simulation: no takeoff or fictitious HOVER state. -->
   <arg name="gui" default="true"/>
   <arg name="motion" default="false"/>
+  <arg name="motion_pattern" default="sine"/>
+  <arg name="motion_seed" default="27"/>
   <arg name="panel" default="$(eval not arg('motion'))"/>
   <arg name="rviz" default="true"/>
   <arg name="stock_shape_config" value="$(find dracomancer)/config/control/shape.yaml"/>
@@ -74,5 +76,8 @@
   <param name="/dracomancer_control_joint_angle/dragon_marker_frame" value="dragon_view/link4"/>
   <rosparam param="/dracomancer_control_joint_angle/shape_marker_origin"
             subst_value="true">$(arg comparison_origin)</rosparam>
-  <node pkg="dracomancer" type="shape_input.py" name="shape_input" if="$(arg motion)"/>
+  <node pkg="dracomancer" type="shape_input.py" name="shape_input" if="$(arg motion)">
+    <param name="pattern" value="$(arg motion_pattern)"/>
+    <param name="seed" type="int" value="$(arg motion_seed)"/>
+  </node>
 </launch>
