@@ -12,7 +12,7 @@
   <arg name="display_gap" default="2.0" doc="Distance between the two model origins in RViz, in metres."/>
   <arg name="display_height" value="$(eval 0.35 if arg('assembly') else 1.0)"/>
   <arg name="comparison_origin" value="$(eval [0.0, arg('display_gap') / 2.0, 1.55])"/>
-  <arg name="mapping_mode" default="shape"/>
+  <arg name="mapping_mode" default="$(eval 'dual_shape' if arg('assembly') else 'shape')"/>
   <arg name="assembly_alignment" value="$(eval [0.0, 0.0, -pi / 2 if arg('mapping_mode') == 'dual_shape' else pi])"/>
   <arg name="force_dimensions" default="2"/>
   <arg name="torso_point" default="[0, 0, 0]"/>

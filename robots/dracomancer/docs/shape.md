@@ -9,7 +9,7 @@ Catkin workspaceでビルド・sourceしてから実行する。
 
 ```bash
 roslaunch dracomancer shape_demo.launch
-# 2026年11月27日版のCADモデルで幾何写像を確認する。
+# 2026年11月27日版のCADモデルで両腕の幾何写像を確認する。
 roslaunch dracomancer shape_demo.launch assembly:=true geometry_only:=true
 # 同じ肩・肘入力を繰り返す。スライダを同時操作しない。
 roslaunch dracomancer shape_demo.launch motion:=true
@@ -25,11 +25,11 @@ Mk-II viewerとDRAGON Gazeboを起動する。離陸も偽のHOVER配信も行�
 `geometry_only:=true`は地上シミュレーションで形状写像の反応を見るための設定。
 このときも関節角と速度の制限を適用する。飛行可能性の評価には`geometry_only:=false`を使う。
 
-手動入力は右腕`right_joint_1..7`。左腕は写像入力に使用しない。
+`assembly:=true`では、左右14関節を使う両腕形状写像（`dual_shape`）が標準。
+`mapping_mode:=shape`を指定すると右腕7関節を使う。
 RVizには両モデル、物理端点、等弧長点、重ねた正規化中心線を表示する。水色が人体、橙色がDRAGON。
 RVizでは両モデルの基準位置を2 m離して固定する。`display_gap:=2.5`のように間隔を変更できる。
 DRAGONの表示にはGazeboの関節角を使う。
-両腕を写像入力にするには`mapping_mode:=dual_shape`を指定する。
 `assembly:=true`の標準設定では、左右それぞれの手先点に新しいCADの手先リンク重心を使う。
 片腕では体幹から肩への正方向を、両腕では左から右への方向を、DRAGONの尾側座標系に合わせる。
 
