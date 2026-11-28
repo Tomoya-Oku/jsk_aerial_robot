@@ -25,7 +25,7 @@ add_dependencies(shape_feasibility_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${ca
 target_link_libraries(shape_feasibility_node ${catkin_LIBRARIES} ${NLOPT_LIBRARIES})
 catkin_install_python(PROGRAMS scripts/mkii/control.py scripts/mkii/panel.py scripts/mkii/direct.py scripts/mkii/observe.py
   scripts/control/wall.py scripts/control/control_joint_angle.py scripts/control/shape_input.py
-  scripts/control/control_position.py scripts/control/feedback.py
+  scripts/control/control_position.py scripts/control/feedback.py scripts/device_io/joystick.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(TARGETS wall_contact LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
 install(TARGETS shape_feasibility_node RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})

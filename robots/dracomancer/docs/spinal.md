@@ -14,10 +14,19 @@ Dracomancer用bridgeでは、ファームウェアの相対名を`/dracomancer`�
 | モード | `/dracomancer/right/direct_servo_mode` | `/dracomancer/left/direct_servo_mode` |
 | 接続情報 | `/dracomancer/right/get_board_info` | `/dracomancer/left/get_board_info` |
 | Joystick | I2C1、`/dracomancer/right/joystick/raw` | I2C3、`/dracomancer/left/joystick/raw` |
+| Joystickの標準ROS形式 | `/dracomancer/right/joystick/joy` | `/dracomancer/left/joystick/joy` |
 | Joystick校正出力 | `/dracomancer/right/joystick/calibrated` | `/dracomancer/left/joystick/calibrated` |
 
 Joystickの押下は各`calibrated/pressed`に配信する。bridgeはファームウェアの`joystick/raw`と
 `joystick/left/raw`を左右別のパスにリマップする。
+
+U024-V2の`raw`は`[Xの差分カウント, Yの差分カウント, ボタンレベル]`。
+Spinalは起動時の中心をX・Yから引き、レジスタ`0x20`のボタンを未押下`1`・押下`0`で送る。
+Dracomancer用bridgeは各`raw`を`joy`（`sensor_msgs/Joy`）に変換する。
+`axes[0:2]`はX・Yで、`int16`の範囲を`-1`〜`1`へ線形換算する。
+`buttons[0]`は押下`1`・未押下`0`。タイムスタンプはホストの受信時刻。
+実測した可動範囲やデッドゾーンを適用した値は`calibrated`を使う。
+[M5Stack公式実装](https://github.com/m5stack/esphome-yaml/blob/main/components/i2c_joystick_2/i2c_joystick_2.cpp)
 
 各ドライバは専用のDMAバッファと通信タスクを持つ。起動時に各バスの7台と物理IDを照合し、scan indexを0〜6に割り当てる。
 既存メッセージの時刻は位置読取の一巡を始めた時点を表す。応答した軸を配信し、欠損した軸の古い値は再配信しない。

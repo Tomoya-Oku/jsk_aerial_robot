@@ -12,4 +12,7 @@
       <arg name="serial_baud" value="$(arg serial_baud)"/>
     </include>
   </group>
+  <include file="$(find dracomancer)/launch/joystick.launch">
+    <arg name="spinal_ns" value="$(arg spinal_ns)"/>
+  </include>
 </launch>
