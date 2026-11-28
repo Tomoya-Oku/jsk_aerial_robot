@@ -328,8 +328,7 @@ int main(void)
   controller_.init(&htim1, &htim4, &estimator_, dshotptr, servoptr, &battery_status_, &nh_, &flightControlMutexHandle);
 
   bool nerve_connect = Spine::init(&hfdcan1, &nh_, &estimator_, &controller_, LED1_GPIO_Port, LED1_Pin);
-
-  if (nerve_connect) Spine::useRTOS(&canMsgMailHandle);  // use RTOS for CAN in spianl
+  if(nerve_connect) Spine::useRTOS(&canMsgMailHandle); // use RTOS for CAN in spianl
 
   /* USER CODE END 2 */
 
@@ -1330,7 +1329,7 @@ void coreTaskFunc(void const * argument)
         }
     }
 
-    /* USER CODE END 5 */
+  /* USER CODE END 5 */
 }
 
 /* USER CODE BEGIN Header_rosSpinTaskFunc */
