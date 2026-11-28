@@ -9,6 +9,14 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 
+try:
+    from ._shape_kernel import sample_centerlines as _sample_centerlines
+except ModuleNotFoundError as error:
+    if error.name != 'control._shape_kernel':
+        raise
+    # The numerical Python code also supports analysis from a source checkout.
+    _sample_centerlines = None
+
 DRAGON_JOINTS = ["joint%d_%s" % (i, axis)
                  for i in range(1, 4) for axis in ("pitch", "yaw")]
 
@@ -209,11 +217,60 @@ class DragonChain:
     """
     def __init__(self, model, tail):
         self.model = model
-        self.tail = vector(tail, 3)
+        self.tail = np.ascontiguousarray(vector(tail, 3))
         self.chain = model.chain("link1", "link4")
         if [j["name"] for j in self.chain if j["kind"] != "fixed"] != DRAGON_JOINTS:
             raise ValueError("unexpected DRAGON joint order")
         self.lower, self.upper, self.velocity = model.limits(DRAGON_JOINTS)
+        self.native_chain = None
+        self.native_frames = None
+        if _sample_centerlines is not None:
+            self.native_chain = self.pack_chain(self.chain)
+            try:
+                frames = [self.pack_chain(model.chain('link1', link)) for link in ('fc', 'inter_joint2')]
+            except ValueError:
+                # Preserve root-based FK for an alternative layout.
+                frames = [None, None]
+            if all(frame is not None for frame in frames):
+                self.native_frames = frames
+
+    @staticmethod
+    def pack_chain(chain):
+        fields = []
+        for joint in chain:
+            if joint['kind'] == 'fixed':
+                index = -1
+            elif joint['kind'] in ('continuous', 'revolute') and joint['name'] in DRAGON_JOINTS:
+                index = DRAGON_JOINTS.index(joint['name'])
+            else:
+                return None
+            pose = joint['origin']
+            axis = joint['axis'] / np.linalg.norm(joint['axis'])
+            fields.append(np.r_[pose[:3, :3].ravel(), pose[:3, 3], axis, index])
+        return np.asarray(fields, dtype=float).reshape(-1, 16)
+
+    def centerlines(self, angles, samples, alignment, centered):
+        angles = np.ascontiguousarray(angles, dtype=float)
+        if angles.ndim != 2 or angles.shape[1] != 6 or not np.all(np.isfinite(angles)):
+            raise ValueError("invalid joint angle batch")
+        if centered and (np.any(angles < self.lower - 1e-8) or np.any(angles > self.upper + 1e-8)):
+            raise ValueError("input joint outside URDF limits")
+        if not len(angles):
+            return np.empty((0, samples, 3))
+        if _sample_centerlines is not None and self.native_chain is not None and (not centered or self.native_frames is not None):
+            empty = self.native_chain[:0]
+            fc, mid = self.native_frames if centered else (empty, empty)
+            result = np.empty((len(angles), samples, 3))
+            _sample_centerlines(angles, self.native_chain, fc, mid, self.tail,
+                                np.ascontiguousarray(alignment, dtype=float), result, centered)
+            return result
+        if centered:
+            points = (self.points_mid(q) for q in angles)
+            origin = [0, 0, 0]
+        else:
+            points = [self.points(angles[0])] if len(angles) == 1 else self.point_batch(angles)
+            origin = None
+        return np.array([centerline(line, samples, alignment, origin) for line in points])
 
     def points_mid(self, q):
         """Tail-to-head polyline, in fixed FC axes about joint2_pitch."""
@@ -278,6 +335,7 @@ class ShapeMapper:
     is_shape = True
     def __init__(self, human, dragon, config, rest):
         self.human, self.dragon, self.config = human, dragon, config
+        self.centered = isinstance(human, BimanualHumanChain)
         self.samples = int(config.get("samples", 20))
         self.weights = vector(config.get("weights", [1.] * self.samples), self.samples)
         if np.any(self.weights < 0) or self.weights.sum() <= 0:
@@ -300,10 +358,7 @@ class ShapeMapper:
             raise ValueError("rest pose outside DRAGON limits")
 
     def dragon_shape(self, q):
-        if isinstance(self.human, BimanualHumanChain):
-            return centerline(self.dragon.points_mid(q), self.samples, self.dragon_alignment, origin=[0, 0, 0])
-        return centerline(self.dragon.points(q), self.samples,
-                          self.dragon_alignment)
+        return self.dragon.centerlines([q], self.samples, self.dragon_alignment, self.centered)[0]
 
     def human_shape(self, values):
         return centerline(self.human.points(values), self.samples,
@@ -335,10 +390,7 @@ class ShapeMapper:
             steps = np.where(q+self.epsilon <= self.dragon.upper, self.epsilon, -self.epsilon)
             perturbed = np.tile(q, (6, 1))
             perturbed[np.arange(6), np.arange(6)] += steps
-            shapes = (np.asarray([self.dragon_shape(v) for v in perturbed])
-                      if isinstance(self.human, BimanualHumanChain) else
-                      np.asarray([centerline(points, self.samples, self.dragon_alignment)
-                                  for points in self.dragon.point_batch(perturbed)]))
+            shapes = self.dragon.centerlines(perturbed, self.samples, self.dragon_alignment, self.centered)
             residuals = (shapes-target).reshape(6, -1)*self.sqrt_w
             jac = ((residuals-residual_q)/steps[:, None]).T
             lhs = jac.T.dot(jac) + (self.lam + self.rho + self.damping) * np.eye(6)

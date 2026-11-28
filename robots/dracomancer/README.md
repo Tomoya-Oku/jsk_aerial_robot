@@ -35,6 +35,7 @@ roslaunch dracomancer shape_demo.launch
 | `scripts/simulation/` | viewer／Gazeboの関節制御、地上デモの入力、接触壁 |
 | `scripts/control/` | 形態写像・接触計算・出力排他を共用するPythonモジュール |
 | `src/feasibility/` | 候補形態の可行性を評価するROSサービス |
+| `src/kinematics/` | 順運動学と中心線サンプリングのPython拡張 |
 | `src/simulation/` | Gazeboの壁接触プラグイン |
 | `figures/scripts/` | オフラインの作図スクリプト |
 | `figures/YYYYMMDD_HHMMSS_名前/` | 保存対象の図・CSV・集計・録画 |

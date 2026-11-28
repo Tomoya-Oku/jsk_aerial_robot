@@ -55,6 +55,7 @@ ROS 1の`dracomancer`パッケージにモデル・GUI・直結制御・形状�
 | `src/feasibility/allocation.cpp` | 静的な釣合いから推力とジンバル角を反復推定 |
 | `src/feasibility/feedback.cpp` | ジンバル・基部姿勢のフィードバック受信と鮮度判定 |
 | `src/feasibility/wrench.cpp`、`wrench_math.h` | 接触・重力を含む必要レンチ、符号付き余裕、有界共通推力配分の評価 |
+| `src/kinematics/shape_kernel.cpp` | DRAGONの順運動学と中心線サンプリングをまとめて実行するPython拡張 |
 | `src/simulation/wall_contact.cpp` | Gazeboの接触からLink1先端のレンチを配信するプラグイン |
 
 ## 上肢形状の取得
@@ -90,6 +91,8 @@ q_{ref}=\arg\min_{q\in\mathcal Q_{joint}}
 有限差分ヤコビアン、減衰付き最小二乗、境界への投影、バックトラッキング、前回解からのwarm startを用いる。
 
 設定の正本は`config/control/shape.yaml`。既定は20点、最適化10 Hz、最大1反復、時間予算20 ms、指令ループ40 Hz。
+反復中に繰り返すDRAGONの順運動学と等弧長サンプリングは`src/kinematics/shape_kernel.cpp`がまとめて計算する。
+Python側は人体モデル、最適化と時間予算、飛行可能性のゲートを扱う。Catkinビルドでは同じPython ABIの開発ヘッダーが必要。
 最適化結果を周期内・更新周期間で共有し、診断のために解を再度進めない。
 体幹点・人体代表点・固定軸合わせの設定方法は[形状操作](shape.md)にまとめる。
 
