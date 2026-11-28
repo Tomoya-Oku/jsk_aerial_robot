@@ -100,6 +100,26 @@ Mk-II単体Gazebo、DRAGONの別Gazebo、重複する形態指令ノードを同
 ソースを取得したworkspaceで、変更内容に応じて次を使う。
 テストは`test/`へ集約し、Mk-II固有のモデル・直結制御・GUI検証は`test/mkii/`に置く。
 
+### テストファイル一覧
+
+| ファイル | 用途 |
+|---|---|
+| `test_contact.py` | 接触力のモーメント基準点、接触Jacobian、力覚への変換を数値で検証する。 |
+| `test_haptics.py` | 接触・制約力覚の計算、トルク制限、変化率制限を検証する。 |
+| `test_output.py` | 同じROS出力を複数プロセスが取得した場合の排他を検証する。 |
+| `test_runtime.py` | 模擬ROSで計測鮮度、指令の所有、Spinalの左右経路、ゲートと停止条件を検証する。 |
+| `test_shape.py` | URDFの順運動学、片腕・両腕写像、最適化、姿勢入力欠損時の保持を検証する。 |
+| `test_theory.py` | 必要レンチ、接触力覚、基準点補償と視点基準の操作式を検証する。 |
+| `wrench.cpp` | C++の力・トルク余裕、可行な共通配分、境界条件を検証する。 |
+| `gazebo.sh`、`test_gazebo.py` | Gazeboの壁接触プラグインを起動し、力・モーメントの符号と座標を検証する。 |
+| `demo_probe.py` | 起動済みの地上デモを購読し、関節指令、速度上限、Gazebo実測とTFの整合を確認する。 |
+| `mkii/model.py` | CAD基準とXacroの関節・慣性・衝突形状・STLを照合する。 |
+| `mkii/current.py` | XM430の電流換算、モード切替、停止時のレジスタ操作を模擬バスで確認する。 |
+| `mkii/run.sh` | viewer・Gazebo・模擬Spinalの試験用ROS masterを起動し、以下の各テストを実行する。 |
+| `mkii/view_test.py` | viewerで左右14関節の角度表示と無効な入力の扱いを確認する。 |
+| `mkii/simulation.py` | Gazeboで角度追従、トルク切替、GUI、指令切れによる停止を確認する。 |
+| `mkii/direct_test.py` | 模擬Spinalで実機向けの準備・ARM・電流指令・停止・復旧を確認する。 |
+
 ```bash
 python3 -B src/jsk_aerial_robot/robots/dracomancer/test/mkii/model.py
 python3 -B src/jsk_aerial_robot/robots/dracomancer/test/mkii/current.py
@@ -129,3 +149,14 @@ bash src/jsk_aerial_robot/robots/dracomancer/test/gazebo.sh
 `direct`試験は偽Spinalを使い、実サーボへ接続しない。
 単体試験はCAD整合・数値処理・入力監視の確認で、実際の通信断、物理停止、飛行安定性の検証とは区別する。
 未確認事項と次に必要な評価は[残作業](roadmap.md#再検証が必要な範囲)にまとめる。
+
+## ROSサービス定義
+
+`srv/ShapeFeasibility.srv`は、DRAGONの候補関節角が飛行可能性のゲートを満たすか評価するサービスの型定義。
+`shape_feasibility_node`が既定で`/dragon/shape_feasibility/check_shape`を提供し、
+`control_joint_angle.py`が候補形態と速度制限後の発行候補を検査する。
+
+| 方向 | 主な内容 |
+|---|---|
+| リクエスト | 関節名と候補角、必要に応じて接触レンチ、接触点、再評価で使う固定済みのジンバル角と姿勢。 |
+| レスポンス | 力・トルクの余裕半径、釣合い判定`stability_ok`、計算の有効性`valid`、再評価用のジンバル角・姿勢と座標情報。 |
