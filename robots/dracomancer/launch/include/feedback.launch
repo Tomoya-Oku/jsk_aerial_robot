@@ -1,0 +1,18 @@
+<launch>
+  <arg name="robot_ns"/>
+  <arg name="target_ns"/>
+  <arg name="mapping_mode"/>
+  <arg name="anchor_mode"/>
+  <arg name="shape_config"/>
+  <arg name="hardware"/>
+
+  <node pkg="dracomancer" type="feedback.py" name="$(arg robot_ns)_feedback" output="screen">
+    <param name="device_ns" value="/$(arg robot_ns)" />
+    <param name="robot_name" value="$(arg target_ns)" />
+    <param name="mapping_mode" value="$(arg mapping_mode)" />
+    <param name="anchor_mode" value="$(arg anchor_mode)" />
+    <param name="hardware" value="$(arg hardware)"/>
+    <remap if="$(arg hardware)" from="/$(arg robot_ns)/torque_cmd" to="/$(arg robot_ns)/haptic_torque"/>
+    <rosparam command="load" file="$(arg shape_config)" />
+  </node>
+</launch>

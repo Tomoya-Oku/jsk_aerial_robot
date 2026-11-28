@@ -31,6 +31,7 @@
     <node pkg="dracomancer" type="backend.py" args="wall" name="contact_wall" output="screen"/>
   </group>
 
+  <!-- Reuse the integrated device, shape, pose, and force-feedback configuration. -->
   <include file="$(find dracomancer)/launch/bringup.launch">
     <arg name="backend" value="$(eval 'viewer' if arg('simulation') else 'hardware')"/>
     <arg name="rviz" value="$(arg rviz)"/>

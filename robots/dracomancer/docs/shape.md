@@ -39,14 +39,15 @@ DRAGONの表示にはGazeboの関節角を使う。
 
 ## 通常起動と設定
 
-Mk-IIとDRAGONを別々に起動する場合は、校正した設定を指定する。
+Mk-IIとDRAGONが稼働中なら、`shape.launch`で内部関節角の操作だけを追加できる。
 
 ```bash
-roslaunch dracomancer bringup.launch start_control:=true shape_config:=/absolute/path/to/shape.yaml
+roslaunch dracomancer shape.launch shape_config:=/absolute/path/to/shape.yaml
 # 条件がそろってから形状操作を有効化する
 rostopic pub -1 /dracomancer/teleop_mode std_msgs/Bool 'data: true'
 ```
 
+Mk-IIの起動もまとめる場合は、`bringup.launch enable_joint_angle_control:=true`に同じ設定を指定する。
 設定元は`config/control/shape.yaml`。標準の`torso_point: []`では写像を有効化しない。
 体幹点、人体代表点、固定軸合わせを実機に合わせて設定する。
 `shape_demo.launch`と`haptics.launch simulation:=true`は、シミュレーション用に`base_link`原点の体幹代理点を明示する。
