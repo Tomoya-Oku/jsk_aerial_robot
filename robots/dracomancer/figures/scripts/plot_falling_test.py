@@ -91,10 +91,15 @@ def robot_joint_axis_label(name):
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    bag_name = "20260705_222212_falling_test.bag"
+    local_bag = os.path.join(os.path.dirname(__file__), "..", "..", "rosbags", bag_name)
+    default_bag = local_bag if os.path.isfile(local_bag) else os.path.expanduser(
+        "~/rosbag/falling_test_20260705_222212.bag"
+    )
     parser.add_argument(
         "bag",
         nargs="?",
-        default=os.path.expanduser("~/rosbag/falling_test_20260705_222212.bag"),
+        default=default_bag,
         help="input rosbag path",
     )
     parser.add_argument(

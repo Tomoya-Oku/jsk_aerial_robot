@@ -33,11 +33,26 @@ roslaunch dracomancer shape_demo.launch
 | `scripts/` | launchから起動するPythonノード |
 | `test/` | 単体・回帰テストとROS・Gazebo検証。Mk-II固有の検証は`test/mkii/` |
 | `figures/scripts/` | オフラインの作図スクリプト |
-| `figures/archive/` | 保存対象とした過去の図・CSV・集計。現行Mk-IIの検証結果とは区別する |
+| `figures/YYYYMMDD_HHMMSS_名前/` | 保存対象の図・CSV・集計・録画 |
+| `rosbags/YYYYMMDD_HHMMSS_名前.bag` | ローカルのROS bag記録 |
 
-新規のログ・bag・作図結果は一時生成物としてGit管理から除外する。
-作図スクリプトの出力先は`figures/`内または実験結果の保存先とし、`figures/scripts/`へ混在させない。
-保存対象と決めた成果物のみ`figures/archive/`へ移し、通常の出力先にはしない。
+## 保存済みの実験結果
+
+フォルダ名の日時にはデータの取得日時を使う。取得日時を確認できなかったものは、表に記載した日時を使った。
+
+| フォルダ | 内容 | 日時の根拠 |
+|---|---|---|
+| [`20260630_225241_fc_thresholds_4096grid`](figures/20260630_225241_fc_thresholds_4096grid/) | 旧計算による4096形状の力・トルク余裕 | 最初のSVGの作成日時 |
+| [`20260706_175417_shape_test`](figures/20260706_175417_shape_test/) | 形状操作試験の図・PDF・集計 | ROS bag名 |
+| [`20260708_151650_joint_angles_mapping`](figures/20260708_151650_joint_angles_mapping/) | 関節写像と位置の図・集計 | ROS bag名 |
+| [`20260708_185555_rsj2026_test`](figures/20260708_185555_rsj2026_test/) | RSJ 2026向けの解析図 | ROS bag名 |
+| [`20260724_153451_fc_thresholds_4096grid_signed`](figures/20260724_153451_fc_thresholds_4096grid_signed/) | 符号付き計算による4096形状の力・トルク余裕 | 最初のSVGの作成日時 |
+| [`20261127_144120_shape_demo`](figures/20261127_144120_shape_demo/) | 両腕の形状マッピングデモの録画2本 | 1本目のGit登録日時 |
+
+`figures/20260621_223025_fc_experiment/`の集計に対応する記録は`rosbags/20260621_223025_fc_sweep.bag`。bag内の時刻はシミュレーション時刻のため、内容が一致するコピー元bagの最終書き込み時刻を使った。用途名が付いていなかったbagには`recording`を付けた。
+
+ログ・bag・再生成した図は一時生成物として扱う。再生成先には`figures/`内の別フォルダか外部の結果保存先を指定する。
+Gitで保存する成果物はフォルダごとに`.gitignore`の除外対象から外す。
 
 文書の入口は[ドキュメント一覧](docs/README.md)。
 起動・検証は[操作手順](docs/usage.md)、研究仕様・未実装の課題は一覧内の各設計書を参照する。

@@ -13,8 +13,8 @@ joints_ctrl_before_failsafe: (83.55499999999998, {'joint1_pitch': -0.15800002115
 candidate_before_failsafe: (83.547, {'joint1_pitch': -0.15033011721279282, 'joint1_yaw': -0.37889325460775336, 'joint2_pitch': -0.49854375606283335, 'joint2_yaw': 0.0, 'joint3_pitch': 0.7424467013366504, 'joint3_yaw': 0.17640779060684875})
 safety_scale_before_failsafe: (83.55799999999999, 0.10873869948578381)
 failsafe_message: failsafe: the roll pitch angles are too large, roll: -1.003392 (1.000000), pitch: 0.156559 (1.000000)
-joint_mapping_pdf: robots/dracomancer/figures/shape_test_20260706_175417/joint_mapping.pdf
-safety_overview_png: robots/dracomancer/figures/shape_test_20260706_175417/safety_overview.png
-safety_overview_svg: robots/dracomancer/figures/shape_test_20260706_175417/safety_overview.svg
-fc_prediction_error_png: robots/dracomancer/figures/shape_test_20260706_175417/fc_prediction_error.png
-fc_prediction_error_svg: robots/dracomancer/figures/shape_test_20260706_175417/fc_prediction_error.svg
+joint_mapping_pdf: robots/dracomancer/figures/20260706_175417_shape_test/joint_mapping.pdf
+safety_overview_png: robots/dracomancer/figures/20260706_175417_shape_test/safety_overview.png
+safety_overview_svg: robots/dracomancer/figures/20260706_175417_shape_test/safety_overview.svg
+fc_prediction_error_png: robots/dracomancer/figures/20260706_175417_shape_test/fc_prediction_error.png
+fc_prediction_error_svg: robots/dracomancer/figures/20260706_175417_shape_test/fc_prediction_error.svg

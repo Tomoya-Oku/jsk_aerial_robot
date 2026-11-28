@@ -24,8 +24,8 @@ rerun using the signed force-margin calculation.
 - `fc_4096grid_signed_by_joint.{png,svg}`: relationship with commanded joints.
 - `fc_4096grid_signed_altitude_correlation.{png,svg}`: relationship with altitude.
 
-The previous unsigned results remain in the sibling
-`fc_thresholds_4096grid` directory.
+The previous unsigned results are in the
+[`20260630_225241_fc_thresholds_4096grid`](../20260630_225241_fc_thresholds_4096grid/) directory.
 
 ## Threshold summary
 
@@ -43,14 +43,14 @@ heuristic needs to be reconsidered for a signed distribution.
 
 ## Regeneration
 
-Run from this directory. New plots are written outside `archive/` to keep the
-saved results intact.
+Run from this directory. Regenerated plots are written to a separate sibling
+directory to preserve the saved results.
 
 ```bash
 MPLCONFIGDIR=/tmp/mpl_fc_signed \
-python3 ../../scripts/plot_fc_data.py \
+python3 ../scripts/plot_fc_data.py \
   fc_4096grid_signed_merged.csv \
-  --out-dir ../../fc_thresholds_4096grid_signed \
+  --out-dir ../20260724_153451_fc_thresholds_4096grid_signed_plots \
   --name-prefix fc_4096grid_signed \
   --formats png svg \
   --bins 60 \
@@ -60,9 +60,9 @@ python3 ../../scripts/plot_fc_data.py \
 
 ```bash
 MPLCONFIGDIR=/tmp/mpl_fc_signed_zoom \
-python3 ../../scripts/plot_fc_data.py \
+python3 ../scripts/plot_fc_data.py \
   fc_4096grid_signed_merged.csv \
-  --out-dir ../../fc_thresholds_4096grid_signed \
+  --out-dir ../20260724_153451_fc_thresholds_4096grid_signed_plots \
   --name-prefix fc_4096grid_signed_zoom \
   --formats png svg \
   --bins 60 \
@@ -74,9 +74,9 @@ python3 ../../scripts/plot_fc_data.py \
 
 ```bash
 MPLCONFIGDIR=/tmp/mpl_fc_signed_force \
-python3 ../../scripts/plot_fc_data.py \
+python3 ../scripts/plot_fc_data.py \
   fc_4096grid_signed_merged.csv \
-  --out-dir ../../fc_thresholds_4096grid_signed \
+  --out-dir ../20260724_153451_fc_thresholds_4096grid_signed_plots \
   --name-prefix fc_4096grid_signed \
   --formats png svg \
   --bins 64 \
