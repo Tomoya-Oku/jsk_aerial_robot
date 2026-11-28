@@ -35,6 +35,7 @@ void DynamixelSerial::resetBus(UART_HandleTypeDef* huart, osMutexId* mutex, uint
   rd_ptr_ = 0;
   memset(rx_buf_, 0, RX_BUFFER_SIZE);
 
+  // Clear offsets and metadata before the new scan fills in device-specific values.
   servo_.fill(ServoData{});
   for (auto& servo : servo_) servo.id_ = 255;
 }
