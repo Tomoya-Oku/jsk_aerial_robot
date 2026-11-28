@@ -4,12 +4,19 @@
 
 | ファイル | 用途 |
 |---|---|
-| `bridge.launch` | Dracomancer用Spinal rosserial bridge。左右のサーボ・Joystickを公開し、各Joystickの`raw`から`joy`を生成する。 |
+| `bridge.launch` | Dracomancer用Spinal rosserial bridge。左右のサーボ・Joystickを公開し、各Joystickの`raw`から−1〜1の`scaled`を生成する。 |
 | `bringup.launch` | 通常のシミュレーション・実験用。Mk-IIのモデルとバックエンドに、DRAGONの位置・姿勢操作、内部関節角操作、力覚提示を組み合わせる。 |
 | `haptics.launch` | 実機サーボで力覚提示を行う。 `simulation:=true`でDRAGONの壁接触を観測できる。 |
 | `pose.launch` | 既存のDRAGONとJoystick入力に接続して、位置・姿勢を操作する。 |
 | `shape.launch` | 既存のDracomancerとDRAGONに接続し、DRAGONの内部関節角操作と可行性判定を起動する。 |
 | `shape_demo.launch` | DRAGONを離陸させず、形態写像・両モデルの姿勢をGazeboとRVizで比較する。 |
+
+[system.svg](../launch/system.svg) で各launchのincludeとPythonノードの起動関係を確認できる。
+Graphvizの `dot` が使える環境で、Dracomancerパッケージ直下から次のコマンドで再生成する。
+
+```bash
+python3 figures/scripts/draw_system.py
+```
 
 ## 設定ファイル一覧
 
@@ -69,12 +76,15 @@ DRAGONを起動した環境で、下記のようにDracomancer側の制御をま
 ```bash
 roslaunch dracomancer bringup.launch enable_position_control:=true enable_joint_angle_control:=true \
   shape_config:=/absolute/path/to/shape.yaml
-# 操作を開始する条件がそろってから有効にする
-rostopic pub -1 /dracomancer/teleop_mode std_msgs/Bool 'data: true'
+# 条件がそろってから形態操作も有効にする
+rostopic pub -1 /dracomancer/enabled std_msgs/Bool 'data: true'
 ```
 
 統合起動で力覚提示も使う場合は`enable_haptics:=true`を追加する。実機では[校正とHOLD操作](hardware.md#実機の力覚提示)が必要。
-従来の`start_control:=true`は、操作指令が無効な状態でも制御ノードを起動する。
+`enabled:=true`で起動時から形態操作を許可できる。形態操作の既定は`false`。
+`pose.launch`で起動した位置・姿勢操作は、起動時から有効でHoverを待つ。
+起動後は上記のトピックで位置・姿勢・形態操作をまとめて切り替えられる。
+`start_control:=true`は、操作指令が無効な状態でも制御ノードを起動する。
 
 稼働中のDracomancerとDRAGONに操作を追加する場合は、必要なlaunchを選ぶ。
 
@@ -85,8 +95,20 @@ roslaunch dracomancer pose.launch shape_config:=/absolute/path/to/shape.yaml
 roslaunch dracomancer shape.launch shape_config:=/absolute/path/to/shape.yaml
 ```
 
-位置・姿勢操作にはHover、新鮮なオドメトリ、操作者の世界座標（`navigation.operator_position`または外部計測）、
-既定ではIMUが必要。片腕では押下で並進と回転を切り替え、両腕では右が並進・左が回転を担当する。
+`pose.launch`と`bringup.launch`では、`right_joystick_calibration`と`left_joystick_calibration`で
+左右のJoystick校正YAMLの読み書き先を指定できる。既定は右がパッケージ内の
+`config/device/joystick_calibration.yaml`、左が`$HOME/.ros/dracomancer-joystick-left.yaml`。
+
+`pose.launch`、`bringup.launch`、`haptics.launch`の`view_mode`でJoystickの操作方向を選ぶ。
+
+| 指定 | 操作方向 |
+|---|---|
+| `view_mode:=false`（既定） | 右Joystickは世界座標のX・Y方向の並進、左Joystickは世界座標のX・Y軸まわりの回転に割り当てる。 |
+| `view_mode:=true` | 操作者から見た左右・上下を基準にし、体幹IMUの傾きに合わせて操作方向を回転させる。 |
+
+どちらもHover中に操作できる。操作者視点では、新鮮なオドメトリ、操作者の世界座標
+（`navigation.operator_position`または外部計測）、既定ではIMUも必要。
+右が並進、左が回転を担当する。`mapping_mode`で選んだ腕の形態写像とは独立する。
 DRAGONの内部関節角の操作には、校正済みの関節計測と、体幹点・軸合わせを含む[形状設定](shape.md#通常起動と設定)が必要。
 
 既存workspaceを更新する場合は、削除済みパッケージ・メッセージ・プラグインの生成物を
@@ -131,7 +153,7 @@ Spinalの14軸拡張を取り消したため、拡張済みイメージを使用
 
 `srv/ShapeFeasibility.srv`は、DRAGONの候補関節角が飛行可能性のゲートを満たすか評価するサービスの型定義。
 `shape_feasibility_node`が既定で`/dragon/shape_feasibility/check_shape`を提供し、
-`control_joint_angle.py`が候補形態と速度制限後の発行候補を検査する。
+`control_shape.py`が候補形態と速度制限後の発行候補を検査する。
 
 | 方向 | 主な内容 |
 |---|---|

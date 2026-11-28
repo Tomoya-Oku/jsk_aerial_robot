@@ -6,14 +6,16 @@ supports at most `MAX_SERVO_NUM` (currently 10) motors. Do not map all 14 CAD jo
 to one direct UART handler without a separate capacity change.
 The H7 V2 Mk-II build (`DRACOMANCER_DUAL=1`) runs two dedicated RS485 workers.
 USART2 scans IDs 1–7 and USART6 scans IDs 11–17. The firmware exposes states,
-current commands, mode and board info under `right/` and `left/`. Each includes
-its own scan indexes and current sessions. The device uses its own servo
+current commands, mode and board info under `right/` and `left/` to distinguish
+them from the unprefixed CAN interfaces. Dracomancer remaps these names.
+Each bus has its own scan indexes and current sessions. The device uses its own servo
 register settings rather than adding scan-indexed data to Spinal Flash.
 Build with `DRACOMANCER_DUAL=0` to use the original single-port interfaces.
 
 The Mk-II ROS interfaces are registered even when an RS485 bus fails startup.
-Check the rosserial warning for the failing stage, and call `/left/get_board_info`
-or `/right/get_board_info` to see the IDs detected at boot. State messages contain
+Check the rosserial warning for the failing stage. With the Dracomancer bridge,
+call `/dracomancer/get_board_info/right` or `/dracomancer/get_board_info/left`
+to see the IDs detected at boot. State messages contain
 only positions actually read from the detected devices. With no replies, the
 topic is registered and has no samples. A bus with a startup fault rejects mode
 and current commands and withholds torque-state samples. Restart Spinal after

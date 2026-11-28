@@ -19,7 +19,7 @@ PDFや旧設計資料を優先して原稿の理論を変更しない。
 | `bimanual-centerline`、`bimanual-centered-centerline` | 左手→右手の中心線。人体の両肩中点と機体第2関節pitch軸原点を基準にする |
 | `contact-torque`、`safety-torque` | `feedback.py`。同一公称解・入力と固定履歴でMを求め、接触と抵抗を区別して合成 |
 | `volume-margin`、`static-allocation` | `src/feasibility/wrench_math.h`。固定Qの符号付きXY/XYZ射影余裕と有界共通推力配分 |
-| `gate-acceptance`、`rechecked-command` | `control_joint_angle.py`。再判定拒否も保持へ移行し、復帰条件を要求 |
+| `gate-acceptance`、`rechecked-command` | `control_shape.py`。再判定拒否も保持へ移行し、復帰条件を要求 |
 | `anchor-compensation`、`bimanual-center-position` | `control_position.py`。発行関節指令に対する重心位置補償。移動指令の所有者は単一 |
 | `anchored-jacobian` | `scripts/control/contacts.py`。接触Jから固定基準点の並進Jを差し引く |
 | `joystick-view-basis`、`joystick-heading` | `navigation.py`。視点と体幹の傾きによる2次元入力面、SO(3)での姿勢積分 |
@@ -47,20 +47,19 @@ PDFや旧設計資料を優先して原稿の理論を変更しない。
 
 ### 視点基準の並進・回転
 
+`view_mode:=true`で操作者視点を選ぶ。既定の`false`では世界座標のX・Y方向に並進し、X・Y軸まわりに回転する。
 `navigation/operator_position`にworld座標の操作者基準位置を設定する。
 空のままでは視点基準のJoystick速度を出力しない。移動を許す場合は`/dracomancer/operator_position`
 （worldの新鮮なPoseStamped）で更新する。体幹IMUの取付補正と`navigation/tilt_alignment`を校正する。
 外部計測からの初期化も可能で、動的更新を使い始めた後は計測が古いと入力を零にする。
 `require_imu: true`が既定で、IMUが不明・古いときは速度入力を零にする。
 
-片腕は`/dracomancer/right/joystick/calibrated/pressed`の押下エッジで並進／回転を切り替え、
-中立を確認するまで両速度を零にする。両腕は右入力が並進、
-`/dracomancer/left/joystick/calibrated`の左入力が回転。左側の校正は[実機手順](hardware.md#joystickの左右校正)を参照する。
+`/dracomancer/right/joystick/calibrated`の右入力が並進、
+`/dracomancer/left/joystick/calibrated`の左入力が回転を担当する。左側の校正は[実機手順](hardware.md#joystickの左右校正)を参照する。
 各瞬間の独立入力は各スティック2軸であり、3軸独立入力とは扱わない。
 
 姿勢目標は回転行列で積分し、速度・姿勢範囲の上限を適用する。
 DRAGONの`target_rotation_motion`（CoG対象）を用い、無視されるFlightNavのroll/pitch欄には依存しない。
-従来の入力経路は`control_position.py`の`navigation_mode:=legacy`として残す。
 
 ### 複数接触
 

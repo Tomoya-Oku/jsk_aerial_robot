@@ -24,7 +24,7 @@ Gazeboの衝突判定にはSTLの外接箱を使う。URDFのeffort・velocity�
 | トルク提示モード | Current Control Mode、Operating Mode = 0 [10] |
 | 電流指令単位 | 2.69 mA [10] |
 | 標準経路 | Spinal → UART/RS485 → XM430 |
-| 接続API | `right/`・`left/`配下の`direct_servo_mode`、`servo/direct_current`、`servo/states` |
+| 接続API | `direct_servo_mode`、`servo/direct_current`、`servo/states` の末尾で `right`・`left` を区別する |
 | ROS名前空間の既定 | Spinal bridgeとMk-IIの表示・操作は`/dracomancer` |
 
 物理IDの既定値は`config/device/hardware.yaml`の`servo_ids`が管理する。

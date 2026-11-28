@@ -12,9 +12,9 @@ ROS 1の`dracomancer`パッケージにモデル・GUI・直結制御・形状�
 | 未校正の実機仮表示 | `scripts/device/observe.py`。起動姿勢基準の読み取り専用表示。形態制御には使用しない |
 | 形状写像B | `scripts/control/shape.py`。コントローラと力覚処理が共用 |
 | 関節角写像 | 同じ`shape.py`が修論の片腕・両腕方式を実装 |
-| 形態指令の所有者 | `scripts/teleop/control_joint_angle.py`。`shape`・`joint`・`dual_shape`・`dual_joint` |
+| 形態指令の所有者 | `scripts/teleop/control_shape.py`。`shape`・`joint`・`dual_shape`・`dual_joint` |
 | 飛行可能性評価 | `src/feasibility/`と`ShapeFeasibility.srv`。候補・発行形態の可行性を評価し、holdの判定材料を返す |
-| 機体移動・姿勢 | `scripts/teleop/control_position.py`。視点・体幹傾きによる2軸入力面。Joystick操作は既定無効 |
+| 機体移動・姿勢 | `scripts/teleop/control_position.py`が右Joystickの並進、`control_attitude.py`が左Joystickの回転を担当する |
 | 壁接触の観測 | `scripts/simulation/backend.py wall`・`src/simulation/wall_contact.cpp`。シミュレーション用 |
 | 力覚 | `scripts/haptics/feedback.py`からNmを送信。既定無効、自動ARMなし。4方式の局所Jacobianに対応 |
 | 基準点補償 | `control_position.py`。尾側点または中央関節を基準とし、移動指令を一元化 |
@@ -35,14 +35,16 @@ ROS 1の`dracomancer`パッケージにモデル・GUI・直結制御・形状�
 | `haptics/feedback.py` | 接触力と可行性の余裕から力覚トルクを求め、計測の鮮度と出力上限を確認して配信する |
 | `safety/volume_radius_monitor.py` | 力・トルク余裕と閾値を配信し、操作側に提示する安全度を計算する。`--filter`で一次ローパスを実行する |
 | `simulation/backend.py` | viewer・Gazeboの関節制御。 `motion`でデモ軌道を生成し、`wall`で固定壁を配置する |
-| `teleop/control_joint_angle.py` | 操作者の関節計測をDRAGONの関節目標へ写像し、可行性判定・速度制限・holdを適用する |
-| `teleop/control_position.py` | DRAGONの位置・姿勢指令を生成し、形状変化による基準点の移動を補償する。視点・体幹の傾きから操作面も計算する |
+| `teleop/control_shape.py` | 操作者の関節計測をDRAGONの関節目標へ写像し、可行性判定・速度制限・holdを適用する |
+| `teleop/control_position.py` | 右Joystickの位置指令、形態変化による基準点補償、操作者視点の入力面を担当する |
+| `teleop/control_attitude.py` | 左Joystickの角速度を積分し、DRAGONのCoG姿勢目標を発行する |
 
 | 共通モジュール | 役割 |
 |---|---|
 | `control/__init__.py` | 共通モジュールのPythonパッケージを定義する |
 | `control/contacts.py` | 接触レンチの座標変換と、関節角から接触点・Jacobianを求める処理を共用する |
 | `control/output_lock.py` | 同じサーボ出力を操作するプロセス間の排他を管理する |
+| `control/pose.py` | 位置・姿勢制御が共用する回転行列、四元数、RPYの変換 |
 | `control/shape.py` | URDFの順運動学、中心線の最適化、片腕・両腕の関節角写像を実装する |
 
 ## C++ソース
@@ -133,11 +135,12 @@ Python側は人体モデル、最適化と時間予算、飛行可能性のゲ�
 ## Joystick・モード
 
 主な複合操作は「右腕→内部形状、Joystick→機体移動」。通常の形態指令はHover条件を使う。
-修論の改稿に従い、視点座標とIMUの相対傾きから入力面を作り、2軸のスティックを3次元の速度候補へ写す。
-両腕では右スティックが並進、左が回転。片腕では押下後の中立確認で切り替える。
-姿勢は回転行列で積分し、位置・姿勢の目標を切替や体幹基準の再設定でリセットしない。
-操作者位置・左右トピック・旧入力経路は[修論対応](thesis.md#視点基準の並進回転)を参照する。
-`teleop_mode=false`は最後の発行形態を保持し、現在の実装はclutch解除時の人体基準の再設定を行わない。
+`view_mode:=true`では、視点座標とIMUの相対傾きから入力面を作り、2軸のスティックを3次元の速度候補へ写す。
+右スティックが並進、左が回転。操作者視点では位置ノードが両者の入力面を`/dracomancer/view_frame`で配信する。
+姿勢は回転行列で積分し、左入力が中立または途絶すると最後の姿勢目標を保持する。
+操作者位置・左右トピックは[修論対応](thesis.md#視点基準の並進回転)を参照する。
+`/dracomancer/enabled`に`false`を送ると最後の発行形態を保持する。
+現在の実装はclutch解除時の人体基準の再設定を行わない。
 Joystickだけの長距離移動、機体位置を保つ形態操作、基準リンク固定を研究上の操作形態とし、
 現在の対応と未実装のモード遷移を[残作業](roadmap.md)で区別する。
 地上デモでHover条件を外す構成は[形状操作](shape.md)に限定して明示する。

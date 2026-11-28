@@ -44,7 +44,7 @@ Mk-IIとDRAGONが稼働中なら、`shape.launch`で内部関節角の操作だ�
 ```bash
 roslaunch dracomancer shape.launch shape_config:=/absolute/path/to/shape.yaml
 # 条件がそろってから形状操作を有効化する
-rostopic pub -1 /dracomancer/teleop_mode std_msgs/Bool 'data: true'
+rostopic pub -1 /dracomancer/enabled std_msgs/Bool 'data: true'
 ```
 
 Mk-IIの起動もまとめる場合は、`bringup.launch enable_joint_angle_control:=true`に同じ設定を指定する。
@@ -56,14 +56,68 @@ CADフレーム原点・手先重心とidentityの軸合わせも代理値で、
 URDFを変更したら人体代表点と`dragon_tail`の整合を確認する。
 
 標準入力は`/dracomancer/measured_joint_states`、人体モデルは`/dracomancer/robot_description`。
-形態指令は`control_joint_angle.py`だけが発行する。別ノードから同じtopicへ指令しない。
+形態指令は`control_shape.py`だけが発行する。別ノードから同じtopicへ指令しない。
 対応モードは`shape`（標準）・`joint`・`dual_shape`・`dual_joint`。feasibility gateは`hold`のみ。
 `shape_demo.launch mapping_mode:=dual_shape`等で選ぶ。関節角方式の既定の零点・符号はシミュレーション用。
 `bringup.launch anchor_mode:=tail`は尾側点、`mid`は中央関節の位置補償を有効化する。
 両腕方式の標準は`mid`。移動指令は単一の`control_position.py`が担当し、Joystick入力が零でも変形による位置差を補償する。
 `enable_position_control:=true`でJoystickによる基準位置の移動も有効化する。補償はHover中に限る。
 力覚には`haptics.launch`を使える。実機のARMには操作者による準備とボタン押下が必要。[修論対応](thesis.md)と[実機手順](hardware.md#実機の力覚提示)を参照する。
-`teleop_mode=false`は最後の指令を保持する。現在のclutch解除は人体基準姿勢の再設定を行わない。
+`enabled`の既定は`false`。`/dracomancer/enabled`に`false`を送って操作を止めると最後の指令を保持する。
+現在のclutch解除は人体基準姿勢の再設定を行わない。
+
+### `shape.launch` の引数
+
+パッケージ名を省略したファイルパスは `dracomancer` パッケージ内のパス。トピックの既定値は `robot_ns=dracomancer`、`target_ns=dragon` の場合を示す。
+
+| 引数 | 既定値 | 用途 |
+|---|---|---|
+| `robot_ns` | `dracomancer` | 操作デバイスの名前空間。計測・操作切替・診断に使用。 |
+| `target_ns` | `dragon` | DRAGONの名前空間。形態指令・状態・可行性評価に使用。 |
+| `shape_config` | `config/control/shape.yaml` | 関節対応、体幹点、座標合わせなどを設定するYAML。 |
+| `mapping_mode` | `shape` | 形状写像の`shape`、関節角写像の`joint`、両腕版の`dual_shape`・`dual_joint`。 |
+| `enabled` | `false` | `true`で起動時から形態操作を許可する。実行中は`/dracomancer/enabled`で切り替える。 |
+| `enable_joint_angle_control` | `true` | 形態制御ノードを起動する。 |
+| `device_joint_topic` | `/dracomancer/measured_joint_states` | 操作者側の校正済み関節計測トピック。 |
+| `human_description` | `/dracomancer/robot_description` | 操作者側URDFを読み取るROSパラメータ名。 |
+| `publish_joints_only_when_hovering` | `true` | DRAGONのHover中に関節指令を発行する。 |
+| `max_step` | `0.015` rad | 1回に発行する関節角の変化量上限。 |
+| `max_joint_velocity` | `0.1` rad/s | 関節角指令の速度上限。 |
+| `enable_feasibility_gate` | `true` | 可行性評価サービスを起動し、関節指令に可行性判定を適用する。 |
+| `feasibility_gate_mode` | `hold` | 判定を通過できない場合に最後の指令を保持する。実装済みの値は`hold`。 |
+| `feasibility_service` | `/dragon/shape_feasibility/check_shape` | 形態制御ノードが呼ぶ可行性評価サービス名。 |
+| `feasibility_rate` | `10.0` Hz | 候補形態の可行性評価頻度。発行前の再判定にも同じサービスを使う。 |
+| `robot_model_plugin_name` | `dragon/full_vectoring_robot_model` | 可行性評価に用いるロボットモデルのプラグイン名。 |
+| `shape_feasibility_prediction_mode` | `allocation` | 評価方法を選ぶ。選択肢は`allocation`、`controller`、`optimized_gimbal`、`model`。 |
+| `force_dimensions` | `2` | 力余裕の評価次元。`2`はX・Y、`3`はX・Y・Z。 |
+| `use_contact_wrench` | `false` | 可行性評価に接触力・モーメントを含める。 |
+| `shape_feasibility_gimbal_feedback_topic` | `gimbals_ctrl` | ジンバル角フィードバック入力名。`target_ns`からの相対名。 |
+| `shape_feasibility_baselink_rpy_topic` | `final_target_baselink_rpy` | 基部の目標RPY入力名。`target_ns`からの相対名。 |
+| `shape_feasibility_baselink_odom_topic` | `uav/baselink/odom` | 基部オドメトリ入力名。`target_ns`からの相対名。 |
+| `shape_feasibility_use_gimbal_feedback` | `true` | ジンバル角フィードバックを評価に使用する。 |
+| `shape_feasibility_use_baselink_rpy_feedback` | `true` | 基部の目標RPYを評価に使用する。 |
+| `shape_feasibility_use_baselink_odom_feedback` | `true` | 基部オドメトリを評価に使用する。 |
+| `shape_feasibility_feedback_timeout` | `0.25` 秒 | 評価に使うフィードバックの鮮度上限。 |
+| `shape_feasibility_allocation_refine_max_iteration` | `5` | `allocation`で推力・ジンバル角を求める反復回数上限。 |
+| `shape_feasibility_allocation_refine_threshold` | `0.0001` | `allocation`の反復で収束を判定する差分閾値。 |
+| `force_radius_threshold` | `0.108990` N | 形態指令の保持判定に使う力余裕の閾値。 |
+| `torque_radius_threshold` | `0.015400` N·m | 形態指令の保持判定に使うトルク余裕の閾値。 |
+| `force_radius_recover_threshold` | `0.249220` N | 保持状態から復帰するための力余裕の閾値。 |
+| `torque_radius_recover_threshold` | `0.278159` N·m | 保持状態から復帰するためのトルク余裕の閾値。 |
+| `enable_volume_radius_monitor` | `true` | 飛行中の力・トルク余裕を購読し、監視値を配信するノードを起動する。 |
+| `enable_shape_safety` | `true` | 監視ノードが余裕に応じた安全度を計算する。 |
+| `missing_inradius_scale` | `1.0` | 余裕の入力が欠落または期限切れの場合の安全度。 |
+| `min_safety_scale` | `0.0` | 安全度の下限。いずれかの余裕が低い側の閾値以下ならこの値を使う。 |
+| `force_inradius_min` | `0.249220` N | 監視時に安全度が1に達する側の力余裕閾値。 |
+| `torque_inradius_min` | `0.278159` N·m | 監視時に安全度が1に達する側のトルク余裕閾値。 |
+| `force_inradius_hard_min` | `0.108990` N | 監視時に安全度を下限にする力余裕閾値。 |
+| `torque_inradius_hard_min` | `0.015400` N·m | 監視時に安全度を下限にするトルク余裕閾値。 |
+| `inradius_timeout` | `0.5` 秒 | 監視に使う力・トルク余裕の鮮度上限。 |
+| `safety_log_period` | `1.0` 秒 | 余裕低下ログの出力間隔。 |
+| `enable_fc_min_lowpass` | `true` | 力・トルク余裕に一次ローパスをかけるノードを起動する。 |
+| `fc_min_lowpass_cutoff_hz` | `2.0` Hz | 一次ローパスの遮断周波数。 |
+| `monitor_force_inradius_topic` | `/dragon/debug/fc_f_min_filtered` | 監視用の力余裕入力。ローパス無効時の既定は`/dragon/debug/fc_f_min`。 |
+| `monitor_torque_inradius_topic` | `/dragon/debug/fc_t_min_filtered` | 監視用のトルク余裕入力。ローパス無効時の既定は`/dragon/debug/fc_t_min`。 |
 
 ## 実装の入口
 
@@ -71,7 +125,7 @@ URDFを変更したら人体代表点と`dragon_tail`の整合を確認する。
 |---|---|
 | `scripts/control/shape.py` | URDF FK、中心線・関節角写像、最適化、速度制限 |
 | `src/kinematics/shape_kernel.cpp` | 最適化で繰り返すDRAGONの順運動学と中心線サンプリングを一括で計算 |
-| `scripts/teleop/control_joint_angle.py` | 入力検証、可行性ゲート、診断・Marker、単一の形態指令発行 |
+| `scripts/teleop/control_shape.py` | 入力検証、可行性ゲート、診断・Marker、単一の形態指令発行 |
 | `scripts/simulation/backend.py motion` | デモの再現用入力。DRAGONへは指令しない |
 | `config/control/shape.yaml` | 代表点・軸合わせ・最適化設定 |
 

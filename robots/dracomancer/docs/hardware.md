@@ -45,8 +45,8 @@ Spinalを単独で接続する場合は、シリアルポートを指定してDr
 roslaunch dracomancer bridge.launch serial_port:=/dev/ttyUSB0
 ```
 
-bridgeは左右のサーボとJoystickを`/dracomancer/right/`、`/dracomancer/left/`配下に登録する。
-命名はROS側で解決するため、既存のファームウェアを使える。
+bridgeは `/dracomancer/servo/states/right` と `/dracomancer/servo/states/left` にサーボ状態を配信する。
+Joystickの生データは `/dracomancer/joystick/raw/{right,left}`、−1〜1への変換結果は `/dracomancer/joystick/scaled/{right,left}` に配信する。
 
 ### 未校正の動作確認だけを行う場合
 
@@ -74,7 +74,7 @@ source devel/setup.bash
 roslaunch dracomancer bringup.launch backend:=hardware config:=/absolute/path/to/hardware.yaml
 ```
 
-既定のbridgeは`/dracomancer/right/servo/states`と`/dracomancer/left/servo/states`を配信する。
+既定のbridgeは`/dracomancer/servo/states/right`と`/dracomancer/servo/states/left`を配信する。
 `spinal_ns`でbridgeの名前空間、`robot_ns`で表示・操作の名前空間を指定できる。
 bridgeの同時起動は`connect_fc:=true`と`fc_serial_port`を指定する。
 従来の1バスファームウェアを使用する場合は`dual_spinal:=false`と、その機体の物理IDを設定する。
@@ -89,18 +89,18 @@ bridgeの同時起動は`connect_fc:=true`と`fc_serial_port`を指定する。
 
 ### Joystickの左右校正
 
-右は`/dracomancer/right/joystick/raw`、左は`/dracomancer/left/joystick/raw`。
+右は`/dracomancer/joystick/raw/right`、左は`/dracomancer/joystick/raw/left`。
 Spinalの起動時は両方を中立にする。
 左は先にターミナルで校正し、左専用のファイルに保存する。
 
 ```bash
-rosrun dracomancer joystick.py --calibrate _js_raw_topic:=/dracomancer/left/joystick/raw \
+rosrun dracomancer joystick.py --calibrate _js_raw_topic:=/dracomancer/joystick/raw/left \
   _js_calibrated_topic:=/dracomancer/left/joystick/calibrated \
   _yaml_path:="$HOME/.ros/dracomancer-joystick-left.yaml"
 ```
 
-保存後に校正ノードを終了し、両腕の操作を使う場合は`teleop_mode:=true`、
-`mapping_mode:=dual_joint`または`dual_shape`、`enable_position_control:=true`を指定する。
+保存後に校正ノードを終了する。`bringup.launch enable_position_control:=true`で右を並進、左を回転に使える。
+操作者視点を使う場合は`view_mode:=true`を追加する。
 
 ## トルク操作と停止
 

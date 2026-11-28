@@ -3,26 +3,27 @@
 ## 実装
 
 H7 V2のMk-II構成では、USART2の右7軸とUSART6の左7軸を独立したRS485ドライバで扱う。
-Dracomancer用bridgeでは、ファームウェアの相対名を`/dracomancer`配下で解決する。
+ファームウェアはCANの名前との衝突を避けるため、RS485の各エンドポイントに `right/`・`left/` を付ける。Dracomancer用bridgeが下表の公開名に変換する。
+単一バス版の `servo/states` を使う場合は `dual_spinal:=false` を指定する。
 
 | 用途 | 右 | 左 |
 |---|---|---|
 | サーボと物理ID | USART2、1〜7 | USART6、11〜17 |
-| 状態 | `/dracomancer/right/servo/states` | `/dracomancer/left/servo/states` |
-| トルク状態 | `/dracomancer/right/servo/torque_states` | `/dracomancer/left/servo/torque_states` |
-| 電流 | `/dracomancer/right/servo/direct_current` | `/dracomancer/left/servo/direct_current` |
-| モード | `/dracomancer/right/direct_servo_mode` | `/dracomancer/left/direct_servo_mode` |
-| 接続情報 | `/dracomancer/right/get_board_info` | `/dracomancer/left/get_board_info` |
-| Joystick | I2C1、`/dracomancer/right/joystick/raw` | I2C3、`/dracomancer/left/joystick/raw` |
-| Joystickの標準ROS形式 | `/dracomancer/right/joystick/joy` | `/dracomancer/left/joystick/joy` |
+| 状態 | `/dracomancer/servo/states/right` | `/dracomancer/servo/states/left` |
+| トルク状態 | `/dracomancer/servo/torque_states/right` | `/dracomancer/servo/torque_states/left` |
+| 電流 | `/dracomancer/servo/direct_current/right` | `/dracomancer/servo/direct_current/left` |
+| モード | `/dracomancer/direct_servo_mode/right` | `/dracomancer/direct_servo_mode/left` |
+| 接続情報 | `/dracomancer/get_board_info/right` | `/dracomancer/get_board_info/left` |
+| Joystick | I2C1、`/dracomancer/joystick/raw/right` | I2C3、`/dracomancer/joystick/raw/left` |
+| Joystickの±1変換 | `/dracomancer/joystick/scaled/right` | `/dracomancer/joystick/scaled/left` |
 | Joystick校正出力 | `/dracomancer/right/joystick/calibrated` | `/dracomancer/left/joystick/calibrated` |
 
-Joystickの押下は各`calibrated/pressed`に配信する。bridgeはファームウェアの`joystick/raw`と
+Joystickの校正済み押下は各`calibrated/pressed`に配信する。bridgeはファームウェアの`joystick/raw`と
 `joystick/left/raw`を左右別のパスにリマップする。
 
 U024-V2の`raw`は`[Xの差分カウント, Yの差分カウント, ボタンレベル]`。
 Spinalは起動時の中心をX・Yから引き、レジスタ`0x20`のボタンを未押下`1`・押下`0`で送る。
-Dracomancer用bridgeは各`raw`を`joy`（`sensor_msgs/Joy`）に変換する。
+Dracomancer用bridgeは各`raw`を`scaled`（`sensor_msgs/Joy`）に変換する。
 `axes[0:2]`はX・Yで、`int16`の範囲を`-1`〜`1`へ線形換算する。
 `buttons[0]`は押下`1`・未押下`0`。タイムスタンプはホストの受信時刻。
 実測した可動範囲やデッドゾーンを適用した値は`calibrated`を使う。
