@@ -25,8 +25,9 @@ class Observer:
         self.observed = [self.arm+'_joint_'+str(i) for i in range(1, 8)]
         if any(name not in self.names for name in self.observed):
             raise ValueError('Observed joints must exist in the model')
-        prefix = rospy.get_param('~spinal_ns', '/').rstrip('/')
-        if rospy.get_param('~dual_spinal', False):
+        dual = rospy.get_param('~dual_spinal', False)
+        prefix = rospy.get_param('~spinal_ns', '/dracomancer' if dual else '/').rstrip('/')
+        if dual:
             prefix += '/'+self.arm
         service = prefix+'/get_board_info'
         rospy.wait_for_service(service, timeout=10)

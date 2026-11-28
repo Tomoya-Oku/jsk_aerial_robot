@@ -3,7 +3,7 @@
   <arg name="robot_ns" default="dracomancer"/>
   <arg name="config" default="$(find dracomancer)/config/mkii/hardware.yaml"/>
   <arg name="dual_spinal" default="true"/>
-  <arg name="spinal_ns" default="$(eval '/' if arg('dual_spinal') else '/dracomancer')"/>
+  <arg name="spinal_ns" default="/dracomancer"/>
   <arg name="rviz" default="true"/>
   <arg name="panel" default="true"/>
   <group ns="$(arg robot_ns)">

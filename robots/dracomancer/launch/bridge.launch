@@ -1,0 +1,15 @@
+<launch>
+  <arg name="spinal_ns" default="/dracomancer"/>
+  <arg name="serial_port" default="/dev/ttyUSB0"/>
+  <arg name="serial_baud" default="921600"/>
+
+  <group ns="$(arg spinal_ns)">
+    <!-- Servo topics are already arm-relative in Spinal. Translate the joystick names here. -->
+    <remap from="joystick/raw" to="right/joystick/raw"/>
+    <remap from="joystick/left/raw" to="left/joystick/raw"/>
+    <include file="$(find spinal)/launch/bridge.launch">
+      <arg name="serial_port" value="$(arg serial_port)"/>
+      <arg name="serial_baud" value="$(arg serial_baud)"/>
+    </include>
+  </group>
+</launch>

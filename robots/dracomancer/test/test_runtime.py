@@ -258,14 +258,14 @@ class RuntimeTest(unittest.TestCase):
         services = {}
         for bus, first in [('right', 1), ('left', 11)]:
             board = SimpleNamespace(slave_id=0, servos=[SimpleNamespace(id=i) for i in range(first, first+7)])
-            services['/'+bus+'/get_board_info'] = MagicMock(return_value=SimpleNamespace(boards=[board]))
+            services['/dracomancer/'+bus+'/get_board_info'] = MagicMock(return_value=SimpleNamespace(boards=[board]))
         self.rospy.ServiceProxy.side_effect = lambda path, _: services.get(path, MagicMock())
         self.rospy.Publisher.side_effect = lambda *args, **kwargs: MagicMock()
         self.modules['spinal.msg'].DirectServoCurrent.side_effect = lambda **fields: SimpleNamespace(**fields)
         with patch.object(self.direct, 'DaemonExecutor'), patch.object(self.direct.threading, 'Thread'):
             node = self.direct.SpinalControl()
         self.assertEqual([call.args[0] for call in self.rospy.Subscriber.call_args_list][:2],
-                         ['/right/servo/states', '/left/servo/states'])
+                         ['/dracomancer/right/servo/states', '/dracomancer/left/servo/states'])
         node.calibrated = True
         node.states(self.observer_sample([150], 9.91), 'right')
         node.states(self.observer_sample([220], 9.98), 'left')

@@ -8,7 +8,7 @@
   <arg name="mount_height" default="1.0"/>
   <arg name="config" default="$(find dracomancer)/config/mkii/hardware.yaml"/>
   <arg name="dual_spinal" default="true"/>
-  <arg name="spinal_ns" default="$(eval '/' if arg('dual_spinal') else '/dracomancer')"/>
+  <arg name="spinal_ns" default="/dracomancer"/>
   <arg name="connect_fc" default="false"/>
   <arg name="fc_serial_port" default="/dev/ttyUSB0"/>
   <arg name="fc_serial_baud" default="921600"/>
@@ -20,13 +20,11 @@
   <arg name="enable_position_control" default="false"/>
   <arg name="anchor_mode" default="$(eval 'mid' if arg('mapping_mode').startswith('dual_') else 'none')"/>
   <!-- Hardware stays opt-in and requires a calibrated actuator table. -->
-  <group if="$(eval arg('selected') == 'hardware' and arg('connect_fc'))" ns="$(arg spinal_ns)">
-    <include file="$(find spinal)/launch/bridge.launch">
-      <arg name="mode" value="serial"/>
-      <arg name="serial_port" value="$(arg fc_serial_port)"/>
-      <arg name="serial_baud" value="$(arg fc_serial_baud)"/>
-    </include>
-  </group>
+  <include file="$(find dracomancer)/launch/bridge.launch" if="$(eval arg('selected') == 'hardware' and arg('connect_fc'))">
+    <arg name="spinal_ns" value="$(arg spinal_ns)"/>
+    <arg name="serial_port" value="$(arg fc_serial_port)"/>
+    <arg name="serial_baud" value="$(arg fc_serial_baud)"/>
+  </include>
   <include file="$(find dracomancer)/launch/view.launch" if="$(eval arg('selected') == 'viewer')">
     <arg name="robot_ns" value="$(arg robot_ns)"/>
     <arg name="rviz" value="$(arg rviz)"/>
@@ -51,8 +49,8 @@
   <include file="$(find dracomancer)/launch/teleoperation.launch" if="$(arg teleop_mode)">
     <arg name="device_ns" value="$(arg robot_ns)"/>
     <arg name="device_joint_topic" value="/$(arg robot_ns)/measured_joint_states"/>
-    <arg name="js_raw_topic" value="$(eval arg('spinal_ns').rstrip('/')+'/joystick/raw' if arg('selected') == 'hardware' and arg('dual_spinal') else '/joystick/raw')"/>
-    <arg name="left_js_raw_topic" value="$(eval arg('spinal_ns').rstrip('/')+'/joystick/left/raw' if arg('selected') == 'hardware' and arg('dual_spinal') else '/joystick/left/raw')"/>
+    <arg if="$(eval arg('selected') == 'hardware')" name="js_raw_topic" value="$(eval arg('spinal_ns').rstrip('/')+'/right/joystick/raw')"/>
+    <arg if="$(eval arg('selected') == 'hardware')" name="left_js_raw_topic" value="$(eval arg('spinal_ns').rstrip('/')+'/left/joystick/raw')"/>
     <arg name="teleop_mode" value="true"/>
     <arg name="shape_config" value="$(arg shape_config)"/>
     <arg name="mapping_mode" value="$(arg mapping_mode)"/>

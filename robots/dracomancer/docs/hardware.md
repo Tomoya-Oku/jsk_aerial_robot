@@ -37,16 +37,25 @@ Gazeboとは別のROS masterを使い、`use_sim_time=true`の環境では起動
 
 ## 起動と表示
 
+Spinalを単独で接続する場合は、シリアルポートを指定してDracomancer用bridgeを起動する。
+
+```bash
+roslaunch dracomancer bridge.launch serial_port:=/dev/ttyUSB0
+```
+
+bridgeは左右のサーボとJoystickを`/dracomancer/right/`、`/dracomancer/left/`配下に登録する。
+命名はROS側で解決するため、既存のファームウェアを使える。
+
 ### 未校正の動作確認だけを行う場合
 
 各腕の計測経路を読み取り、装着前に関節とIDの対応を確認できる。
 
 ```bash
-roslaunch dracomancer observe.launch dual_spinal:=true arm:=right
-roslaunch dracomancer observe.launch dual_spinal:=true arm:=left
+roslaunch dracomancer observe.launch arm:=right
+roslaunch dracomancer observe.launch arm:=left
 ```
 
-既定はルート名前空間のbridgeからID 1〜7を右腕の第1〜第7関節へ対応させる。
+既定は`/dracomancer`のbridgeからID 1〜7を右腕の第1〜第7関節へ対応させる。
 `get_board_info`で物理IDとscan indexを照合し、起動後最初の新鮮な全7軸計測を0度とする。
 換算は直接駆動の4096 count/rev・全軸符号+1を仮定する。外部エンコーダ・異なる分解能比は拒否する。
 実機のCAD零点・回転方向を校正した表示ではなく、反対側の腕はモデルの0度で表示する。
@@ -63,7 +72,7 @@ source devel/setup.bash
 roslaunch dracomancer bringup.launch backend:=hardware config:=/absolute/path/to/hardware.yaml
 ```
 
-既定のbridgeは`/right/servo/states`と`/left/servo/states`を配信する。
+既定のbridgeは`/dracomancer/right/servo/states`と`/dracomancer/left/servo/states`を配信する。
 `spinal_ns`でbridgeの名前空間、`robot_ns`で表示・操作の名前空間を指定できる。
 bridgeの同時起動は`connect_fc:=true`と`fc_serial_port`を指定する。
 従来の1バスファームウェアを使用する場合は`dual_spinal:=false`と、その機体の物理IDを設定する。
@@ -78,12 +87,13 @@ bridgeの同時起動は`connect_fc:=true`と`fc_serial_port`を指定する。
 
 ### Joystickの左右校正
 
-右は`/joystick/raw`、左は`/joystick/left/raw`。Spinalの起動時は両方を中立にする。
+右は`/dracomancer/right/joystick/raw`、左は`/dracomancer/left/joystick/raw`。
+Spinalの起動時は両方を中立にする。
 左は先にターミナルで校正し、左専用のファイルに保存する。
 
 ```bash
-rosrun dracomancer calibrate_joystick.py _js_raw_topic:=/joystick/left/raw \
-  _js_calibrated_topic:=/dracomancer/joystick/left/calibrated \
+rosrun dracomancer calibrate_joystick.py _js_raw_topic:=/dracomancer/left/joystick/raw \
+  _js_calibrated_topic:=/dracomancer/left/joystick/calibrated \
   _yaml_path:="$HOME/.ros/dracomancer-joystick-left.yaml"
 ```
 

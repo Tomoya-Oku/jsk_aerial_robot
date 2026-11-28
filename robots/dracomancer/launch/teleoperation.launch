@@ -1,8 +1,8 @@
 <launch>
-  <arg name="js_raw_topic" default="/joystick/raw"/>
-  <arg name="left_js_raw_topic" default="/joystick/left/raw"/>
-  <arg name="left_joystick_calibration" default="$(env HOME)/.ros/dracomancer-joystick-left.yaml"/>
   <arg name="device_ns" default="dracomancer" />
+  <arg name="js_raw_topic" default="/$(arg device_ns)/right/joystick/raw"/>
+  <arg name="left_js_raw_topic" default="/$(arg device_ns)/left/joystick/raw"/>
+  <arg name="left_joystick_calibration" default="$(env HOME)/.ros/dracomancer-joystick-left.yaml"/>
   <arg name="device_joint_topic" default="/$(arg device_ns)/measured_joint_states" />
   <arg name="robot_ns" default="dragon" />
   <arg name="enable_feasibility_gate" default="true" />
@@ -114,7 +114,7 @@
     <rosparam param="invert_axes">[]</rosparam>
     <param name="rate" value="40" />
     <param name="js_raw_topic" value="$(arg js_raw_topic)" />
-    <param name="js_calibrated_topic" value="/$(arg device_ns)/joystick/calibrated" />
+    <param name="js_calibrated_topic" value="/$(arg device_ns)/right/joystick/calibrated" />
     <param name="raw_timeout" value="$(arg joy_timeout)" />
     <param name="center_duration" value="2.0" />
     <param name="range_duration" value="5.0" />
@@ -126,7 +126,7 @@
   <node pkg="dracomancer" type="calibrate_joystick.py" name="$(arg device_ns)_left_joystick"
         output="screen" if="$(eval arg('enable_position_control') and arg('mapping_mode').startswith('dual_'))">
     <param name="js_raw_topic" value="$(arg left_js_raw_topic)"/>
-    <param name="js_calibrated_topic" value="/$(arg device_ns)/joystick/left/calibrated"/>
+    <param name="js_calibrated_topic" value="/$(arg device_ns)/left/joystick/calibrated"/>
     <param name="raw_timeout" value="$(arg joy_timeout)"/>
     <param name="yaml_path" value="$(arg left_joystick_calibration)"/>
   </node>
@@ -148,7 +148,7 @@
     <param name="robot_name" value="$(arg robot_ns)" />
     <param name="teleop_mode" value="$(arg teleop_mode)" />
     <param name="rate" value="40.0" />
-    <param name="joy_topic" value="/$(arg device_ns)/joystick/calibrated" />
+    <param name="joy_topic" value="/$(arg device_ns)/right/joystick/calibrated" />
     <param name="direction_mode" value="none" />
     <param name="scale_x" value="1.0" />
     <param name="scale_y" value="1.0" />

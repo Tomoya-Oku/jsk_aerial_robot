@@ -24,7 +24,7 @@ continuous関節、CAD q=0、URDFのeffort・velocity、PID、減衰、箱collis
 | 電流指令単位 | 2.69 mA [10] |
 | 標準経路 | Spinal → UART/RS485 → XM430 |
 | 接続API | `right/`・`left/`配下の`direct_servo_mode`、`servo/direct_current`、`servo/states` |
-| ROS名前空間の既定 | Spinal bridgeは`/`、Mk-IIの表示・操作は`/dracomancer` |
+| ROS名前空間の既定 | Spinal bridgeとMk-IIの表示・操作は`/dracomancer` |
 
 物理IDの既定値は`config/mkii/hardware.yaml`の`servo_ids`が管理する。
 Spinal scan indexは各通信系統の接続時に確認する別番号で、物理IDから推定しない。

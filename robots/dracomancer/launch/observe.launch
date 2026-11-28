@@ -1,9 +1,9 @@
 <launch>
   <!-- Read-only preview; startup pose is zero, not calibrated CAD coordinates. -->
   <arg name="robot_ns" default="dracomancer_preview"/>
-  <arg name="spinal_ns" default="/"/>
+  <arg name="dual_spinal" default="true"/>
+  <arg name="spinal_ns" default="$(eval '/dracomancer' if arg('dual_spinal') else '/')"/>
   <arg name="arm" default="right"/>
-  <arg name="dual_spinal" default="false"/>
   <arg name="servo_ids" default="$(eval [11, 12, 13, 14, 15, 16, 17] if arg('arm') == 'left' else [1, 2, 3, 4, 5, 6, 7])"/>
   <arg name="rviz" default="true"/>
   <group ns="$(arg robot_ns)">

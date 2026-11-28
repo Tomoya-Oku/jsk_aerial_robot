@@ -53,9 +53,9 @@ PDFや旧設計資料を優先して原稿の理論を変更しない。
 外部計測からの初期化も可能で、動的更新を使い始めた後は計測が古いと入力を零にする。
 `require_imu: true`が既定で、IMUが不明・古いときは速度入力を零にする。
 
-片腕は`/dracomancer/joystick/calibrated/pressed`の押下エッジで並進／回転を切り替え、
+片腕は`/dracomancer/right/joystick/calibrated/pressed`の押下エッジで並進／回転を切り替え、
 中立を確認するまで両速度を零にする。両腕は右入力が並進、
-`/dracomancer/joystick/left/calibrated`の左入力が回転。左側の実機入力経路・校正は別途用意する。
+`/dracomancer/left/joystick/calibrated`の左入力が回転。左側の校正は[実機手順](hardware.md#joystickの左右校正)を参照する。
 各瞬間の独立入力は各スティック2軸であり、3軸独立入力とは扱わない。
 
 姿勢目標は回転行列で積分し、速度・姿勢範囲の上限を適用する。

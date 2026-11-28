@@ -100,7 +100,7 @@ class ControlPose(AnchorRuntime):
 
         self.robot_name = rospy.get_param("~robot_name", "dragon")
         self.device_ns = rospy.get_param("~device_ns", "/dracomancer").rstrip("/")
-        self.joy_topic = rospy.get_param("~joy_topic", "/dracomancer/joystick/calibrated")
+        self.joy_topic = rospy.get_param("~joy_topic", self.device_ns + "/right/joystick/calibrated")
         self.imu_topic = rospy.get_param("~imu_topic", "/dracomancer/imu")
         self.rate_hz = rospy.get_param("~rate", 40.0)
         self.wait_after_hover = rospy.get_param("~wait_after_hover", 3.0)
@@ -219,7 +219,7 @@ class ControlPose(AnchorRuntime):
         self.left_received=0.
         self.view_last=None
         self.view_attitude_ready=False
-        rospy.Subscriber(self.device_ns+'/joystick/left/calibrated',Float32MultiArray,self.left_joystick,queue_size=1)
+        rospy.Subscriber(self.device_ns+'/left/joystick/calibrated',Float32MultiArray,self.left_joystick,queue_size=1)
         rospy.Subscriber(self.joy_topic+'/pressed',Bool,self.stick_button,queue_size=1)
         rospy.Subscriber(self.device_ns+'/operator_position',PoseStamped,self.operator_position,queue_size=1)
 

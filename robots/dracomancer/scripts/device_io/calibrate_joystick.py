@@ -14,8 +14,8 @@ class JoystickCalibPublisher:
         self.rate_hz = rospy.get_param("~rate", 40)
 
         # Topic names
-        self.js_raw_topic = rospy.get_param("~js_raw_topic", "dracomancer/joystick/raw")
-        self.js_calibrated_topic = rospy.get_param("~js_calibrated_topic", "dracomancer/joystick/calibrated")
+        self.js_raw_topic = rospy.get_param("~js_raw_topic", "/dracomancer/right/joystick/raw")
+        self.js_calibrated_topic = rospy.get_param("~js_calibrated_topic", "/dracomancer/right/joystick/calibrated")
 
         # Calibration parameters
         self.axis_indices = rospy.get_param("~axis_indices", [0, 1])

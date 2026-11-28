@@ -3,16 +3,21 @@
 ## 実装
 
 H7 V2のMk-II構成では、USART2の右7軸とUSART6の左7軸を独立したRS485ドライバで扱う。
-既定のルートbridgeでは`/right/servo/states`と`/left/servo/states`に配信する。
+Dracomancer用bridgeでは、ファームウェアの相対名を`/dracomancer`配下で解決する。
 
 | 用途 | 右 | 左 |
 |---|---|---|
 | サーボと物理ID | USART2、1〜7 | USART6、11〜17 |
-| 状態 | `/right/servo/states` | `/left/servo/states` |
-| 電流 | `/right/servo/direct_current` | `/left/servo/direct_current` |
-| モード | `/right/direct_servo_mode` | `/left/direct_servo_mode` |
-| 接続情報 | `/right/get_board_info` | `/left/get_board_info` |
-| Joystick | I2C1、`/joystick/raw` | I2C3、`/joystick/left/raw` |
+| 状態 | `/dracomancer/right/servo/states` | `/dracomancer/left/servo/states` |
+| トルク状態 | `/dracomancer/right/servo/torque_states` | `/dracomancer/left/servo/torque_states` |
+| 電流 | `/dracomancer/right/servo/direct_current` | `/dracomancer/left/servo/direct_current` |
+| モード | `/dracomancer/right/direct_servo_mode` | `/dracomancer/left/direct_servo_mode` |
+| 接続情報 | `/dracomancer/right/get_board_info` | `/dracomancer/left/get_board_info` |
+| Joystick | I2C1、`/dracomancer/right/joystick/raw` | I2C3、`/dracomancer/left/joystick/raw` |
+| Joystick校正出力 | `/dracomancer/right/joystick/calibrated` | `/dracomancer/left/joystick/calibrated` |
+
+Joystickの押下は各`calibrated/pressed`に配信する。bridgeはファームウェアの`joystick/raw`と
+`joystick/left/raw`を左右別のパスにリマップする。
 
 各ドライバは専用のDMAバッファと通信タスクを持つ。起動時に各バスの7台と物理IDを照合し、scan indexを0〜6に割り当てる。
 既存メッセージの時刻は位置読取の一巡を始めた時点を表す。応答した軸を配信し、欠損した軸の古い値は再配信しない。

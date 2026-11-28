@@ -7,7 +7,7 @@
   <arg name="mount_height" default="1.0" />
   <arg name="config" default="$(find dracomancer)/config/mkii/hardware.yaml" />
   <arg name="dual_spinal" default="true"/>
-  <arg name="spinal_ns" default="$(eval '/' if arg('dual_spinal') else '/dracomancer')"/>
+  <arg name="spinal_ns" default="/dracomancer"/>
   <arg name="connect_fc" default="false" />
   <arg name="fc_serial_port" default="/dev/ttyUSB0" />
   <arg name="fc_serial_baud" default="921600" />

@@ -118,8 +118,8 @@ class SpinalControl:
         self.busy = set()
         self.alive = True
         self.timeout = 0.15  # Shorter than the independent MCU's fixed 250ms deadline.
-        prefix = rospy.get_param('~spinal_ns', '/').rstrip('/')
         if self.dual:
+            prefix = rospy.get_param('~spinal_ns', '/dracomancer').rstrip('/')
             active = [bus for bus in self.buses if self.joints_by_bus[bus]]
             mode_paths = {bus: prefix+'/'+bus+'/direct_servo_mode' for bus in active}
             current_paths = {bus: prefix+'/'+bus+'/servo/direct_current' for bus in active}
