@@ -48,6 +48,7 @@ catkin_install_python(PROGRAMS
   scripts/simulation/backend.py
   scripts/teleop/control_joint_angle.py scripts/teleop/control_position.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+install(PROGRAMS scripts/record.sh DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(TARGETS wall_contact LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
 install(TARGETS shape_kernel LIBRARY DESTINATION ${SHAPE_KERNEL_DESTINATION})
 install(TARGETS shape_feasibility_node RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})

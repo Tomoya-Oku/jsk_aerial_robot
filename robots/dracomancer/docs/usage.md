@@ -93,6 +93,17 @@ DRAGONの内部関節角の操作には、校正済みの関節計測と、体�
 Catkinのclean機能で整理してからビルドする。
 旧構成のPython実行ファイルが残っている場合も、`catkin clean dracomancer`で整理してからビルドする。
 
+## 自動bag記録
+
+`bringup.launch`は既定で全ROSトピックを記録する。保存先はDracomancerパッケージの`rosbags/`で、
+ファイル名は起動PCの日時を使った`YYYYMMDD_HHMMSS_bringup.bag`。同じ名前がある場合は末尾に連番が付く。
+Ctrl-Cでlaunchを終了すると、記録中の`.bag.active`が`.bag`になる。
+
+```bash
+roslaunch dracomancer bringup.launch bag_name:=shape_test bag_dir:=/path/to/rosbags
+roslaunch dracomancer bringup.launch record_bag:=false
+```
+
 ## 壁接触の観測
 
 ```bash

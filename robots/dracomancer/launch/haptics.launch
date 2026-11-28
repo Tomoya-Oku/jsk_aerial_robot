@@ -33,6 +33,7 @@
 
   <!-- Reuse the integrated device, shape, pose, and force-feedback configuration. -->
   <include file="$(find dracomancer)/launch/bringup.launch">
+    <arg name="record_bag" value="false"/>
     <arg name="backend" value="$(eval 'viewer' if arg('simulation') else 'hardware')"/>
     <arg name="rviz" value="$(arg rviz)"/>
     <arg name="panel" value="$(arg panel)"/>

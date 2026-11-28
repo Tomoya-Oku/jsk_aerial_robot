@@ -5,6 +5,9 @@
   <arg name="rviz" default="true"/>
   <arg name="panel" default="true"/>
   <arg name="gui" default="true"/>
+  <arg name="record_bag" default="true" doc="Record all ROS topics until bringup exits."/>
+  <arg name="bag_dir" default="$(find dracomancer)/rosbags" doc="Destination for ROS bags."/>
+  <arg name="bag_name" default="bringup" doc="Name after the recording start timestamp."/>
   <arg name="mount_height" default="1.0"/>
   <arg name="config" default="$(find dracomancer)/config/device/hardware.yaml"/>
   <arg name="dual_spinal" default="true"/>
@@ -75,6 +78,9 @@
   <arg name="enable_joint_angle_control" default="$(arg start_control)"
        doc="Enable the shape controller, including when start_control is false."/>
   <arg name="publish_joints_only_when_hovering" default="true" />
+
+  <node if="$(arg record_bag)" pkg="dracomancer" type="record.sh" ns="$(arg robot_ns)"
+        name="bag_record" args="&quot;$(arg bag_dir)&quot; &quot;$(arg bag_name)&quot;" output="screen"/>
 
   <include file="$(find dracomancer)/launch/bridge.launch"
            if="$(eval arg('selected') in ['hardware', 'preview'] and arg('connect_fc'))">

@@ -45,6 +45,7 @@
   <node pkg="rviz" type="rviz" name="shape_rviz" if="$(arg rviz)"
         args="-d $(find dracomancer)/config/visualization/shape.rviz"/>
   <include file="$(find dracomancer)/launch/bringup.launch">
+    <arg name="record_bag" value="false"/>
     <arg name="rviz" value="false"/>
     <arg name="panel" value="$(arg panel)"/>
     <arg name="assembly" value="$(arg assembly)"/>

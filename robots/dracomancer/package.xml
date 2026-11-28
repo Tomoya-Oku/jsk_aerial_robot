@@ -27,6 +27,7 @@
   <depend>nlopt</depend>
   <depend>pluginlib</depend>
   <exec_depend>message_runtime</exec_depend>
+  <exec_depend>rosbag</exec_depend>
   <exec_depend>spinal</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
