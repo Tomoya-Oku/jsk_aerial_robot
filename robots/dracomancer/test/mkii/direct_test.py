@@ -44,7 +44,7 @@ joint = 'right_joint_1'
 cfg = {joint: {'index': 2, 'id': 7, 'direction': -1, 'zero_tick': 2000,
                'radians_per_tick': 0.001, 'joint_nm_per_amp': 2.0,
                'max_current_amp': 0.5, 'max_torque_nm': 0.8}}
-rospy.set_param('robot_description', (PACKAGE/'urdf/mkii.urdf.xacro').read_text())
+rospy.set_param('robot_description', (PACKAGE/'urdf/dracomancer.urdf.xacro').read_text())
 rospy.set_param('joints', ['%s_joint_%d' % (side, i) for side in ('right', 'left') for i in range(1, 8)])
 rospy.set_param('~actuators', cfg)
 rospy.set_param('~calibrated', True)

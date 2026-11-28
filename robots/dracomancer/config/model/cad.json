@@ -155,5 +155,5 @@
   ],
   "source_urdf_sha256": "4e321ae6b30e8fdb8bdebb2823defacbfebc7b15605e2aa41e80f2e60bab99c4",
   "baseline_urdf_sha256": "f9142457a1feb0ccf92a80bab0f241763a9602c7e0a6686950f0585ec0ed155d",
-  "baseline_note": "From the repository assembly.urdf export with mirror axes, with mesh paths normalized."
+  "baseline_note": "From the 2026-11-27 repository CAD export with mirror axes, with mesh paths normalized."
 }

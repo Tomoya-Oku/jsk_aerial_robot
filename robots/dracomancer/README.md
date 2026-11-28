@@ -25,7 +25,7 @@ roslaunch dracomancer shape_demo.launch
 
 | 場所 | 内容 |
 |---|---|
-| `urdf/cad.urdf`、`urdf/mkii.urdf.xacro` | 2026年11月27日版のCAD基準モデルと、同じ形状・関節を使うROS/Gazebo用モデル |
+| `urdf/dracomancer.urdf`、`urdf/dracomancer.urdf.xacro` | 2026年11月27日版のCAD基準モデルと、同じ形状・関節を使うROS/Gazebo用モデル |
 | `meshes/` | CAD基部・左右共用の腕部品・左右別の手首部品を収めるSTL 10点 |
 | [`config/`](docs/usage.md#設定ファイル一覧) | 関節、実機校正、制御、可視化、実験の設定 |
 | `scripts/mkii/` | viewer・Gazebo・直結制御とGUI |

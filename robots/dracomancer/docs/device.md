@@ -8,8 +8,8 @@
 基部1点、左右共用の肩・上腕・前腕5点、左右別の手首4点のSTLを`meshes/`直下に置く。
 標準入力は`right_joint_1..7`。両腕方式では左腕も含め、入力ベクトルを左7軸・右7軸の順に並べる。
 
-CAD基準は`urdf/cad.urdf`。従来の`urdf/assembly.urdf`も同じファイルを指す。
-`urdf/mkii.urdf.xacro`は同じメッシュ・関節フレーム・慣性を使い、world固定・transmission・Gazebo設定を加える。
+CAD基準は`urdf/dracomancer.urdf`。
+`urdf/dracomancer.urdf.xacro`は同じメッシュ・関節フレーム・慣性を使い、world固定・transmission・Gazebo設定を加える。
 CADの慣性・軸・関節変換とSTLハッシュは`test/mkii/model.py`で照合する。
 Gazeboの衝突判定にはSTLの外接箱を使う。URDFのeffort・velocity、PID、減衰はシミュレーション用の仮設定。
 実機の可動限界・許容トルクを保証せず、自己衝突判定も有効化していない。

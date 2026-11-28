@@ -21,7 +21,7 @@ class ShapeTests(unittest.TestCase):
     def setUpClass(cls):
         robots = PACKAGE.parent
         cls.human_model = UrdfModel(xacro.process_file(str(
-            robots / "dracomancer/urdf/mkii.urdf.xacro")).toxml())
+            robots / "dracomancer/urdf/dracomancer.urdf.xacro")).toxml())
         cls.dragon_model = UrdfModel(xacro.process_file(str(
             robots / "dragon/robots/quad/v1_5_202601.urdf.xacro")).toxml())
         cls.config = yaml.safe_load((PACKAGE / "config/control/shape.yaml").read_text())["shape"]

@@ -88,8 +88,8 @@
   </include>
 
   <group ns="$(arg robot_ns)">
-    <param unless="$(arg assembly_view)" name="robot_description" command="$(find xacro)/xacro '$(find dracomancer)/urdf/mkii.urdf.xacro' robot_ns:=$(arg robot_ns) mount_height:=$(arg mount_height)"/>
-    <param if="$(arg assembly_view)" name="robot_description" textfile="$(find dracomancer)/urdf/cad.urdf"/>
+    <param unless="$(arg assembly_view)" name="robot_description" command="$(find xacro)/xacro '$(find dracomancer)/urdf/dracomancer.urdf.xacro' robot_ns:=$(arg robot_ns) mount_height:=$(arg mount_height)"/>
+    <param if="$(arg assembly_view)" name="robot_description" textfile="$(find dracomancer)/urdf/dracomancer.urdf"/>
     <!-- Map the assembly's shoulder direction (+X) to the viewer's up direction (+Z). -->
     <node if="$(arg assembly_view)" pkg="tf2_ros" type="static_transform_publisher" name="upright"
           args="0 0 $(arg mount_height) 0 -1.570796326794897 0 world base_link"/>

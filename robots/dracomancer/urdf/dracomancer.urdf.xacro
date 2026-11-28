@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <robot name="dracomancer" xmlns:xacro="http://www.ros.org/wiki/xacro">
-  <!-- Geometry, inertias and joint frames match cad.urdf. Gazebo uses boxes fitted to the STL bounds. -->
+  <!-- Geometry, inertias and joint frames match dracomancer.urdf. Gazebo uses boxes fitted to the STL bounds. -->
   <link name="base_link">
     <inertial>
       <origin xyz="0.538159498795166 7.7253991936946e-05 0.0394651265746217" rpy="0 0 0" />

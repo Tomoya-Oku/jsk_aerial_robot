@@ -52,7 +52,7 @@ roslaunch dracomancer bringup.launch backend:=gazebo
 標準のviewer・Gazeboと`assembly:=true`は、2026年11月27日保存のSolidWorksアセンブリから
 マネキンを除いた両腕モデルを使う。全関節角がゼロのとき、関節姿勢はCADの保存状態と一致する。
 `roslaunch dracomancer bringup.launch assembly:=true mount_height:=0.0`では
-[CAD基準URDF](../urdf/cad.urdf)を読み込み、肩が上になるようモデル全体を90度回転して表示する。
+[CAD基準URDF](../urdf/dracomancer.urdf)を読み込み、肩が上になるようモデル全体を90度回転して表示する。
 別ウィンドウの`Angles [rad]`タブで、左右14関節を個別に操作できる。
 同番号の左右関節に同じ角度を入れると、それぞれのCAD基準姿勢から鏡像方向へ回転する。
 DRAGONと組み合わせる場合は[地上デモ](shape.md#地上デモ)を参照。

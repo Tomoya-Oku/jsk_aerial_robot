@@ -9,9 +9,9 @@ import xml.etree.ElementTree as ET
 
 package = Path(__file__).parents[2]
 metadata = json.loads((package / 'config/model/cad.json').read_text())
-cad_file = package / 'urdf/cad.urdf'
+cad_file = package / 'urdf/dracomancer.urdf'
 source = ET.parse(cad_file).getroot()
-model = ET.parse(package / 'urdf/mkii.urdf.xacro').getroot()
+model = ET.parse(package / 'urdf/dracomancer.urdf.xacro').getroot()
 links = {link.get('name'): link for link in source.findall('link')}
 joints = {joint.get('name'): joint for joint in source.findall('joint')}
 with (package / 'config/model/joint_mapping.csv').open(encoding='utf-8-sig', newline='') as stream:
@@ -67,6 +67,5 @@ for name, cad in joints.items():
     assert row['mesh'] == mesh_path(links[row['child']])
     assert [float(row[f'axis {axis}']) for axis in 'xyz'] == list(map(float, cad.find('axis').get('xyz').split()))
 
-assert (package/'urdf/assembly.urdf').read_bytes() == cad_file.read_bytes()
 assert hashlib.sha256(cad_file.read_bytes()).hexdigest() == metadata['baseline_urdf_sha256']
 print('PASS: 15 CAD links, 14 joint frames and axes, 14 transmissions, 10 shared meshes, collision bounds')
