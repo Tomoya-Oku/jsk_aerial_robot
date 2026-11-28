@@ -7,12 +7,10 @@ import unittest
 import numpy as np
 
 PACKAGE = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PACKAGE / 'scripts/control'))
-sys.path.insert(0, str(PACKAGE / 'scripts/haptics'))
-from contact_math import anchor_position, required_wrench, finite_jacobian
-from contact_model import ContactModel
-from contact_feedback import ContactFeedback
-from safety_feedback import SafetyFeedback
+sys.path.insert(0, str(PACKAGE / 'src'))
+from dracomancer.contacts import ContactModel, anchor_position, required_wrench
+from dracomancer.haptics import ContactFeedback, SafetyFeedback
+from dracomancer.shape import finite_jacobian
 
 
 class TheoryTests(unittest.TestCase):
@@ -80,7 +78,7 @@ class TheoryTests(unittest.TestCase):
         np.testing.assert_allclose(left+right,[-1.,-1.],atol=1e-8)
 
     def test_view_plane_neutral_switch_and_rotation_integration(self):
-        from navigation import ViewControl
+        from dracomancer.navigation import ViewControl
         view=ViewControl([0,0,0],linear=[1,1],angular=[1,1])
         v,w=view.commands([1,0,0],np.eye(3),[1,0])
         np.testing.assert_allclose(v,[0,-1,0]);np.testing.assert_allclose(w,0.)
@@ -95,7 +93,7 @@ class TheoryTests(unittest.TestCase):
         np.testing.assert_allclose(angles,[0,0,.1],atol=1e-12)
 
     def test_view_vertical_singularity_is_continuous(self):
-        from navigation import ViewControl
+        from dracomancer.navigation import ViewControl
         view=ViewControl([0,0,1])
         first=view.basis([.00001,0,0],np.eye(3))
         second=view.basis([-.00001,0,0],np.eye(3))

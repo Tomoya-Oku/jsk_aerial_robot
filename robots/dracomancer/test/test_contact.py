@@ -7,10 +7,10 @@ import unittest
 
 import numpy as np
 
-CONTROL = Path(__file__).resolve().parents[1] / "scripts" / "control"
-sys.path.insert(0, str(CONTROL))
-from contact_math import finite_jacobian, reflect_wrench, shift_wrench
-from contact_model import ContactModel
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from dracomancer.contacts import ContactModel, shift_wrench
+from dracomancer.haptics import reflect_wrench
+from dracomancer.shape import finite_jacobian
 
 
 

@@ -110,7 +110,7 @@ class Panel(QWidget):
                 rospy.wait_for_service(service, timeout=2)
                 result = rospy.ServiceProxy(service, SetBool)(enabled)
                 self.feedback.emit(json.dumps({'reply': name, 'success': result.success, 'message': result.message}))
-            except rospy.ROSException as error:
+            except (rospy.ROSException, rospy.ServiceException) as error:
                 self.feedback.emit(json.dumps({'reply': name, 'success': False, 'message': str(error)}))
         threading.Thread(target=call, daemon=True).start()
 
@@ -186,7 +186,7 @@ class Panel(QWidget):
             try:
                 rospy.wait_for_service('control/stop', timeout=0.2)
                 rospy.ServiceProxy('control/stop', Trigger)()
-            except rospy.ROSException:
+            except (rospy.ROSException, rospy.ServiceException):
                 pass
         if request_stop:
             threading.Thread(target=call, daemon=True).start()

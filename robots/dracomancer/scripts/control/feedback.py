@@ -1,29 +1,18 @@
 #!/usr/bin/env python3
-"""Opt-in thesis haptics. Publishes Nm only; never arms a servo."""
+"""Opt-in haptic feedback with calibrated torque caps and freshness checks."""
 import json
-from pathlib import Path
-import sys
 import time
 
 import numpy as np
 import rospy
-from sensor_msgs.msg import JointState
 from geometry_msgs.msg import WrenchStamped
+from sensor_msgs.msg import JointState
 from std_msgs.msg import String
 
-helper_dir = Path(__file__).resolve().parent
-if not (helper_dir/'shape_mapping.py').is_file():
-    import rospkg
-    helper_dir = Path(rospkg.RosPack().get_path('dracomancer'))/'scripts/control'
-sys.path.insert(0,str(helper_dir))
-sys.path.insert(0, str(helper_dir.parent/'haptics'))
-from contact_feedback import ContactFeedback
-from safety_feedback import SafetyFeedback, combine_torque, rate_limit
-from shape_mapping import UrdfModel, HumanChain, BimanualHumanChain, DragonChain, ShapeMapper, DRAGON_JOINTS
-from joint_mapping import JointMapper
-from contact_model import ContactModel
-from contacts import ContactInputs
+from dracomancer.contacts import ContactInputs, ContactModel
+from dracomancer.haptics import ContactFeedback, SafetyFeedback, combine_torque, rate_limit
 from dracomancer.output_lock import claim_output
+from dracomancer.shape import DRAGON_JOINTS, DragonChain, JointMapper, UrdfModel, make_mapper
 
 
 class Feedback:
@@ -37,14 +26,9 @@ class Feedback:
         xml = rospy.get_param('/'+self.robot+'/robot_description')
         dragon = DragonChain(UrdfModel(xml), self.config['dragon_tail'])
         rest = rospy.get_param('~startup_pose', [0., np.pi/2]*3)
-        dual = self.mode.startswith('dual_')
-        if self.mode in ('joint', 'dual_joint'):
-            if self.config.get('joint_mapping', {}).get('calibrated') is not True and not rospy.get_param('/use_sim_time', False):
-                raise ValueError('anatomical calibration required for joint feedback')
-            self.mapper = JointMapper(human,dragon,self.config,rest,dual)
-        else:
-            chain = BimanualHumanChain(human,self.config) if dual else HumanChain(human,self.config)
-            self.mapper = ShapeMapper(chain,dragon,self.config,rest)
+        self.mapper = make_mapper(
+            human, dragon, self.config, rest, self.mode,
+            simulation=rospy.get_param('/use_sim_time', False))
         self.contact_model = ContactModel(xml)
         self.names = self.mapper.human.names
         n = len(self.names)

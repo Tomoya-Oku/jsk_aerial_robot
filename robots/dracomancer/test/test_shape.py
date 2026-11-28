@@ -12,7 +12,7 @@ import xacro
 
 PACKAGE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PACKAGE / "scripts/control"))
-from shape_mapping import (UrdfModel, HumanChain, DragonChain, ShapeMapper,
+from dracomancer.shape import (UrdfModel, HumanChain, DragonChain, ShapeMapper,
                            centerline, limit_step, DRAGON_JOINTS, transform)
 
 
@@ -168,14 +168,14 @@ class ShapeTests(unittest.TestCase):
             limit_step([0]*6, [np.nan]*6, [.1]*6, .025, .015)
 
     def test_single_joint_thesis_equations(self):
-        from joint_mapping import JointMapper
+        from dracomancer.shape import JointMapper
         mapper = JointMapper(self.human_model,self.dragon,self.config,[0]*6)
         q = np.array([.1,.2,np.pi/4,.4,np.pi/4,.2,.3])
         # Wrist rotates by shoulder_rot + forearm_pron = pi/2.
         np.testing.assert_allclose(mapper.reference(q),[-.3,.2,.2,.2,.2,.1],atol=1e-12)
 
     def test_dual_joint_neutral_and_independent_elbows(self):
-        from joint_mapping import JointMapper
+        from dracomancer.shape import JointMapper
         mapper = JointMapper(self.human_model,self.dragon,self.config,[0]*6,True)
         np.testing.assert_allclose(mapper.reference(np.zeros(14)),0.)
         values = np.zeros(14)
@@ -188,7 +188,7 @@ class ShapeTests(unittest.TestCase):
         np.testing.assert_allclose(mapper.reference(values)[2:4],0.,atol=1e-12)
 
     def test_bimanual_centerline_uses_body_not_left_hand(self):
-        from shape_mapping import BimanualHumanChain
+        from dracomancer.shape import BimanualHumanChain
         human = BimanualHumanChain(self.human_model,self.config)
         values = {n:0. for n in human.names}
         points = human.points(values)
@@ -201,7 +201,7 @@ class ShapeTests(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(mapper.dragon_shape([.1]*6))))
 
     def test_direct_jacobian_power_with_calibrated_coordinates(self):
-        from joint_mapping import JointMapper
+        from dracomancer.shape import JointMapper
         mapper = JointMapper(self.human_model,self.dragon,self.config,[0]*6,True)
         values = {n:.05 for n in mapper.human.names}
         matrix = mapper.mapping_jacobian(values,[0]*6)

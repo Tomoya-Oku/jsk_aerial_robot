@@ -1,9 +1,70 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""Directional safety feedback model for Dracomancer Mk-II."""
-
+"""Virtual-work reflection, shape constraint feedback and torque limits."""
 import numpy as np
+
+
+def _reflect(mapping, robot_jacobian, wrench, gain):
+    return float(gain) * mapping.T.dot(robot_jacobian.T.dot(wrench))
+
+
+class ContactFeedback:
+    """Apply tau_h = M.T * J_r.T * wrench.
+
+    ``robot_jacobian`` maps robot joint velocity to the wrench-frame twist and
+    ``mapping_jacobian`` maps human joint velocity to robot joint velocity.
+    Keeping both matrices as inputs lets the fixed-link and global-shape
+    mappings share this haptic implementation.
+    """
+
+    def __init__(self, robot_joint_count, human_joint_count, gain=1.0):
+        self.robot_joint_count = int(robot_joint_count)
+        self.human_joint_count = int(human_joint_count)
+        self.gain = float(gain)
+        if self.robot_joint_count <= 0 or self.human_joint_count <= 0 or not np.isfinite(self.gain) or self.gain < 0:
+            raise ValueError("joint counts must be positive and contact gain nonnegative")
+
+    def compute(self, wrench, robot_jacobian, mapping_jacobian):
+        wrench = np.asarray(wrench, dtype=float)
+        robot_jacobian = np.asarray(robot_jacobian, dtype=float)
+        mapping_jacobian = np.asarray(mapping_jacobian, dtype=float)
+
+        expected_robot = (6, self.robot_joint_count)
+        expected_mapping = (self.robot_joint_count, self.human_joint_count)
+        if wrench.shape != (6,):
+            raise ValueError("contact wrench must have 6 elements")
+        if robot_jacobian.shape != expected_robot:
+            raise ValueError("robot Jacobian must have shape %s" % (expected_robot,))
+        if mapping_jacobian.shape != expected_mapping:
+            raise ValueError("mapping Jacobian must have shape %s" % (expected_mapping,))
+        if not (np.all(np.isfinite(wrench)) and
+                np.all(np.isfinite(robot_jacobian)) and
+                np.all(np.isfinite(mapping_jacobian))):
+            raise ValueError("contact feedback input contains non-finite values")
+
+        return _reflect(mapping_jacobian, robot_jacobian, wrench, self.gain)
+
+
+def reflect_wrench(mapping, robot_jacobian, wrench, gain, limits):
+    """Return raw and limited device torques using gain * M.T * J.T * w.
+
+    w is the environment-on-robot wrench. Do not negate it again: virtual
+    work maps that resisting wrench to a resisting device torque already.
+    """
+    mapping = np.asarray(mapping, dtype=float)
+    robot_jacobian = np.asarray(robot_jacobian, dtype=float)
+    wrench = np.asarray(wrench, dtype=float)
+    limits = np.asarray(limits, dtype=float)
+    if mapping.ndim != 2 or robot_jacobian.shape != (6, mapping.shape[0]):
+        raise ValueError("incompatible mapping and robot Jacobian dimensions")
+    if wrench.shape != (6,) or limits.shape != (mapping.shape[1],):
+        raise ValueError("incompatible wrench or device torque limit dimensions")
+    if (not all(np.all(np.isfinite(v)) for v in
+                (mapping, robot_jacobian, wrench, limits)) or
+            not np.isfinite(gain) or gain < 0 or np.any(limits < 0)):
+        raise ValueError("non-finite input or negative gain/torque limit")
+    raw = _reflect(mapping, robot_jacobian, wrench, gain)
+    if not np.all(np.isfinite(raw)):
+        raise ValueError("reflected torque is not finite")
+    return raw, np.clip(raw, -limits, limits)
 
 
 class SafetyFeedback:

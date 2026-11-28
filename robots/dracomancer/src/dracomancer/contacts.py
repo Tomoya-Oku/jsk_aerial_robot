@@ -1,25 +1,62 @@
-#!/usr/bin/env python3
-"""URDF kinematics about the moving CoG with fixed FC orientation."""
+"""Contact wrench inputs, reference-frame transformations and robot kinematics."""
 import xml.etree.ElementTree as ET
+
 import numpy as np
-from contact_math import finite_jacobian
 
-
-def rotation(axis, angle):
-    axis = np.asarray(axis, dtype=float)
-    axis = axis / np.linalg.norm(axis)
-    x, y, z = axis
-    skew = np.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])
-    return np.eye(3) + np.sin(angle) * skew + (1 - np.cos(angle)) * skew.dot(skew)
+from .shape import finite_jacobian, rotation, transform, vector
 
 
 def origin(element):
-    transform = np.eye(4)
-    if element is not None:
-        transform[:3, 3] = np.fromstring(element.get("xyz", "0 0 0"), sep=" ")
-        r, p, y = np.fromstring(element.get("rpy", "0 0 0"), sep=" ")
-        transform[:3, :3] = rotation([0, 0, 1], y) @ rotation([0, 1, 0], p) @ rotation([1, 0, 0], r)
-    return transform
+    if element is None:
+        return np.eye(4)
+    xyz = [float(v) for v in element.get("xyz", "0 0 0").split()]
+    rpy = [float(v) for v in element.get("rpy", "0 0 0").split()]
+    return transform(xyz, rpy)
+
+
+def shift_wrench(force, torque, source, destination):
+    """Move a wrench's moment origin; all arguments share one orientation.
+
+    A force at source contributes (source - destination) x force about
+    destination. The force itself does not change.
+    """
+    values = [np.asarray(v, dtype=float) for v in (force, torque, source, destination)]
+    if any(v.shape != (3,) or not np.all(np.isfinite(v)) for v in values):
+        raise ValueError("wrench and reference points must be finite 3-vectors")
+    force, torque, source, destination = values
+    return np.r_[force, torque + np.cross(source - destination, force)]
+
+
+def anchor_position(reference, world_rotation, relative_point):
+    """Thesis eq:anchor-compensation / eq:bimanual-center-position.
+
+    The same command q_cmd used for the joints must produce relative_point.
+    This fixes the point's position; it does not command a fixed orientation.
+    """
+    reference, relative_point = (np.asarray(v, dtype=float) for v in (reference, relative_point))
+    world_rotation = np.asarray(world_rotation, dtype=float)
+    if (reference.shape != (3,) or relative_point.shape != (3,) or world_rotation.shape != (3, 3)
+            or not all(np.all(np.isfinite(v)) for v in (reference, relative_point, world_rotation))
+            or not np.allclose(world_rotation.T @ world_rotation, np.eye(3), atol=1e-7)
+            or not np.isclose(np.linalg.det(world_rotation), 1., atol=1e-7)):
+        raise ValueError("invalid anchor position or rotation")
+    return reference - world_rotation @ relative_point
+
+
+def required_wrench(mass, gravity, contact_wrench, contact_from_cog):
+    """Thesis eq:required-static-wrench; all components share one frame.
+
+    contact_wrench is environment-on-robot, about the contact point E.
+    """
+    mass = float(mass)
+    gravity, contact_from_cog = (np.asarray(v, dtype=float) for v in (gravity, contact_from_cog))
+    wrench = np.asarray(contact_wrench, dtype=float)
+    if (not np.isfinite(mass) or mass <= 0 or gravity.shape != (3,)
+            or contact_from_cog.shape != (3,) or wrench.shape != (6,)
+            or not all(np.all(np.isfinite(v)) for v in (gravity, contact_from_cog, wrench))):
+        raise ValueError("invalid static wrench inputs")
+    return np.r_[-mass * gravity - wrench[:3],
+                 -wrench[3:] - np.cross(contact_from_cog, wrench[:3])]
 
 
 class ContactModel:
@@ -119,3 +156,37 @@ class ContactModel:
     def wrench_in_fc(self, positions, wrench, link=None):
         rotation_fc_tip = self.point_pose(positions,self.tip if link is None else link)[:3, :3]
         return np.r_[rotation_fc_tip @ wrench[:3], rotation_fc_tip @ wrench[3:]]
+
+
+class ContactInputs:
+    def __init__(self,specs,robot):
+        if not isinstance(specs,list) or not specs:raise ValueError('at least one contact specification required')
+        self.specs=[]
+        self.robot=robot
+        self.latest={}
+        for spec in specs:
+            link=spec.get('link','link1')
+            if not isinstance(link,str) or not link:raise ValueError('contact link required')
+            self.specs.append(dict(link=link,point=vector(spec.get('point',[0,0,0]),3).tolist(),
+                                   topic=spec.get('topic','/'+robot+'/contact/wrench')))
+        if len({s['topic'] for s in self.specs})!=len(self.specs):
+            raise ValueError('each contact requires an individual wrench topic')
+
+    def update(self,index,msg,received):
+        self.latest[index]=(msg,received)
+
+    def values(self,now,wall):
+        contacts=[]
+        for i,spec in enumerate(self.specs):
+            if i not in self.latest:raise ValueError('contact wrench unavailable')
+            msg,received=self.latest[i]
+            stamp=msg.header.stamp.to_sec()
+            if not stamp>0 or not 0<=now-stamp<=.25 or not 0<=wall-received<=.25:
+                raise ValueError('contact wrench stale or future')
+            frame=msg.header.frame_id.lstrip('/')
+            local=frame in (spec['link'],self.robot+'/'+spec['link'])
+            if not local and frame not in ('fc',self.robot+'/fc'):raise ValueError('contact frame mismatch')
+            f,m=msg.wrench.force,msg.wrench.torque
+            wrench=vector([f.x,f.y,f.z,m.x,m.y,m.z],6).tolist()
+            contacts.append((spec['link'],spec['point'],wrench,local))
+        return contacts

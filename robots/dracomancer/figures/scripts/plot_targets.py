@@ -3,15 +3,14 @@
 
 """Render shape-task target snapshots from the DRAGON FK model.
 
-The images show the DRAGON link chain at each q_star in
-config/shape_task/targets.yaml, expressed in the link4-root frame used by the
-shape-task shadow and E_s metric.
+The images show the DRAGON link chain at each q_star in an archived target
+YAML, expressed in the link4-root frame of the shape-task E_s metric.
 """
 
+import argparse
 import ast
 import os
 import re
-import sys
 
 import matplotlib
 matplotlib.use("Agg")
@@ -20,13 +19,9 @@ import numpy as np
 
 
 DRACOMANCER = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-SHAPE_TASK = os.path.join(DRACOMANCER, "scripts", "shape_task")
-sys.path.insert(0, SHAPE_TASK)
-
 import dragon_fk  # noqa: E402
 
 
-TARGETS_YAML = os.path.join(DRACOMANCER, "config", "shape_task", "targets.yaml")
 OUT_DIR = os.path.join(DRACOMANCER, "figures", "shape_task_targets")
 
 
@@ -95,10 +90,14 @@ def save(fig, path):
 
 
 def main():
-    targets = load_targets(TARGETS_YAML)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("targets", help="YAML file with archived target shapes and q_star")
+    parser.add_argument("--output", default=OUT_DIR, help="directory for the generated figures")
+    args = parser.parse_args()
+    targets = load_targets(args.targets)
     if not targets:
-        raise RuntimeError("no targets found in %s" % TARGETS_YAML)
-    os.makedirs(OUT_DIR, exist_ok=True)
+        parser.error(f"no targets found in {args.targets}")
+    os.makedirs(args.output, exist_ok=True)
 
     target_points = []
     for target in targets:
@@ -114,14 +113,14 @@ def main():
         draw_shape(ax, target["points"], target["name"], target["q_star"], colors[i % len(colors)])
         set_equal_axes(ax, all_points)
         safe_name = re.sub(r"[^A-Za-z0-9]+", "_", target["name"]).strip("_").lower()
-        save(fig, os.path.join(OUT_DIR, safe_name))
+        save(fig, os.path.join(args.output, safe_name))
 
     fig = plt.figure(figsize=(15, 5))
     for i, target in enumerate(targets):
         ax = fig.add_subplot(1, len(targets), i + 1, projection="3d")
         draw_shape(ax, target["points"], target["name"], target["q_star"], colors[i % len(colors)])
         set_equal_axes(ax, all_points)
-    save(fig, os.path.join(OUT_DIR, "overview"))
+    save(fig, os.path.join(args.output, "overview"))
 
 
 if __name__ == "__main__":

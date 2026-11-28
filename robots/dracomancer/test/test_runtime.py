@@ -14,7 +14,6 @@ import yaml
 
 PACKAGE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PACKAGE / 'src'))
-sys.path.insert(0, str(PACKAGE / 'scripts/control'))
 
 
 class Stamp:
@@ -147,20 +146,14 @@ class RuntimeTest(unittest.TestCase):
         self.rospy.Publisher.assert_not_called()
 
     def test_installed_shape_entrypoint_resolves_shared_helpers(self):
-        package_resolver = MagicMock()
-        package_resolver.RosPack.return_value.get_path.return_value = str(PACKAGE)
         source = PACKAGE / 'scripts/control/control_joint_angle.py'
         with tempfile.TemporaryDirectory() as directory:
-            installed = Path(directory) / 'control_joint_angle.py'
+            installed = Path(directory) / source.name
             installed.write_bytes(source.read_bytes())
-            search_path = [p for p in sys.path if Path(p).resolve() != source.parent.resolve()]
-            with patch.dict(sys.modules, {'rospkg': package_resolver}), patch.object(sys, 'path', search_path):
-                sys.modules.pop('shape_mapping', None)
-                sys.modules.pop('shape_runtime', None)
-                module = load('installed_shape', installed)
-                self.assertEqual(module.helper_dir, source.parent)
-                self.assertEqual(Path(sys.modules['shape_runtime'].__file__).parent, source.parent)
-                package_resolver.RosPack.return_value.get_path.assert_called_once_with('dracomancer')
+            search_path = sys.path.copy()
+            module = load('installed_shape', installed)
+            self.assertEqual(module.make_mapper.__module__, 'dracomancer.shape')
+            self.assertEqual(sys.path, search_path)
 
     def test_gazebo_forwards_original_measurement_time(self):
         n = self.simulation.Control.__new__(self.simulation.Control)
@@ -462,12 +455,12 @@ class RuntimeTest(unittest.TestCase):
         with self.assertRaises(ValueError):n.torque()
 
     def test_anchor_uses_sent_shape_and_preserves_world_reference(self):
-        anchor=load('runtime_anchor',PACKAGE/'scripts/control/anchor_runtime.py')
-        n=anchor.AnchorRuntime.__new__(anchor.AnchorRuntime)
+        position = load('runtime_anchor', PACKAGE/'scripts/control/control_position.py')
+        n = position.ControlPose.__new__(position.ControlPose)
         n.anchor_mode,n.anchor_reference,n.anchor_last='tail',None,None
         n.anchor_tail=[.474,0,0]
         n.rate_hz,n.pos_limit=40.,False
-        n.anchor_received=n.odom_received=anchor.time.monotonic()
+        n.anchor_received=n.odom_received=position.time.monotonic()
         names=self.control.DRAGON_JOINTS
         n.anchor_data=dict(active=True,stamp=10.,fc_to_cog=np.eye(3).ravel().tolist(),
                            robot=dict.fromkeys(names,.1),q_command=[.2]*6)
@@ -475,7 +468,7 @@ class RuntimeTest(unittest.TestCase):
                              orientation=SimpleNamespace(x=0.,y=0.,z=0.,w=1.))
         n.anchor_odom=SimpleNamespace(header=SimpleNamespace(stamp=Stamp(10)),pose=SimpleNamespace(pose=pose))
         n.anchor_base_odom=n.anchor_odom
-        n.base_received=anchor.time.monotonic()
+        n.base_received=position.time.monotonic()
         def point(positions,*args):
             result=np.eye(4);result[0,3]=positions[names[0]];return result
         n.anchor_model=SimpleNamespace(required_joints=set(names),point_pose=point,
@@ -489,7 +482,7 @@ class RuntimeTest(unittest.TestCase):
         self.assertAlmostEqual(nav.target_pos_x,1.7)
 
     def test_multiple_contacts_require_fresh_grasp_validation(self):
-        from contacts import ContactInputs
+        from dracomancer.contacts import ContactInputs
         n=self.control.ControlJoints.__new__(self.control.ControlJoints)
         n.use_contact_wrench=True
         n.contacts=ContactInputs([{'link':'link1','topic':'/head'},

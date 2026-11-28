@@ -29,8 +29,8 @@ roslaunch dracomancer shape_demo.launch
 | `meshes/` | CAD基部・左右共用の腕部品・左右別の手首部品を収めるSTL 10点 |
 | [`config/`](docs/usage.md#設定ファイル一覧) | 関節、実機校正、制御、可視化、実験の設定 |
 | `scripts/mkii/` | viewer・Gazebo・直結制御とGUI |
-| `src/dracomancer/` | 校正済み電流換算・セッション・出力排他のPython部品 |
-| `scripts/control/shape_*.py` | CAD中心線による形状写像・診断 |
+| `src/dracomancer/` | 形態写像・接触・力覚・移動の共通処理、校正済み電流換算と出力排他 |
+| `scripts/` | launchから起動するPythonノード |
 | `test/` | 単体・回帰テストとROS・Gazebo検証。Mk-II固有の検証は`test/mkii/` |
 | `figures/scripts/` | オフラインの作図スクリプト |
 | `figures/archive/` | 保存対象とした過去の図・CSV・集計。現行Mk-IIの検証結果とは区別する |

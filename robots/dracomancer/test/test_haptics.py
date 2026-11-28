@@ -9,10 +9,9 @@ import unittest
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts/haptics"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from contact_feedback import ContactFeedback
-from safety_feedback import SafetyFeedback, combine_torque, rate_limit
+from dracomancer.haptics import ContactFeedback, SafetyFeedback, combine_torque, rate_limit
 
 
 class ContactFeedbackTest(unittest.TestCase):

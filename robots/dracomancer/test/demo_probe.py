@@ -3,7 +3,6 @@
 import argparse
 import json
 from pathlib import Path
-import sys
 import time
 
 import numpy as np
@@ -12,8 +11,7 @@ import tf2_ros
 from sensor_msgs.msg import JointState
 from std_msgs.msg import String
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts/control"))
-from shape_mapping import DRAGON_JOINTS, UrdfModel
+from dracomancer.shape import DRAGON_JOINTS, UrdfModel
 
 
 def main():

@@ -68,9 +68,8 @@ URDFを変更したら人体代表点と`dragon_tail`の整合を確認する。
 
 | ファイル | 役割 |
 |---|---|
-| `scripts/control/shape_mapping.py` | URDF FK、中心線、最適化、速度制限 |
-| `scripts/control/shape_runtime.py` | 入力・モデル確認、ゲート、周期内キャッシュ、診断・Marker |
-| `scripts/control/control_joint_angle.py` | 単一の指令発行ノード、モード・Hover条件 |
+| `src/dracomancer/shape.py` | URDF FK、中心線・関節角写像、最適化、速度制限 |
+| `scripts/control/control_joint_angle.py` | 入力検証、可行性ゲート、診断・Marker、単一の形態指令発行 |
 | `scripts/control/shape_input.py` | デモの再現用入力。DRAGONへは指令しない |
 | `config/control/shape.yaml` | 代表点・軸合わせ・最適化設定 |
 | `test/test_shape.py`、`test/demo_probe.py` | 単体検証、起動中のGazebo・TFとの照合 |
@@ -107,7 +106,7 @@ rosbag record -O shape.bag /dracomancer/measured_joint_states /dragon/joint_stat
 
 ## 評価時の注意
 
-`shape_task/dragon_fk.py`は目標形態との`E_s`・シャドウ用の簡易FKで、スペーサを含む本写像のFKと同一ではない。
+`figures/scripts/dragon_fk.py`は過去の形態目標到達タスクの`E_s`に対応する作図用FK。
 既存CSVの意味を変えず、Human–Robot形状RMSEとは区別する。
 中心線に現れない軸回旋・手先姿勢は復元できず、CAD関節と人体関節が同じ座標であるとも扱わない。
 速度制限は発行目標の制限で、実関節速度・経路中間点・動的安定性・衝突回避の保証ではない。

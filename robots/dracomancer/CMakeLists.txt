@@ -23,13 +23,16 @@ add_executable(shape_feasibility_node src/shape_feasibility_node.cpp)
 target_include_directories(shape_feasibility_node PRIVATE ${NLOPT_INCLUDE_DIRS})
 add_dependencies(shape_feasibility_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(shape_feasibility_node ${catkin_LIBRARIES} ${NLOPT_LIBRARIES})
-catkin_install_python(PROGRAMS scripts/mkii/control.py scripts/mkii/panel.py scripts/mkii/direct.py scripts/mkii/observe.py
-  scripts/control/wall.py scripts/control/control_joint_angle.py scripts/control/shape_input.py
-  scripts/control/control_position.py scripts/control/feedback.py scripts/device_io/joystick.py
+catkin_install_python(PROGRAMS
+  scripts/control/control_joint_angle.py scripts/control/control_position.py scripts/control/feedback.py
+  scripts/control/shape_input.py scripts/control/wall.py
+  scripts/device_io/calibrate_joystick.py scripts/device_io/joystick.py
+  scripts/mkii/control.py scripts/mkii/direct.py scripts/mkii/observe.py scripts/mkii/panel.py
+  scripts/safety/fc_min_lowpass.py scripts/safety/volume_radius_monitor.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(TARGETS wall_contact LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
 install(TARGETS shape_feasibility_node RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
-install(DIRECTORY config launch scripts urdf meshes docs
+install(DIRECTORY config launch urdf meshes docs
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION} USE_SOURCE_PERMISSIONS)
 install(DIRECTORY figures/scripts
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/figures USE_SOURCE_PERMISSIONS)

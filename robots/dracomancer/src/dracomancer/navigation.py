@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """View/tilt input plane and SO(3) target integration (thesis chapter 4)."""
 import numpy as np
-from shape_mapping import vector, rotation, rpy_matrix
+from .shape import vector, rotation, rpy_matrix
 
 
 def quaternion_matrix(xyzw):

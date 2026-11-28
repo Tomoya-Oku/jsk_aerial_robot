@@ -3,7 +3,7 @@
 
 """Plots for the shape-target reaching task results.
 
-Reads a results directory produced by scripts/shape_task/ (trial_XXX_raw.csv,
+Reads an archived shape-task results directory (trial_XXX_raw.csv,
 summary_metrics.csv, session.yaml) and writes PNGs into <results>/plots/:
 
   joint_error_trial_XXX.png   E_q with the success threshold
