@@ -13,14 +13,26 @@ ROS 1の`dracomancer`パッケージにモデル・GUI・直結制御・形状�
 | 形状写像B | `src/dracomancer/shape.py`。コントローラと力覚処理が共用 |
 | 関節角写像 | 同じ`shape.py`が修論の片腕・両腕方式を実装 |
 | 形態指令の所有者 | `scripts/control/control_joint_angle.py`。`shape`・`joint`・`dual_shape`・`dual_joint` |
-| 飛行可能性評価 | `src/shape_feasibility_node.cpp`と`ShapeFeasibility.srv`。候補・発行形態の判定とhold |
+| 飛行可能性評価 | `src/feasibility/`と`ShapeFeasibility.srv`。候補・発行形態の判定とhold |
 | 機体移動・姿勢 | `control_position.py`と`src/dracomancer/navigation.py`。視点・体幹傾きによる2軸入力面。Joystick操作は既定無効 |
-| 壁接触の観測 | `wall.py`・`src/wall_contact.cpp`。シミュレーション用 |
+| 壁接触の観測 | `wall.py`・`src/simulation/wall_contact.cpp`。シミュレーション用 |
 | 力覚 | `feedback.py`からNmを送信。既定無効、自動ARMなし。4方式の局所Jacobianに対応 |
 | 基準点補償 | `control_position.py`。尾側点または中央関節を基準とし、移動指令を一元化 |
 
 理論は[修論](thesis.md)を優先する。可行集合への射影やLiDAR制約を追加した最適化ではなく、
 修論のヒステリシス付きholdと速度制限・再判定を実装する。
+
+## C++ソース
+
+| ファイル | 役割 |
+|---|---|
+| `src/feasibility/node.cpp`、`server.h` | ROSノードの起動とサービス実装のクラス宣言 |
+| `src/feasibility/server.cpp` | ROSパラメータ・購読・サービスの初期化と、候補形態の検証・評価の振り分け |
+| `src/feasibility/prediction.cpp` | モデルとジンバル条件に基づく評価と、計画モデルの更新 |
+| `src/feasibility/allocation.cpp` | 静的な釣合いから推力とジンバル角を反復推定 |
+| `src/feasibility/feedback.cpp` | ジンバル・基部姿勢のフィードバック受信と鮮度判定 |
+| `src/feasibility/wrench.cpp`、`wrench_math.h` | 接触・重力を含む必要レンチ、符号付き余裕、有界共通推力配分の評価 |
+| `src/simulation/wall_contact.cpp` | Gazeboの接触からLink1先端のレンチを配信するプラグイン |
 
 ## 上肢形状の取得
 

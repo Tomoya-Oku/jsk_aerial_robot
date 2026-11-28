@@ -31,6 +31,8 @@ roslaunch dracomancer shape_demo.launch
 | `scripts/mkii/` | viewer・Gazebo・直結制御とGUI |
 | `src/dracomancer/` | 形態写像・接触・力覚・移動の共通処理、校正済み電流換算と出力排他 |
 | `scripts/` | launchから起動するPythonノード |
+| `src/feasibility/` | 候補形態の可行性を評価するROSサービス |
+| `src/simulation/` | Gazeboの壁接触プラグイン |
 | `figures/scripts/` | オフラインの作図スクリプト |
 | `figures/YYYYMMDD_HHMMSS_名前/` | 保存対象の図・CSV・集計・録画 |
 | `rosbags/YYYYMMDD_HHMMSS_名前.bag` | ローカルのROS bag記録 |
