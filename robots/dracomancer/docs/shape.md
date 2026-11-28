@@ -72,7 +72,6 @@ URDFを変更したら人体代表点と`dragon_tail`の整合を確認する。
 | `scripts/control/control_joint_angle.py` | 入力検証、可行性ゲート、診断・Marker、単一の形態指令発行 |
 | `scripts/control/shape_input.py` | デモの再現用入力。DRAGONへは指令しない |
 | `config/control/shape.yaml` | 代表点・軸合わせ・最適化設定 |
-| `test/test_shape.py`、`test/demo_probe.py` | 単体検証、起動中のGazebo・TFとの照合 |
 
 初期化は新鮮な機体実測姿勢・入力・設定・可行性を確認するまで待機する。
 最適化失敗、入力欠損・古い時刻・未来時刻、不正値、時間超過、サービス障害では指令を進めない。
@@ -100,9 +99,6 @@ rosbag record -O shape.bag /dracomancer/measured_joint_states /dragon/joint_stat
   /dracomancer/shape/diagnostics /dracomancer/shape/rmse \
   /dracomancer/shape_control_error /dragon/flight_state
 ```
-
-起動中のデモを検証する場合は、ソース取得先で`test/demo_probe.py`を実行する。
-検証コマンドの一覧は[操作手順](usage.md#再現できる検証)を参照する。
 
 ## 評価時の注意
 
