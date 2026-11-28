@@ -39,44 +39,55 @@ void DynamixelSerial::resetBus(UART_HandleTypeDef* huart, osMutexId* mutex, uint
   for (auto& servo : servo_) servo.id_ = 255;
 }
 
-bool DynamixelSerial::initRs485(UART_HandleTypeDef* huart, osMutexId* mutex, uint8_t* rx_buffer,
-                               uint8_t first_id, uint8_t count)
+const char* DynamixelSerial::initRs485(UART_HandleTypeDef* huart, osMutexId* mutex, uint8_t* rx_buffer,
+                                     uint8_t first_id, uint8_t count)
 {
-  if (!mutex || !*mutex || !count || count > MAX_SERVO_NUM ||
-      static_cast<unsigned>(first_id) + count > 253) return false;
   fixed_rs485_ = true;
+  servo_num_ = 0;
+  if (!mutex || !*mutex || !count || count > MAX_SERVO_NUM ||
+      static_cast<unsigned>(first_id) + count > 253) return "invalid RS485 bus configuration";
   resetBus(huart, mutex, rx_buffer ? rx_buffer : legacy_rx_buf);
-  if (HAL_UART_DeInit(huart_) != HAL_OK) return false;
+  if (HAL_UART_DeInit(huart_) != HAL_OK) return "UART reset failed";
   huart_->Init.BaudRate = 1000000;
   huart_->Init.Mode = UART_MODE_TX_RX;
-  if (HAL_UART_Init(huart_) != HAL_OK || !huart_->hdmarx ||
-      HAL_UART_Receive_DMA(huart_, rx_buf_, RX_BUFFER_SIZE) != HAL_OK) return false;
+  if (HAL_UART_Init(huart_) != HAL_OK) return "UART initialization failed";
+  if (!huart_->hdmarx || HAL_UART_Receive_DMA(huart_, rx_buf_, RX_BUFFER_SIZE) != HAL_OK)
+    return "UART RX DMA initialization failed";
   __HAL_UART_DISABLE_IT(huart_, UART_IT_PE);
   __HAL_UART_DISABLE_IT(huart_, UART_IT_ERR);
 
   ping();
-  if (servo_num_ != count) return false;
-  // Use physical ID order so an absent or extra ID cannot shift the mapping.
-  std::sort(servo_.begin(), servo_.begin() + count,
+  // Keep board info and read-only telemetry in the same scan order even on a partial bus.
+  std::sort(servo_.begin(), servo_.begin() + servo_num_,
             [](const ServoData& a, const ServoData& b) {return a.id_ < b.id_;});
-  bool ready = true;
-  for (unsigned i = 0; i < count; ++i) {
+  for (unsigned i = 0; i < servo_num_; ++i) {
     ServoData& servo = servo_[i];
-    if (servo.id_ != first_id + i) return false;
     servo.send_data_flag_ = 1;
     servo.joint_resolution_ = servo.servo_resolution_ = 4096;
     servo.resolution_ratio_ = 1;
     servo.hardware_error_status_ = 255; // Unknown until the first successful diagnostic read.
+  }
+
+  if (!servo_num_) return "no DYNAMIXEL ping replies";
+  if (servo_num_ != count) return "unexpected DYNAMIXEL servo count (see get_board_info)";
+  for (unsigned i = 0; i < count; ++i) {
+    if (servo_[i].id_ != first_id + i) return "unexpected DYNAMIXEL IDs (see get_board_info)";
+  }
+
+  const char* fault = nullptr;
+  for (unsigned i = 0; i < count; ++i) {
+    ServoData& servo = servo_[i];
     CurrentBus bus(*this, servo.id_);
     uint32_t limit = 0;
     current_[i].managed = true;
     const bool stopped = current_[i].stop(bus);
     const bool limit_read = bus.read(CTRL_CURRENT_LIMIT, 2, limit);
     servo.current_limit_ = limit;
-    ready = ready && stopped && limit_read;
+    if (!stopped) fault = "could not verify torque OFF at startup";
+    else if (!limit_read && !fault) fault = "could not read Current Limit at startup";
   }
   // Mk-II does not register scan-indexed values in Spinal's legacy Flash layout.
-  return ready;
+  return fault;
 }
 
 void DynamixelSerial::init(UART_HandleTypeDef* huart, osMutexId* mutex)
@@ -385,6 +396,7 @@ uint8_t DynamixelSerial::getServoIndex(uint8_t id)
 
 void DynamixelSerial::updateRs485()
 {
+  if (servo_num_ == 0) return;
   worker_running_ = true;
   currentUpdate();
   const uint32_t now = HAL_GetTick();

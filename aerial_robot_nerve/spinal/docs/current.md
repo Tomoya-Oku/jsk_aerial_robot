@@ -11,6 +11,14 @@ its own scan indexes and current sessions. The device uses its own servo
 register settings rather than adding scan-indexed data to Spinal Flash.
 Build with `DRACOMANCER_DUAL=0` to use the original single-port interfaces.
 
+The Mk-II ROS interfaces are registered even when an RS485 bus fails startup.
+Check the rosserial warning for the failing stage, and call `/left/get_board_info`
+or `/right/get_board_info` to see the IDs detected at boot. State messages contain
+only positions actually read from the detected devices. With no replies, the
+topic is registered and has no samples. A bus with a startup fault rejects mode
+and current commands and withholds torque-state samples. Restart Spinal after
+correcting the reported fault so it can scan and verify the bus again.
+
 ## New interfaces (existing message/service MD5s unchanged)
 
 - `direct_servo_mode`: `spinal/DirectServoMode`

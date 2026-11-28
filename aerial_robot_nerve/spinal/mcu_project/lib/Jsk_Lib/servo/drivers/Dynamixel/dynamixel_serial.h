@@ -297,9 +297,9 @@ public:
 
 
   void init(UART_HandleTypeDef* huart, osMutexId* mutex = NULL) override;
-  // Dedicated XM430 RS485 buses use servo EEPROM and their own DMA storage.
-  bool initRs485(UART_HandleTypeDef* huart, osMutexId* mutex, uint8_t* rx_buffer,
-                 uint8_t first_id, uint8_t count);
+  // Return the startup fault, or nullptr when the complete bus is ready for control.
+  const char* initRs485(UART_HandleTypeDef* huart, osMutexId* mutex, uint8_t* rx_buffer,
+                        uint8_t first_id, uint8_t count);
   bool positionReceived(unsigned index) const {return position_received_[index];}
   uint32_t positionSweepStart() const {return poll_started_;}
   void pinReconfig() override;

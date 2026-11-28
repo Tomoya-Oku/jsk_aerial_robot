@@ -85,6 +85,8 @@ private:
   bool registerRos(ros::NodeHandle* nh);
   void sendRs485Data();
   bool fixed_rs485_ = false;
+  const char* rs485_startup_fault_ = nullptr;
+  bool rs485_fault_reported_ = false;
 
   /* ROS */
   ros::NodeHandle* nh_;

@@ -7,6 +7,7 @@
 
 
 #include "servo.h"
+#include <cstdio>
 
 #define  SERVO_PUB_INTERVAL 20 // 50Hz
 #define SERVO_TORQUE_PUB_INTERVAL  1000 // 1Hz
@@ -47,7 +48,9 @@ bool DirectServo::initRs485(UART_HandleTypeDef* huart, ros::NodeHandle* nh, osMu
                           uint8_t* rx_buffer, uint8_t first_id, uint8_t count)
 {
   fixed_rs485_ = true;
-  return servo_handler_.initRs485(huart, mutex, rx_buffer, first_id, count) && registerRos(nh);
+  rs485_startup_fault_ = servo_handler_.initRs485(huart, mutex, rx_buffer, first_id, count);
+  // The ROS interface and detected IDs remain available for diagnosis on a failed bus.
+  return registerRos(nh);
 }
 #endif
 
@@ -96,6 +99,13 @@ void DirectServo::update()
 void DirectServo::sendRs485Data()
 {
 #if DYNAMIXEL && !KONDO
+  if (rs485_startup_fault_ && !rs485_fault_reported_ && nh_->connected()) {
+    char message[160];
+    std::snprintf(message, sizeof(message), "%s: %s; servo control disabled",
+                  servo_state_pub_.topic_, rs485_startup_fault_);
+    nh_->logwarn(message);
+    rs485_fault_reported_ = true;
+  }
   if (servo_handler_.getROSCommFlag()) {
     servo_handler_.setROSCommFlag(false);
     unsigned length = 0;
@@ -120,6 +130,8 @@ void DirectServo::sendRs485Data()
       servo_state_pub_.publish(&servo_state_msg_);
     }
   }
+  // The torque flags are only meaningful after startup verified torque OFF.
+  if (rs485_startup_fault_) return;
   const uint32_t now = HAL_GetTick();
   if (now - servo_torque_last_pub_time_ >= SERVO_TORQUE_PUB_INTERVAL) {
     for (unsigned i = 0; i < servo_handler_.getServoNum(); ++i)
@@ -457,6 +469,7 @@ void DirectServo::jointProfilesCallback(const spinal::JointProfiles& joint_prof_
 void DirectServo::directCurrentCallback(const spinal::DirectServoCurrent& msg)
 {
 #if !KONDO
+  if (rs485_startup_fault_) return;
   if (msg.index_length!=msg.session_length || msg.index_length!=msg.sequence_length ||
       msg.index_length!=msg.current_length || msg.index_length>MAX_SERVO_NUM) return;
   // Validate the entire packet before queueing any joint.
@@ -475,7 +488,8 @@ void DirectServo::directModeCallback(const spinal::DirectServoMode::Request& req
   res.status=spinal_current::DENIED;
 #if !KONDO
   DynamixelSerial::CurrentResult result;
-  servo_handler_.currentRequest(req.index,req.servo_id,req.action,req.session,req.current_limit,result);
+  if (rs485_startup_fault_) result.status=spinal_current::IO_ERROR;
+  else servo_handler_.currentRequest(req.index,req.servo_id,req.action,req.session,req.current_limit,result);
   res.success=result.success; res.status=result.status;
   res.servo_id=(req.index<servo_handler_.getServoNum()) ? servo_handler_.getServo()[req.index].id_ : 255;
   res.model_number=result.snapshot.model; res.firmware_version=result.snapshot.firmware;
