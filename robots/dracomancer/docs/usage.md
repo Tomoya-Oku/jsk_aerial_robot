@@ -54,7 +54,7 @@ roslaunch dracomancer bringup.launch
 roslaunch dracomancer bringup.launch backend:=gazebo
 ```
 
-`rviz:=false panel:=false`で表示を省略できる。`backend:=preview`は未校正の実機を読み取り専用で表示する。
+`rviz:=false panel:=false`で表示を省略できる。`backend:=preview`は未校正の実機を読み取り専用で表示し、2バス構成では既定で両腕を表示する。
 標準名前空間は`/dracomancer`。右腕・左腕のCAD関節名と通信仕様は[デバイス設計](device.md)を参照する。
 
 標準のviewer・Gazeboと`assembly:=true`は、2026年11月27日保存のSolidWorksアセンブリから
@@ -66,8 +66,8 @@ roslaunch dracomancer bringup.launch backend:=gazebo
 DRAGONと組み合わせる場合は[地上デモ](shape.md#地上デモ)を参照。
 
 実機は`backend:=hardware config:=/absolute/path/to/hardware.yaml`を指定し、[実機手順](hardware.md)に従う。
-bridgeも起動する場合だけ`connect_fc:=true fc_serial_port:=/dev/ttyUSB0`を加える。
-通常は既存のSpinal rosserial bridgeへ接続し、ファームウェアを書き込まない。
+`bringup.launch`の`hardware`と`preview`は既定でSpinal rosserial bridgeを起動する。
+既定のポートは`/dev/ttyUSB0`で、`fc_serial_port`で変更できる。起動済みのbridgeを使う場合は`connect_fc:=false`を指定する。
 
 形態入力は`measured_joint_states`。実機の`joint_states`は未計測関節の表示用q=0を含む。
 DRAGONを起動した環境で、下記のようにDracomancer側の制御をまとめて起動する。

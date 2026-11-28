@@ -12,7 +12,7 @@
   <arg name="config" default="$(find dracomancer)/config/device/hardware.yaml"/>
   <arg name="dual_spinal" default="true"/>
   <arg name="spinal_ns" default="$(eval '/' if arg('selected') == 'preview' and not arg('dual_spinal') else '/dracomancer')"/>
-  <arg name="connect_fc" default="false"/>
+  <arg name="connect_fc" default="true" doc="Start the Spinal rosserial bridge for hardware and preview."/>
   <arg name="fc_serial_port" default="/dev/ttyUSB0"/>
   <arg name="fc_serial_baud" default="921600"/>
   <arg name="enabled" default="false" doc="Enable joint commands at startup when controller conditions are met."/>
@@ -25,8 +25,8 @@
   <arg name="anchor_mode" default="$(eval 'mid' if arg('mapping_mode').startswith('dual_') else 'none')"/>
 
   <arg name="assembly" default="false"/>
-  <arg name="arm" default="right"/>
-  <arg name="servo_ids" default="$(eval [11, 12, 13, 14, 15, 16, 17] if arg('arm') == 'left' else [1, 2, 3, 4, 5, 6, 7])"/>
+  <arg name="arm" default="$(eval 'both' if arg('dual_spinal') else 'right')" doc="Preview arms: both, right, or left."/>
+  <arg name="servo_ids" default="$(eval [1, 2, 3, 4, 5, 6, 7] + [11, 12, 13, 14, 15, 16, 17] if arg('arm') == 'both' else ([11, 12, 13, 14, 15, 16, 17] if arg('arm') == 'left' else [1, 2, 3, 4, 5, 6, 7]))"/>
   <arg name="assembly_view" value="$(eval arg('selected') == 'viewer' and arg('assembly'))"/>
   <arg name="rviz_config" value="$(eval 'observe.rviz' if arg('selected') == 'preview' else ('cad.rviz' if arg('assembly_view') else 'mkii.rviz'))"/>
   <arg name="target_ns" default="dragon"/>

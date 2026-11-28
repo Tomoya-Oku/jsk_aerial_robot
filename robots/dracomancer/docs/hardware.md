@@ -50,22 +50,26 @@ Joystickの生データは `/dracomancer/joystick/raw/{right,left}`、−1〜1�
 
 ### 未校正の動作確認だけを行う場合
 
-各腕の計測経路を読み取り、装着前に関節とIDの対応を確認できる。
+両腕を同じRVizモデルに表示し、関節とIDの対応や回転方向を確認できる。
 
 ```bash
+roslaunch dracomancer bringup.launch backend:=preview
+# 片腕だけ確認する場合
 roslaunch dracomancer bringup.launch backend:=preview arm:=right
 roslaunch dracomancer bringup.launch backend:=preview arm:=left
 ```
 
-既定は`/dracomancer`のbridgeからID 1〜7を右腕の第1〜第7関節へ対応させる。
-`get_board_info`で物理IDとscan indexを照合し、起動後最初の新鮮な全7軸計測を0度とする。
+既定でbridgeも起動し、`/dev/ttyUSB0`に接続する。別のポートは`fc_serial_port`で指定する。
+起動済みのbridgeを使う場合は`connect_fc:=false`を加え、必要に応じて`spinal_ns`でその名前空間を指定する。
+2バス構成の既定は`arm:=both`で、右のID 1〜7と左のID 11〜17を各腕の第1〜第7関節へ対応させる。
+`servo_ids`を指定する場合は両腕なら右7個・左7個の順で、片腕なら対象の7個を指定する。単一UART構成（`dual_spinal:=false`）の既定は右腕。
+対象の各バスで`get_board_info`から物理IDとscan indexを照合し、腕ごとに最初の新鮮な7軸計測を0度とする。
 換算は直接駆動の4096 count/rev・全軸符号+1を仮定する。外部エンコーダ・異なる分解能比は拒否する。
-実機のCAD零点・回転方向を校正した表示ではなく、反対側の腕はモデルの0度で表示する。
-`arm:=left`の既定IDは11〜17。bridgeを別の名前空間で起動した場合は`spinal_ns`を指定する。
+CAD零点と回転方向の校正前に使う仮表示で、片腕指定時は反対側をモデルの0度で表示する。
 表示先は`/dracomancer_preview`で、未校正データを`measured_joint_states`へ配信しない。
 サーボへの指令、設定変更、Torque ON/OFF、ファームウェア書き込みは行わない。
-サーボのエラー値は`preview/status`と警告ログへ表示する。計測が途切れた場合は表示を保持し、
-新しい計測時刻を捏造しない。再起動するとその時点の姿勢を0度として取り直す。
+サーボのエラー値は`preview/status`と警告ログへ腕ごとに表示する。片腕の計測が途切れた場合、その腕は最後に受信した姿勢を保持する。
+再起動すると各腕の0度を取り直す。
 
 ### 校正済みの実機表示とトルク操作
 
@@ -76,7 +80,7 @@ roslaunch dracomancer bringup.launch backend:=hardware config:=/absolute/path/to
 
 既定のbridgeは`/dracomancer/servo/states/right`と`/dracomancer/servo/states/left`を配信する。
 `spinal_ns`でbridgeの名前空間、`robot_ns`で表示・操作の名前空間を指定できる。
-bridgeの同時起動は`connect_fc:=true`と`fc_serial_port`を指定する。
+ここでもbridgeは既定で同時に起動する。起動済みのbridgeを使う場合は`connect_fc:=false`を指定する。
 従来の1バスファームウェアを使用する場合は`dual_spinal:=false`と、その機体の物理IDを設定する。
 
 左右バスの計測を関節名で集約し、両腕のサンプルがある場合は時刻差50 ms以内の計測を採用する。

@@ -18,8 +18,8 @@ roslaunch dracomancer shape_demo.launch
 ```
 
 実機は`backend:=hardware`を指定し、[直結制御の手順](docs/hardware.md)に従う。
-未校正で動きだけを見る場合は`roslaunch dracomancer bringup.launch backend:=preview`で読み取り専用の仮表示を起動する。
-既定はID 1〜7の右腕で、起動姿勢を0度とする。[仮表示の条件](docs/hardware.md#未校正の動作確認だけを行う場合)を参照する。
+未校正で動きだけを見る場合は`roslaunch dracomancer bringup.launch backend:=preview`でSpinal bridgeとRVizを起動する。
+既定では左右の腕を同時に読み取り専用で表示し、腕ごとに起動姿勢を0度とする。[仮表示の条件](docs/hardware.md#未校正の動作確認だけを行う場合)を参照する。
 既定は`calibrated: false`・空の関節対応表で、サーボを駆動しない。
 各launchの用途は[起動一覧](docs/usage.md#launch一覧)を参照する。
 

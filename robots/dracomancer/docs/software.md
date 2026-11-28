@@ -30,7 +30,7 @@ ROS 1の`dracomancer`パッケージにモデル・GUI・直結制御・形状�
 |---|---|
 | `device/direct.py` | Spinal経由で左右の関節計測を取得し、校正とARMの条件に従って角度・トルク指令を中継する |
 | `device/joystick.py` | Spinalの生データを `sensor_msgs/Joy` に変換し、正規化した2軸と押下状態を配信する。`--calibrate`で中心・可動範囲を校正する |
-| `device/observe.py` | 未校正の片腕のサーボ角を起動姿勢基準で読み取り、RViz向けに配信する |
+| `device/observe.py` | 左右のサーボ角を腕ごとの起動姿勢基準で読み取り、RViz用の1つの`joint_states`にまとめる |
 | `device/panel.py` | 左右の関節角とトルクを操作するQtパネルを表示する |
 | `haptics/feedback.py` | 接触力と可行性の余裕から力覚トルクを求め、計測の鮮度と出力上限を確認して配信する |
 | `safety/volume_radius_monitor.py` | 力・トルク余裕と閾値を配信し、操作側に提示する安全度を計算する。`--filter`で一次ローパスを実行する |
