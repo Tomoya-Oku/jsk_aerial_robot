@@ -68,9 +68,9 @@ URDFを変更したら人体代表点と`dragon_tail`の整合を確認する。
 
 | ファイル | 役割 |
 |---|---|
-| `src/dracomancer/shape.py` | URDF FK、中心線・関節角写像、最適化、速度制限 |
-| `scripts/control/control_joint_angle.py` | 入力検証、可行性ゲート、診断・Marker、単一の形態指令発行 |
-| `scripts/control/shape_input.py` | デモの再現用入力。DRAGONへは指令しない |
+| `scripts/control/shape.py` | URDF FK、中心線・関節角写像、最適化、速度制限 |
+| `scripts/teleop/control_joint_angle.py` | 入力検証、可行性ゲート、診断・Marker、単一の形態指令発行 |
+| `scripts/simulation/backend.py motion` | デモの再現用入力。DRAGONへは指令しない |
 | `config/control/shape.yaml` | 代表点・軸合わせ・最適化設定 |
 
 初期化は新鮮な機体実測姿勢・入力・設定・可行性を確認するまで待機する。

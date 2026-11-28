@@ -7,20 +7,43 @@ ROS 1の`dracomancer`パッケージにモデル・GUI・直結制御・形状�
 
 | 機能 | 実装と対応範囲 |
 |---|---|
-| 表示・角度／トルク操作 | `scripts/mkii/control.py`・`panel.py`。viewerとGazebo |
-| 実機入出力 | `scripts/mkii/direct.py`、校正済み換算`src/dracomancer/xm430.py` |
-| 未校正の実機仮表示 | `scripts/mkii/observe.py`。起動姿勢基準の読み取り専用表示。形態制御には使用しない |
-| 形状写像B | `src/dracomancer/shape.py`。コントローラと力覚処理が共用 |
+| 表示・角度／トルク操作 | `scripts/simulation/backend.py`がviewer／Gazeboの制御を担当し、`scripts/device/panel.py`が関節操作画面を提供 |
+| 実機入出力 | `scripts/device/direct.py`。校正済み電流換算も担当 |
+| 未校正の実機仮表示 | `scripts/device/observe.py`。起動姿勢基準の読み取り専用表示。形態制御には使用しない |
+| 形状写像B | `scripts/control/shape.py`。コントローラと力覚処理が共用 |
 | 関節角写像 | 同じ`shape.py`が修論の片腕・両腕方式を実装 |
-| 形態指令の所有者 | `scripts/control/control_joint_angle.py`。`shape`・`joint`・`dual_shape`・`dual_joint` |
-| 飛行可能性評価 | `src/feasibility/`と`ShapeFeasibility.srv`。候補・発行形態の判定とhold |
-| 機体移動・姿勢 | `control_position.py`と`src/dracomancer/navigation.py`。視点・体幹傾きによる2軸入力面。Joystick操作は既定無効 |
-| 壁接触の観測 | `wall.py`・`src/simulation/wall_contact.cpp`。シミュレーション用 |
-| 力覚 | `feedback.py`からNmを送信。既定無効、自動ARMなし。4方式の局所Jacobianに対応 |
+| 形態指令の所有者 | `scripts/teleop/control_joint_angle.py`。`shape`・`joint`・`dual_shape`・`dual_joint` |
+| 飛行可能性評価 | `src/feasibility/`と`ShapeFeasibility.srv`。候補・発行形態の可行性を評価し、holdの判定材料を返す |
+| 機体移動・姿勢 | `scripts/teleop/control_position.py`。視点・体幹傾きによる2軸入力面。Joystick操作は既定無効 |
+| 壁接触の観測 | `scripts/simulation/backend.py wall`・`src/simulation/wall_contact.cpp`。シミュレーション用 |
+| 力覚 | `scripts/haptics/feedback.py`からNmを送信。既定無効、自動ARMなし。4方式の局所Jacobianに対応 |
 | 基準点補償 | `control_position.py`。尾側点または中央関節を基準とし、移動指令を一元化 |
 
 理論は[修論](thesis.md)を優先する。可行集合への射影やLiDAR制約を追加した最適化ではなく、
 修論のヒステリシス付きholdと速度制限・再判定を実装する。
+
+## スクリプト一覧
+
+以下のパスは `scripts/` からの相対パス。
+
+| ファイル | 役割 |
+|---|---|
+| `device/direct.py` | Spinal経由で左右の関節計測を取得し、校正とARMの条件に従って角度・トルク指令を中継する |
+| `device/joystick.py` | Spinalの生データを `sensor_msgs/Joy` に変換し、正規化した2軸と押下状態を配信する。`--calibrate`で中心・可動範囲を校正する |
+| `device/observe.py` | 未校正の片腕のサーボ角を起動姿勢基準で読み取り、RViz向けに配信する |
+| `device/panel.py` | 左右の関節角とトルクを操作するQtパネルを表示する |
+| `haptics/feedback.py` | 接触力と可行性の余裕から力覚トルクを求め、計測の鮮度と出力上限を確認して配信する |
+| `safety/volume_radius_monitor.py` | 力・トルク余裕と閾値を配信し、操作側に提示する安全度を計算する。`--filter`で一次ローパスを実行する |
+| `simulation/backend.py` | viewer・Gazeboの関節制御。 `motion`でデモ軌道を生成し、`wall`で固定壁を配置する |
+| `teleop/control_joint_angle.py` | 操作者の関節計測をDRAGONの関節目標へ写像し、可行性判定・速度制限・holdを適用する |
+| `teleop/control_position.py` | DRAGONの位置・姿勢指令を生成し、形状変化による基準点の移動を補償する。視点・体幹の傾きから操作面も計算する |
+
+| 共通モジュール | 役割 |
+|---|---|
+| `control/__init__.py` | 共通モジュールのPythonパッケージを定義する |
+| `control/contacts.py` | 接触レンチの座標変換と、関節角から接触点・Jacobianを求める処理を共用する |
+| `control/output_lock.py` | 同じサーボ出力を操作するプロセス間の排他を管理する |
+| `control/shape.py` | URDFの順運動学、中心線の最適化、片腕・両腕の関節角写像を実装する |
 
 ## C++ソース
 

@@ -14,19 +14,6 @@ def origin(element):
     return transform(xyz, rpy)
 
 
-def shift_wrench(force, torque, source, destination):
-    """Move a wrench's moment origin; all arguments share one orientation.
-
-    A force at source contributes (source - destination) x force about
-    destination. The force itself does not change.
-    """
-    values = [np.asarray(v, dtype=float) for v in (force, torque, source, destination)]
-    if any(v.shape != (3,) or not np.all(np.isfinite(v)) for v in values):
-        raise ValueError("wrench and reference points must be finite 3-vectors")
-    force, torque, source, destination = values
-    return np.r_[force, torque + np.cross(source - destination, force)]
-
-
 def anchor_position(reference, world_rotation, relative_point):
     """Thesis eq:anchor-compensation / eq:bimanual-center-position.
 
@@ -41,22 +28,6 @@ def anchor_position(reference, world_rotation, relative_point):
             or not np.isclose(np.linalg.det(world_rotation), 1., atol=1e-7)):
         raise ValueError("invalid anchor position or rotation")
     return reference - world_rotation @ relative_point
-
-
-def required_wrench(mass, gravity, contact_wrench, contact_from_cog):
-    """Thesis eq:required-static-wrench; all components share one frame.
-
-    contact_wrench is environment-on-robot, about the contact point E.
-    """
-    mass = float(mass)
-    gravity, contact_from_cog = (np.asarray(v, dtype=float) for v in (gravity, contact_from_cog))
-    wrench = np.asarray(contact_wrench, dtype=float)
-    if (not np.isfinite(mass) or mass <= 0 or gravity.shape != (3,)
-            or contact_from_cog.shape != (3,) or wrench.shape != (6,)
-            or not all(np.all(np.isfinite(v)) for v in (gravity, contact_from_cog, wrench))):
-        raise ValueError("invalid static wrench inputs")
-    return np.r_[-mass * gravity - wrench[:3],
-                 -wrench[3:] - np.cross(contact_from_cog, wrench[:3])]
 
 
 class ContactModel:

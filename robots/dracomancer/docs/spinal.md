@@ -191,7 +191,7 @@ XM430のRS485回路要件は[ROBOTIS資料](https://emanual.robotis.com/docs/en/
 - 校正済みの左右7関節をCAD関節名で統合する。各バスの元計測時刻と受信時刻を保持し、
   左右の時刻差・鮮度を検査して、必要な14関節が揃った場合だけ両腕の形態入力を成立させる。
   未計測側を0で補って`measured_joint_states`へ出さない。
-- `calibrate_joystick.py`を左右別の入力・校正ファイルで起動する。
+- `joystick.py --calibrate`を左右別の入力・校正ファイルで起動する。
   右の既存`/dracomancer/joystick/calibrated`と、左の
   `/dracomancer/joystick/left/calibrated`へ接続する。後者の消費側は既に実装がある。
 
@@ -221,7 +221,7 @@ Joystickの部分失敗時の校正、古い計測の統合拒否を対象とす
 | `lib/Jsk_Lib/flashmemory/flashmemory.{h,cpp}` | 保存形式と移行。変更範囲は設計後に確定 |
 | `lib/Jsk_Lib/sensors/joystick/joystick.h` | topic、校正、非同期読取 |
 | I2C共有センサの実装 | 別task/非同期化する場合のbus直列化 |
-| `robots/dracomancer/scripts/mkii/direct.py`、設定・launch | bus識別、物理ID、左右計測・Joystick統合 |
+| `robots/dracomancer/scripts/device/direct.py`、設定・launch | bus識別、物理ID、左右計測・Joystick統合 |
 | `device.md`、`software.md`、`hardware.md`、`roadmap.md` | 最新仕様と実装・未検証範囲の整合 |
 
 `boards/`・`lib/`は`aerial_robot_nerve/spinal/mcu_project/`からの相対パス。

@@ -69,7 +69,7 @@
   <param name="/dracomancer_control_joint_angle/dragon_marker_frame" value="dragon_view/link4"/>
   <rosparam param="/dracomancer_control_joint_angle/shape_marker_origin"
             subst_value="true">$(arg comparison_origin)</rosparam>
-  <node pkg="dracomancer" type="shape_input.py" name="shape_input" if="$(arg motion)">
+  <node pkg="dracomancer" type="backend.py" args="motion" name="shape_input" if="$(arg motion)">
     <param name="pattern" value="$(arg motion_pattern)"/>
     <param name="seed" type="int" value="$(arg motion_seed)"/>
   </node>

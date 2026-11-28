@@ -99,7 +99,7 @@
       <rosparam command="load" file="$(find dracomancer)/config/simulation/controllers.yaml"/>
       <node pkg="gazebo_ros" type="spawn_model" name="spawn" args="-urdf -param robot_description -model $(arg robot_ns)" output="screen"/>
     </group>
-    <node if="$(eval arg('selected') in ['viewer', 'gazebo'])" pkg="dracomancer" type="control.py" name="control" output="screen">
+    <node if="$(eval arg('selected') in ['viewer', 'gazebo'])" pkg="dracomancer" type="backend.py" name="control" output="screen">
       <param name="backend" value="$(arg selected)"/>
     </node>
     <node if="$(eval arg('selected') == 'hardware')" pkg="dracomancer" type="direct.py" name="spinal_control" output="screen" required="true">
@@ -142,7 +142,7 @@
       <param name="safety_log_period" value="$(arg safety_log_period)" />
     </node>
 
-    <node pkg="dracomancer" type="fc_min_lowpass.py" name="teleop_fc_min_lowpass" ns="$(arg target_ns)" output="screen" if="$(arg enable_fc_min_lowpass)">
+    <node pkg="dracomancer" type="volume_radius_monitor.py" args="--filter" name="teleop_fc_min_lowpass" ns="$(arg target_ns)" output="screen" if="$(arg enable_fc_min_lowpass)">
       <param name="robot_name" value="$(arg target_ns)" />
       <param name="cutoff_hz" value="$(arg fc_min_lowpass_cutoff_hz)" />
     </node>

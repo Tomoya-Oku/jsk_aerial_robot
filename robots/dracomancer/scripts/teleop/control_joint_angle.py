@@ -11,8 +11,8 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Float64, Float64MultiArray, String, UInt8
 from visualization_msgs.msg import Marker, MarkerArray
 
-from dracomancer.contacts import ContactInputs, ContactModel
-from dracomancer.shape import DRAGON_JOINTS, DragonChain, UrdfModel, limit_step, make_mapper, vector
+from control.contacts import ContactInputs, ContactModel
+from control.shape import DRAGON_JOINTS, DragonChain, UrdfModel, limit_step, make_mapper, vector
 from dracomancer.srv import ShapeFeasibility, ShapeFeasibilityRequest
 
 

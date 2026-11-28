@@ -30,11 +30,12 @@ target_include_directories(shape_feasibility_node PRIVATE ${NLOPT_INCLUDE_DIRS})
 add_dependencies(shape_feasibility_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(shape_feasibility_node ${catkin_LIBRARIES} ${NLOPT_LIBRARIES})
 catkin_install_python(PROGRAMS
-  scripts/control/control_joint_angle.py scripts/control/control_position.py scripts/control/feedback.py
-  scripts/control/shape_input.py scripts/control/wall.py
-  scripts/device_io/calibrate_joystick.py scripts/device_io/joystick.py
-  scripts/mkii/control.py scripts/mkii/direct.py scripts/mkii/observe.py scripts/mkii/panel.py
-  scripts/safety/fc_min_lowpass.py scripts/safety/volume_radius_monitor.py
+  scripts/device/joystick.py
+  scripts/device/direct.py scripts/device/observe.py scripts/device/panel.py
+  scripts/haptics/feedback.py
+  scripts/safety/volume_radius_monitor.py
+  scripts/simulation/backend.py
+  scripts/teleop/control_joint_angle.py scripts/teleop/control_position.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(TARGETS wall_contact LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
 install(TARGETS shape_feasibility_node RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})

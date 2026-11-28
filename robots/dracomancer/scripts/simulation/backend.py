@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""ROS1 joint_cmd bridge, with exclusive position/effort controllers in Gazebo."""
+"""Run the viewer/Gazebo backend, demo input, or wall setup."""
+import argparse
 import json
 import math
+import random
 import threading
 import time
+import xml.etree.ElementTree as ET
 
 import rospy
 from controller_manager_msgs.srv import LoadController, SwitchController, ListControllers
@@ -175,7 +178,119 @@ class Control:
         self.stop(None)
 
 
-if __name__ == '__main__':
+class NaturalMotion:
+    """Generate gradual paired arm movements from a reproducible random seed."""
+
+    interval = 7.0
+
+    def __init__(self, seed):
+        self.rng = random.Random(seed)
+        self.previous = self.target = [0.0] * 14
+        self.segment = -1
+
+    def keyframe(self):
+        positions = []
+        lift = self.rng.uniform(-1, 1)
+        for _ in range(2):
+            reach = self.rng.uniform(-1, 1)
+            bend = self.rng.uniform(-1, 1)
+            positions.extend((
+                .24 * reach,
+                .16 * lift + .11 * bend,
+                self.rng.uniform(-.18, .18),
+                -.40 - .23 * bend + .06 * reach,
+                self.rng.uniform(-.28, .28),
+                .13 * bend + self.rng.uniform(-.09, .09),
+                self.rng.uniform(-.16, .16),
+            ))
+        return positions
+
+    def position(self, elapsed):
+        segment = int(elapsed / self.interval)
+        while self.segment < segment:
+            self.previous, self.target = self.target, self.keyframe()
+            self.segment += 1
+        phase = elapsed / self.interval - segment
+        # Zero velocity and acceleration at each keyframe.
+        blend = phase ** 3 * (10 + phase * (-15 + 6 * phase))
+        return [start + blend * (end - start) for start, end in zip(self.previous, self.target)]
+
+
+def publish_demo_motion():
+    rospy.init_node("shape_input")
+    if not rospy.get_param("/use_sim_time", False):
+        raise RuntimeError("shape_input requires simulation time")
+    pattern = rospy.get_param("~pattern", "sine")
+    if pattern not in ("sine", "natural"):
+        raise ValueError("shape_input pattern must be sine or natural")
+    natural = NaturalMotion(rospy.get_param("~seed", 27))
+    publisher = rospy.Publisher("/dracomancer/joint_cmd", JointState, queue_size=1)
+    names = ["%s_joint_%d" % (side, i) for side in ("right", "left") for i in range(1, 8)]
+    rate = rospy.Rate(40)
+    start = None
+    while not rospy.is_shutdown():
+        now = rospy.Time.now()
+        if now == rospy.Time(0):
+            rate.sleep()
+            continue
+        if start is None:
+            start = now
+        # Allow five seconds for Gazebo quick_init_pose before moving the arms.
+        elapsed = max(0., (now-start).to_sec()-5.)
+        msg = JointState()
+        msg.header.stamp, msg.name = now, names
+        if pattern == "natural":
+            msg.position = natural.position(elapsed)
+        else:
+            msg.position = [.25*math.sin(.3*elapsed), 0., 0., .4*math.sin(.2*elapsed), 0., 0., 0.] + [0.]*7
+        publisher.publish(msg)
+        rate.sleep()
+
+
+def wall_sdf(position, size, friction):
+    if (len(position) != 3 or len(size) != 3 or
+            not all(math.isfinite(float(v)) for v in list(position) + list(size)) or
+            any(float(v) <= 0 for v in size) or not math.isfinite(friction) or friction < 0):
+        raise ValueError("invalid wall geometry/friction")
+    root = ET.Element("sdf", version="1.6")
+    model = ET.SubElement(root, "model", name="contact_wall")
+    ET.SubElement(model, "static").text = "true"
+    ET.SubElement(model, "pose").text = " ".join(map(str, position)) + " 0 0 0"
+    link = ET.SubElement(model, "link", name="wall")
+    for tag in ("collision", "visual"):
+        item = ET.SubElement(link, tag, name=tag)
+        geom = ET.SubElement(item, "geometry")
+        ET.SubElement(ET.SubElement(geom, "box"), "size").text = " ".join(map(str, size))
+        if tag == "collision":
+            ode = ET.SubElement(ET.SubElement(ET.SubElement(item, "surface"), "friction"), "ode")
+            for key in ("mu", "mu2"):
+                ET.SubElement(ode, key).text = str(friction)
+    sensor = ET.SubElement(link, "sensor", name="wall_contacts", type="contact")
+    ET.SubElement(sensor, "always_on").text = "true"
+    ET.SubElement(ET.SubElement(sensor, "contact"), "collision").text = "collision"
+    plugin = ET.SubElement(sensor, "plugin", name="wall_contact", filename="libwall_contact.so")
+    ET.SubElement(plugin, "robot").text = "dragon"
+    ET.SubElement(plugin, "link").text = "link1"
+    return ET.tostring(root, encoding="unicode")
+
+
+def spawn_wall():
+    from gazebo_msgs.srv import SpawnModel
+    from geometry_msgs.msg import Pose
+
+    rospy.init_node("contact_wall")
+    settings = rospy.get_param("/dracomancer/contact/wall")
+    xml = wall_sdf(settings["position"], settings["size"], float(settings["friction"]))
+    rospy.wait_for_service("/gazebo/spawn_sdf_model")
+    initial = Pose()
+    initial.orientation.w = 1.0
+    response = rospy.ServiceProxy("/gazebo/spawn_sdf_model", SpawnModel)(
+        "contact_wall", xml, "", initial, "world")
+    if not response.success:
+        raise RuntimeError(response.status_message)
+
+
+def run_backend():
     rospy.init_node('control')
     try:
         node = Control()
@@ -183,3 +298,10 @@ if __name__ == '__main__':
     except (rospy.ROSException, RuntimeError, ValueError) as error:
         rospy.logfatal(str(error))
         raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("mode", nargs="?", choices=("backend", "motion", "wall"), default="backend")
+    args = parser.parse_args(rospy.myargv()[1:])
+    {"backend": run_backend, "motion": publish_demo_motion, "wall": spawn_wall}[args.mode]()

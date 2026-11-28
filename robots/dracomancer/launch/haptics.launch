@@ -28,7 +28,7 @@
       <arg name="mujoco" value="false"/>
       <arg name="headless" value="$(arg headless)"/>
     </include>
-    <node pkg="dracomancer" type="wall.py" name="contact_wall" output="screen"/>
+    <node pkg="dracomancer" type="backend.py" args="wall" name="contact_wall" output="screen"/>
   </group>
 
   <include file="$(find dracomancer)/launch/bringup.launch">

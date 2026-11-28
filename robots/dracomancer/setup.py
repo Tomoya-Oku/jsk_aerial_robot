@@ -1,5 +1,7 @@
 from distutils.core import setup
 from catkin_pkg.python_setup import generate_distutils_setup
 
-# A regular package resolves consistently in both catkin devel and install spaces.
-setup(**generate_distutils_setup(packages=['dracomancer'], package_dir={'': 'src'}))
+setup(**generate_distutils_setup(
+    packages=['control'],
+    package_dir={'': 'scripts'},
+))

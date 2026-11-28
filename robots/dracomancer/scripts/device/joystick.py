@@ -1,13 +1,46 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
+"""Convert Spinal joystick messages or publish calibrated axes."""
+import argparse
 import os
 import sys
 import time
 import yaml
 import rospkg
 import rospy
+from sensor_msgs.msg import Joy
 from std_msgs.msg import Int16MultiArray, Float32MultiArray, Bool
+
+def axis_value(count):
+    # Spinal subtracts the startup center and saturates to a signed 16-bit count.
+    return count / (32768.0 if count < 0 else 32767.0)
+
+
+def button_pressed(values):
+    # Unit Joystick2 register 0x20 is active-low.
+    return values[2] == 0 if len(values) > 2 and values[2] in (0, 1) else None
+
+
+def decode():
+    rospy.init_node('joystick')
+    publisher = rospy.Publisher('joy', Joy, queue_size=1)
+
+    def publish(raw):
+        pressed = button_pressed(raw.data)
+        if len(raw.data) != 3 or pressed is None:
+            rospy.logwarn_throttle(5.0, 'Expected three Joystick2 values and a 0/1 button level')
+            return
+
+        x, y, _ = raw.data
+        msg = Joy()
+        msg.header.stamp = rospy.Time.now()
+        msg.axes = [axis_value(x), axis_value(y)]
+        msg.buttons = [int(pressed)]
+        publisher.publish(msg)
+
+    subscriber = rospy.Subscriber('raw', Int16MultiArray, publish, queue_size=1)
+    rospy.spin()
+    subscriber.unregister()
+
 
 class JoystickCalibPublisher:
     def __init__(self):
@@ -221,13 +254,14 @@ class JoystickCalibPublisher:
 
         rate = rospy.Rate(self.rate_hz)
         while not rospy.is_shutdown():
-            if (self.latest_raw is None or
+            raw_sample = self.latest_raw
+            if (raw_sample is None or
                     (self.raw_timeout > 0 and (self.last_raw_time is None or
                      time.monotonic() - self.last_raw_time > self.raw_timeout))):
                 rate.sleep()
                 continue
 
-            axes = self.extract_axes(self.latest_raw)
+            axes = self.extract_axes(raw_sample)
             if axes is None:
                 rate.sleep()
                 continue
@@ -246,8 +280,9 @@ class JoystickCalibPublisher:
             msg = Float32MultiArray()
             msg.data = calib
             self.js_calibrated_pub.publish(msg)
-            if len(self.latest_raw)>2 and self.latest_raw[2] in (0,1):
-                self.button_pub.publish(Bool(self.latest_raw[2]==0))
+            pressed = button_pressed(raw_sample)
+            if pressed is not None:
+                self.button_pub.publish(Bool(pressed))
 
             sys.stdout.write("\rraw={} calib={}".format([int(x) for x in axes],
                                                         [round(x, 3) for x in calib]))
@@ -262,11 +297,17 @@ class JoystickCalibPublisher:
         print("Calibration finished. Publishing started.")
         self.publish_loop()
 
+
 if __name__ == "__main__":
-    try:
-        node = JoystickCalibPublisher()
-        node.main()
-    except rospy.ROSInterruptException:
-        pass
-    except Exception as e:
-        rospy.logerr(str(e))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--calibrate", action="store_true", help="publish axes using saved or measured calibration")
+    args = parser.parse_args(rospy.myargv()[1:])
+    if args.calibrate:
+        try:
+            JoystickCalibPublisher().main()
+        except rospy.ROSInterruptException:
+            pass
+        except Exception as error:
+            rospy.logerr(str(error))
+    else:
+        decode()

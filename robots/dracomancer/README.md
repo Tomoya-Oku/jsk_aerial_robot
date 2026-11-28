@@ -28,9 +28,12 @@ roslaunch dracomancer shape_demo.launch
 | `urdf/dracomancer.urdf`、`urdf/dracomancer.urdf.xacro` | 2026年11月27日版のCAD基準モデルと、同じ形状・関節を使うROS/Gazebo用モデル |
 | `meshes/` | CAD基部・左右共用の腕部品・左右別の手首部品を収めるSTL 10点 |
 | [`config/`](docs/usage.md#設定ファイル一覧) | 関節、実機校正、制御、可視化、実験の設定 |
-| `scripts/mkii/` | viewer・Gazebo・直結制御とGUI |
-| `src/dracomancer/` | 形態写像・接触・力覚・移動の共通処理、校正済み電流換算と出力排他 |
-| `scripts/` | launchから起動するPythonノード |
+| `scripts/device/` | Spinal直結、計測プレビュー、Joystick入力・校正、関節操作GUI |
+| `scripts/teleop/` | DRAGONの関節角・位置・姿勢の操作 |
+| `scripts/haptics/` | 力覚フィードバック |
+| `scripts/safety/` | 力・トルク余裕のフィルタと監視 |
+| `scripts/simulation/` | viewer／Gazeboの関節制御、地上デモの入力、接触壁 |
+| `scripts/control/` | 形態写像・接触計算・出力排他を共用するPythonモジュール |
 | `src/feasibility/` | 候補形態の可行性を評価するROSサービス |
 | `src/simulation/` | Gazeboの壁接触プラグイン |
 | `figures/scripts/` | オフラインの作図スクリプト |
@@ -56,4 +59,5 @@ roslaunch dracomancer shape_demo.launch
 Gitで保存する成果物はフォルダごとに`.gitignore`の除外対象から外す。
 
 文書の入口は[ドキュメント一覧](docs/README.md)。
+[スクリプト一覧](docs/software.md#スクリプト一覧)と[C++ソース一覧](docs/software.md#cソース)にファイルごとの役割を記載する。
 起動・検証は[操作手順](docs/usage.md)、研究仕様・未実装の課題は一覧内の各設計書を参照する。

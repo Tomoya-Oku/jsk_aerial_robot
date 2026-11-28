@@ -94,7 +94,7 @@ Spinalの起動時は両方を中立にする。
 左は先にターミナルで校正し、左専用のファイルに保存する。
 
 ```bash
-rosrun dracomancer calibrate_joystick.py _js_raw_topic:=/dracomancer/left/joystick/raw \
+rosrun dracomancer joystick.py --calibrate _js_raw_topic:=/dracomancer/left/joystick/raw \
   _js_calibrated_topic:=/dracomancer/left/joystick/calibrated \
   _yaml_path:="$HOME/.ros/dracomancer-joystick-left.yaml"
 ```

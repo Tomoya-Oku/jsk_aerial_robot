@@ -13,7 +13,7 @@
   <arg name="position_velocity_only" default="true" />
   <arg name="joy_timeout" default="0.1" />
 
-  <node pkg="dracomancer" type="calibrate_joystick.py" name="$(arg device_ns)_calibrate_joystick" output="screen">
+  <node pkg="dracomancer" type="joystick.py" args="--calibrate" name="$(arg device_ns)_calibrate_joystick" output="screen">
     <rosparam param="axis_indices">[0, 1]</rosparam>
     <rosparam param="invert_axes">[]</rosparam>
     <param name="rate" value="40" />
@@ -28,7 +28,7 @@
     <param name="yaml_path" value="$(find dracomancer)/config/device/joystick_calibration.yaml" />
   </node>
 
-  <node pkg="dracomancer" type="calibrate_joystick.py" name="$(arg device_ns)_left_joystick"
+  <node pkg="dracomancer" type="joystick.py" args="--calibrate" name="$(arg device_ns)_left_joystick"
         output="screen" if="$(eval arg('enable_position_control') and arg('mapping_mode').startswith('dual_'))">
     <param name="js_raw_topic" value="$(arg left_js_raw_topic)"/>
     <param name="js_calibrated_topic" value="/$(arg device_ns)/left/joystick/calibrated"/>

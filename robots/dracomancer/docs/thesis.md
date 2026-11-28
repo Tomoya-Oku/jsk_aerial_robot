@@ -13,15 +13,15 @@ PDFや旧設計資料を優先して原稿の理論を変更しない。
 
 | 修論の式ラベル | 実装 |
 |---|---|
-| `legacy-wrist`、`legacy-elbow`、`legacy-shoulder` | `src/dracomancer/shape.py`の片腕関節角方式 |
-| `normalized-centerline`、`retarget-objective` | `src/dracomancer/shape.py`の片腕中心線方式と有界最適化 |
+| `legacy-wrist`、`legacy-elbow`、`legacy-shoulder` | `scripts/control/shape.py`の片腕関節角方式 |
+| `normalized-centerline`、`retarget-objective` | `scripts/control/shape.py`の片腕中心線方式と有界最適化 |
 | `bimanual-direct-map` | 左・右の順に14軸を受け、右肘／両肩差／左肘を割り当てる関節角方式 |
 | `bimanual-centerline`、`bimanual-centered-centerline` | 左手→右手の中心線。人体の両肩中点と機体第2関節pitch軸原点を基準にする |
 | `contact-torque`、`safety-torque` | `feedback.py`。同一公称解・入力と固定履歴でMを求め、接触と抵抗を区別して合成 |
 | `volume-margin`、`static-allocation` | `src/feasibility/wrench_math.h`。固定Qの符号付きXY/XYZ射影余裕と有界共通推力配分 |
 | `gate-acceptance`、`rechecked-command` | `control_joint_angle.py`。再判定拒否も保持へ移行し、復帰条件を要求 |
 | `anchor-compensation`、`bimanual-center-position` | `control_position.py`。発行関節指令に対する重心位置補償。移動指令の所有者は単一 |
-| `anchored-jacobian` | `src/dracomancer/contacts.py`。接触Jから固定基準点の並進Jを差し引く |
+| `anchored-jacobian` | `scripts/control/contacts.py`。接触Jから固定基準点の並進Jを差し引く |
 | `joystick-view-basis`、`joystick-heading` | `navigation.py`。視点と体幹の傾きによる2次元入力面、SO(3)での姿勢積分 |
 | `multicontact-torque`、`multicontact-balance` | 個別の接触Jによる力覚合成と、同じ候補形態での合力・重心まわりモーメントの釣合い |
 

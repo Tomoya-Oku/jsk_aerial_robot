@@ -14,14 +14,37 @@ from std_msgs.msg import Bool, String
 from std_srvs.srv import SetBool, SetBoolResponse, Trigger, TriggerResponse
 from spinal.msg import DirectServoCurrent, ServoStates
 from spinal.srv import DirectServoMode, DirectServoModeRequest as Mode, GetBoardInfo
-from dracomancer.xm430 import CurrentScale
-from dracomancer.output_lock import claim_output
+from control.output_lock import claim_output
 
 
 # Match the restored Spinal MAX_SERVO_NUM for one direct-UART handler.
 MAX_DIRECT_SERVOS = 10
 ARMS = ("right", "left")
 MAX_ARM_SKEW = 0.05
+
+
+class CurrentScale:
+    UNIT_A = 0.00269
+
+    def __init__(self, joint_nm_per_amp, direction, max_current_amp):
+        if (not math.isfinite(joint_nm_per_amp) or joint_nm_per_amp <= 0
+                or direction not in (-1, 1) or not math.isfinite(max_current_amp)
+                or max_current_amp < self.UNIT_A):
+            raise ValueError('A calibrated positive Nm/A, direction and current limit are required')
+        self.constant = joint_nm_per_amp
+        self.direction = direction
+        self.limit = min(1193, math.floor(max_current_amp/self.UNIT_A))
+
+    def to_raw(self, torque_nm, device_limit):
+        if not math.isfinite(torque_nm):
+            raise ValueError('Non-finite torque')
+        limit = min(self.limit, device_limit)
+        if not 1 <= limit <= 1193:
+            raise ValueError('Invalid Current Limit readback')
+        raw_float = torque_nm/self.constant/self.UNIT_A*self.direction
+        if abs(raw_float) > limit:
+            raise ValueError('Torque exceeds configured or device current limit')
+        return int(round(raw_float))
 
 
 class DaemonExecutor:
