@@ -231,7 +231,7 @@ class RuntimeTest(unittest.TestCase):
         self.rospy.on_shutdown.assert_not_called()
 
     def test_configured_bus_ids_do_not_replace_scan_indexes(self):
-        settings = yaml.safe_load((PACKAGE / 'config/mkii/hardware.yaml').read_text(encoding='utf-8'))
+        settings = yaml.safe_load((PACKAGE / 'config/device/hardware.yaml').read_text(encoding='utf-8'))
         common = dict(zero_tick=2048, radians_per_tick=.0015, direction=1,
                       joint_nm_per_amp=2., max_current_amp=.5, max_torque_nm=.2)
         params = {'joints': list(settings['servo_ids']), '~servo_ids': settings['servo_ids'],
@@ -247,7 +247,7 @@ class RuntimeTest(unittest.TestCase):
         self.assertFalse(node.calibrated)
 
     def test_dual_routes_duplicate_scan_indexes_by_bus_and_checks_skew(self):
-        settings = yaml.safe_load((PACKAGE / 'config/mkii/hardware.yaml').read_text())
+        settings = yaml.safe_load((PACKAGE / 'config/device/hardware.yaml').read_text())
         ids = settings['servo_ids']
         right, left = 'right_joint_1', 'left_joint_1'
         common = dict(index=0, zero_tick=100, radians_per_tick=.01, direction=1,
@@ -291,7 +291,7 @@ class RuntimeTest(unittest.TestCase):
         self.rospy.Publisher.assert_not_called()
 
     def test_ten_direct_axes_and_scan_index_boundary(self):
-        settings = yaml.safe_load((PACKAGE/'config/mkii/hardware.yaml').read_text(encoding='utf-8'))
+        settings = yaml.safe_load((PACKAGE/'config/device/hardware.yaml').read_text(encoding='utf-8'))
         common = dict(zero_tick=2048,radians_per_tick=.0015,direction=1,
                       joint_nm_per_amp=2.,max_current_amp=.5,max_torque_nm=.2)
         names = list(settings['servo_ids'])[:10]

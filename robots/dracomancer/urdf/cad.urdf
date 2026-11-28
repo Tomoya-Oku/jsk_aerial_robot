@@ -1,418 +1,392 @@
-<?xml version='1.0' encoding='utf-8'?>
-<robot name="dracomancer">
-  <!--Mannequin excluded. q=0 is the CAD export pose. Continuous joints are provisional; hardware limits are unknown.-->
+<?xml version="1.0" encoding="utf-8"?>
+<robot name="dracomancer_mkii_assembly">
+  <!-- SolidWorks source: dracomancer_mk2_with_mannequin.SLDASM, saved 2026-11-27. -->
+  <!-- Mannequin omitted. Zero angles reproduce the saved CAD pose. -->
   <link name="base_link">
     <inertial>
-      <origin xyz="0.538297841211797 7.71429791632174e-05 0.0394609993474961" rpy="0 0 0" />
-      <mass value="1.12193720771918" />
-      <inertia ixx="0.00608085027046048" ixy="1.6102669909721e-05" ixz="-0.00246744714079603" iyy="0.0143480736279953" iyz="1.38983508081588e-06" izz="0.01668873664382" />
+      <origin xyz="0.538159498795166 7.7253991936946e-05 0.0394651265746217" rpy="0 0 0"/>
+      <mass value="1.11965394595558"/>
+      <inertia ixx="0.00607270347140615" ixy="1.60938752207106e-05" ixz="-0.00246776353811307" iyy="0.0143349789566615" iyz="1.37640215644864e-06" izz="0.0166722110372159"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="1.5707963267949 0 1.5707963267949" />
+      <origin xyz="0 0 0" rpy="1.5707963267949 0 1.5707963267949"/>
       <geometry>
-        <mesh filename="package://dracomancer/meshes/base.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/base.stl"/>
       </geometry>
       <material name="color_base_link">
-        <color rgba="0.45 0.48 0.52 1" />
+        <color rgba="0.45 0.48 0.52 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="1.5707963267949 0 1.5707963267949" />
+      <origin xyz="0 0 0" rpy="1.5707963267949 0 1.5707963267949"/>
       <geometry>
-        <mesh filename="package://dracomancer/meshes/base.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/base.stl"/>
       </geometry>
     </collision>
   </link>
   <link name="right_link1_shoulder">
     <inertial>
-      <origin xyz="-2.22054765015818e-06 -0.0623248806898595 0.0537570317000164" rpy="0 0 0" />
-      <mass value="0.311033190448667" />
-      <inertia ixx="0.00184709302301005" ixy="-2.30803069612402e-08" ixz="8.28095308956081e-09" iyy="0.00136038129198454" iyz="0.000554003802814448" izz="0.00053989042537464" />
+      <origin xyz="-2.1282270287436e-06 -0.0636980231712038 0.0614127151237088" rpy="0 0 0"/>
+      <mass value="0.324990293342891"/>
+      <inertia ixx="0.00224729136139281" ixy="-2.13040982229516e-08" ixz="6.03026150546037e-08" iyy="0.00174673625156463" iyz="0.000632840952117425" izz="0.000555199046199421"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link1_shoulder.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link1_shoulder.stl"/>
       </geometry>
       <material name="color_right_link1_shoulder">
-        <color rgba="0.15 0.42 0.78 1" />
+        <color rgba="0.15 0.42 0.78 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link1_shoulder.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link1_shoulder.stl"/>
       </geometry>
     </collision>
   </link>
   <link name="right_link2_upper_arm_upper">
     <inertial>
-      <origin xyz="-3.85946855000866e-09 -0.0295644761615872 0.000334681730333839" rpy="0 0 0" />
-      <mass value="0.159071368425311" />
-      <inertia ixx="0.00015395693183761" ixy="-1.98221699093399e-11" ixz="-7.39384026757579e-13" iyy="3.05732363744265e-05" iyz="-1.06306497457957e-06" izz="0.000154185767444511" />
+      <origin xyz="2.87007599770894e-07 -0.0363537947157851 0.000307480502028966" rpy="0 0 0"/>
+      <mass value="0.173303363859651"/>
+      <inertia ixx="0.000239257895836309" ixy="3.54426768162406e-09" ixz="-7.79014290555715e-10" iyy="3.21452038758277e-05" iyz="-1.42416285458455e-06" izz="0.000239444798925579"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link2_upper_arm_upper.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link2_upper_arm_upper.stl"/>
       </geometry>
       <material name="color_right_link2_upper_arm_upper">
-        <color rgba="0.15 0.42 0.78 1" />
+        <color rgba="0.15 0.42 0.78 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link2_upper_arm_upper.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link2_upper_arm_upper.stl"/>
       </geometry>
     </collision>
   </link>
   <link name="right_link3_upper_arm_lower">
     <inertial>
-      <origin xyz="-2.97656988118984e-06 -0.00669352163145934 -0.0271761889340157" rpy="0 0 0" />
-      <mass value="0.202851713995559" />
-      <inertia ixx="0.000294829882555397" ixy="-1.46151737643307e-08" ixz="3.55109407912184e-09" iyy="0.000286653907320972" iyz="3.55213110018567e-05" izz="7.86474683477143e-05" />
+      <origin xyz="-2.5466493498879e-06 -0.0062528543480382 -0.0346681459997604" rpy="0 0 0"/>
+      <mass value="0.217030771473053"/>
+      <inertia ixx="0.000436211358690329" ixy="-1.433385143573e-08" ixz="1.07353184751366e-08" iyy="0.000427492721691512" iyz="4.56755281744249e-05" izz="8.07851083955119e-05"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link3_upper_arm_lower.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link3_upper_arm_lower.stl"/>
       </geometry>
       <material name="color_right_link3_upper_arm_lower">
-        <color rgba="0.15 0.42 0.78 1" />
+        <color rgba="0.15 0.42 0.78 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link3_upper_arm_lower.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link3_upper_arm_lower.stl"/>
       </geometry>
     </collision>
   </link>
   <link name="right_link4_lower_arm_upper">
     <inertial>
-      <origin xyz="-3.85946855014225e-09 -0.0295644761615872 0.000334681730333784" rpy="0 0 0" />
-      <mass value="0.159071368425311" />
-      <inertia ixx="0.00015395693183761" ixy="-1.98221699232484e-11" ixz="-7.39384025317761e-13" iyy="3.05732363744266e-05" iyz="-1.06306497457958e-06" izz="0.000154185767444511" />
+      <origin xyz="2.99312577248433e-07 -0.0328863264015517 0.000320556207474178" rpy="0 0 0"/>
+      <mass value="0.166234780389074"/>
+      <inertia ixx="0.000192721589489814" ixy="3.22773897504157e-09" ixz="-7.78354785624394e-10" iyy="3.13492914029684e-05" iyz="-1.23938248655911e-06" izz="0.000192909189410255"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link4_lower_arm_upper.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link4_lower_arm_upper.stl"/>
       </geometry>
       <material name="color_right_link4_lower_arm_upper">
-        <color rgba="0.15 0.42 0.78 1" />
+        <color rgba="0.15 0.42 0.78 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link4_lower_arm_upper.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link4_lower_arm_upper.stl"/>
       </geometry>
     </collision>
   </link>
   <link name="right_link5_lower_arm_lower">
     <inertial>
-      <origin xyz="-2.97656988122939e-06 -0.00669352163145912 -0.0271761889340158" rpy="0 0 0" />
-      <mass value="0.202851713995559" />
-      <inertia ixx="0.000294829882555399" ixy="-1.46151737642407e-08" ixz="3.55109407857361e-09" iyy="0.000286653907320974" iyz="3.55213110018573e-05" izz="7.86474683477144e-05" />
+      <origin xyz="-2.86798721999522e-06 -0.00646360029093035 -0.0308746457288023" rpy="0 0 0"/>
+      <mass value="0.209962188002476"/>
+      <inertia ixx="0.000360454422825007" ixy="-1.46908146204271e-08" ixz="8.42829946247978e-09" iyy="0.000352039393539122" iyz="4.05277882095954e-05" izz="7.97035731631775e-05"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link5_lower_arm_lower.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link5_lower_arm_lower.stl"/>
       </geometry>
       <material name="color_right_link5_lower_arm_lower">
-        <color rgba="0.15 0.42 0.78 1" />
+        <color rgba="0.15 0.42 0.78 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link5_lower_arm_lower.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link5_lower_arm_lower.stl"/>
       </geometry>
     </collision>
   </link>
   <link name="right_link6_wrist_upper">
     <inertial>
-      <origin xyz="0 -0.0221395746339372 0.000381004081849901" rpy="0 0 0" />
-      <mass value="0.142115458481556" />
-      <inertia ixx="9.32557597243337e-05" ixy="0" ixz="0" iyy="4.31340174898552e-05" iyz="-6.78069154759594e-07" izz="0.000108426371262755" />
+      <origin xyz="0.0145698262241863 -0.0130904602565066 0.000336565885870667" rpy="0 0 0"/>
+      <mass value="0.160182451761173"/>
+      <inertia ixx="4.55820476760918e-05" ixy="6.79535795936085e-06" ixz="7.90180875337207e-07" iyy="0.000107157483697853" iyz="-1.85959161320314e-07" izz="0.000122128114222353"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link6_wrist_upper.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link6_wrist_upper.stl"/>
       </geometry>
       <material name="color_right_link6_wrist_upper">
-        <color rgba="0.15 0.42 0.78 1" />
+        <color rgba="0.15 0.42 0.78 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link6_wrist_upper.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link6_wrist_upper.stl"/>
       </geometry>
     </collision>
   </link>
   <link name="right_link7_wrist_lower">
     <inertial>
-      <origin xyz="0.0397499857748888 -0.0627907132008446 0.000158967612462773" rpy="0 0 0" />
-      <mass value="0.319082232072848" />
-      <inertia ixx="0.000547068750649334" ixy="0.000415615963137919" ixz="2.1970737917657e-06" iyy="0.000717807823662787" iyz="-2.99281119292708e-06" izz="0.00120844468876245" />
+      <origin xyz="-0.0606174416699351 -0.0146671814362258 0.0442306801583407" rpy="0 0 0"/>
+      <mass value="0.349605251891039"/>
+      <inertia ixx="0.000980396168148244" ixy="-2.82564271113715e-05" ixz="0.000591272616226426" iyy="0.00166835274643897" iyz="2.02689568419576e-05" izz="0.000778957016303556"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link7_wrist_lower.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link7_wrist_lower.stl"/>
       </geometry>
       <material name="color_right_link7_wrist_lower">
-        <color rgba="0.15 0.42 0.78 1" />
+        <color rgba="0.15 0.42 0.78 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link7_wrist_lower.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link7_wrist_lower.stl"/>
       </geometry>
     </collision>
   </link>
   <link name="left_link1_shoulder">
     <inertial>
-      <origin xyz="-2.22054765027062e-06 -0.0623248806898594 0.0537570317000164" rpy="0 0 0" />
-      <mass value="0.311033190448667" />
-      <inertia ixx="0.00184709302301005" ixy="-2.30803069612978e-08" ixz="8.28095308957365e-09" iyy="0.00136038129198454" iyz="0.000554003802814448" izz="0.00053989042537464" />
+      <origin xyz="-2.1282270287436e-06 -0.0636980231712038 0.0614127151237088" rpy="0 0 0"/>
+      <mass value="0.324990293342891"/>
+      <inertia ixx="0.00224729136139281" ixy="-2.13040982229516e-08" ixz="6.03026150546037e-08" iyy="0.00174673625156463" iyz="0.000632840952117425" izz="0.000555199046199421"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link1_shoulder.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link1_shoulder.stl"/>
       </geometry>
       <material name="color_left_link1_shoulder">
-        <color rgba="0.85 0.28 0.17 1" />
+        <color rgba="0.85 0.28 0.17 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link1_shoulder.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link1_shoulder.stl"/>
       </geometry>
     </collision>
   </link>
   <link name="left_link2_upper_arm_upper">
     <inertial>
-      <origin xyz="-3.85946857144154e-09 -0.0295644761615872 0.000334681730333839" rpy="0 0 0" />
-      <mass value="0.159071368425311" />
-      <inertia ixx="0.00015395693183761" ixy="-1.98221699193977e-11" ixz="-7.3938402374252e-13" iyy="3.05732363744265e-05" iyz="-1.06306497457957e-06" izz="0.000154185767444511" />
+      <origin xyz="2.87007599770894e-07 -0.0363537947157851 0.000307480502028966" rpy="0 0 0"/>
+      <mass value="0.173303363859651"/>
+      <inertia ixx="0.000239257895836309" ixy="3.54426768162406e-09" ixz="-7.79014290555715e-10" iyy="3.21452038758277e-05" iyz="-1.42416285458455e-06" izz="0.000239444798925579"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link2_upper_arm_upper.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link2_upper_arm_upper.stl"/>
       </geometry>
       <material name="color_left_link2_upper_arm_upper">
-        <color rgba="0.85 0.28 0.17 1" />
+        <color rgba="0.85 0.28 0.17 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link2_upper_arm_upper.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link2_upper_arm_upper.stl"/>
       </geometry>
     </collision>
   </link>
   <link name="left_link3_upper_arm_lower">
     <inertial>
-      <origin xyz="-2.97656988118356e-06 -0.00669352163145936 -0.0271761889340157" rpy="0 0 0" />
-      <mass value="0.202851713995559" />
-      <inertia ixx="0.000294829882555397" ixy="-1.46151737643352e-08" ixz="3.55109407910174e-09" iyy="0.000286653907320972" iyz="3.55213110018567e-05" izz="7.86474683477143e-05" />
+      <origin xyz="-2.5466493498879e-06 -0.0062528543480382 -0.0346681459997604" rpy="0 0 0"/>
+      <mass value="0.217030771473053"/>
+      <inertia ixx="0.000436211358690329" ixy="-1.433385143573e-08" ixz="1.07353184751366e-08" iyy="0.000427492721691512" iyz="4.56755281744249e-05" izz="8.07851083955119e-05"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link3_upper_arm_lower.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link3_upper_arm_lower.stl"/>
       </geometry>
       <material name="color_left_link3_upper_arm_lower">
-        <color rgba="0.85 0.28 0.17 1" />
+        <color rgba="0.85 0.28 0.17 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link3_upper_arm_lower.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link3_upper_arm_lower.stl"/>
       </geometry>
     </collision>
   </link>
   <link name="left_link4_lower_arm_upper">
     <inertial>
-      <origin xyz="-3.85946853918842e-09 -0.0295644761615872 0.000334681730333841" rpy="0 0 0" />
-      <mass value="0.159071368425311" />
-      <inertia ixx="0.00015395693183761" ixy="-1.98221699253028e-11" ixz="-7.39384033229203e-13" iyy="3.05732363744266e-05" iyz="-1.06306497457956e-06" izz="0.000154185767444511" />
+      <origin xyz="2.99312577248433e-07 -0.0328863264015517 0.000320556207474178" rpy="0 0 0"/>
+      <mass value="0.166234780389074"/>
+      <inertia ixx="0.000192721589489814" ixy="3.22773897504157e-09" ixz="-7.78354785624394e-10" iyy="3.13492914029684e-05" iyz="-1.23938248655911e-06" izz="0.000192909189410255"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link4_lower_arm_upper.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link4_lower_arm_upper.stl"/>
       </geometry>
       <material name="color_left_link4_lower_arm_upper">
-        <color rgba="0.85 0.28 0.17 1" />
+        <color rgba="0.85 0.28 0.17 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link4_lower_arm_upper.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link4_lower_arm_upper.stl"/>
       </geometry>
     </collision>
   </link>
   <link name="left_link5_lower_arm_lower">
     <inertial>
-      <origin xyz="-2.97656988139602e-06 -0.00669352163145911 -0.0271761889340158" rpy="0 0 0" />
-      <mass value="0.202851713995559" />
-      <inertia ixx="0.000294829882555399" ixy="-1.46151737642532e-08" ixz="3.55109407854969e-09" iyy="0.000286653907320974" iyz="3.55213110018573e-05" izz="7.86474683477143e-05" />
+      <origin xyz="-2.86798721999522e-06 -0.00646360029093035 -0.0308746457288023" rpy="0 0 0"/>
+      <mass value="0.209962188002476"/>
+      <inertia ixx="0.000360454422825007" ixy="-1.46908146204271e-08" ixz="8.42829946247978e-09" iyy="0.000352039393539122" iyz="4.05277882095954e-05" izz="7.97035731631775e-05"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link5_lower_arm_lower.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link5_lower_arm_lower.stl"/>
       </geometry>
       <material name="color_left_link5_lower_arm_lower">
-        <color rgba="0.85 0.28 0.17 1" />
+        <color rgba="0.85 0.28 0.17 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link5_lower_arm_lower.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link5_lower_arm_lower.stl"/>
       </geometry>
     </collision>
   </link>
   <link name="left_link6_wrist_upper">
     <inertial>
-      <origin xyz="0 -0.0221395746339372 0.000381004081849901" rpy="0 0 0" />
-      <mass value="0.142115458481556" />
-      <inertia ixx="9.32557597243337e-05" ixy="0" ixz="0" iyy="4.31340174898552e-05" iyz="-6.78069154759584e-07" izz="0.000108426371262755" />
+      <origin xyz="-0.0145728314698564 -0.0130904602565066 0.000336565885870719" rpy="0 0 0"/>
+      <mass value="0.160182451761173"/>
+      <inertia ixx="4.55820476760918e-05" ixy="-6.79676210845238e-06" ixz="-7.90335293543002e-07" iyy="0.000107159773697964" iyz="-1.85959161320288e-07" izz="0.000122130404222464"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link6_wrist_upper.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link6_wrist_upper_left.stl"/>
       </geometry>
       <material name="color_left_link6_wrist_upper">
-        <color rgba="0.85 0.28 0.17 1" />
+        <color rgba="0.85 0.28 0.17 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link6_wrist_upper.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link6_wrist_upper_left.stl"/>
       </geometry>
     </collision>
   </link>
   <link name="left_link7_wrist_lower">
     <inertial>
-      <origin xyz="0.0397499857748886 -0.0627907132008445 0.000158967612462766" rpy="0 0 0" />
-      <mass value="0.319082232072848" />
-      <inertia ixx="0.000547068750649334" ixy="0.000415615963137919" ixz="2.19707379176584e-06" iyy="0.000717807823662786" iyz="-2.9928111929272e-06" izz="0.00120844468876245" />
+      <origin xyz="0.0606160647237451 -0.0146671960335121 0.0442306801583408" rpy="0 0 0"/>
+      <mass value="0.349605251891039"/>
+      <inertia ixx="0.00098039613017343" ixy="2.82537682052075e-05" ixz="-0.000591293909686889" iyy="0.00166839478954437" iyz="2.02673005643561e-05" izz="0.000778999021434139"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link7_wrist_lower.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link7_wrist_lower_left.stl"/>
       </geometry>
       <material name="color_left_link7_wrist_lower">
-        <color rgba="0.85 0.28 0.17 1" />
+        <color rgba="0.85 0.28 0.17 1"/>
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://dracomancer/meshes/link7_wrist_lower.stl" scale="1 1 1" />
+        <mesh filename="package://dracomancer/meshes/link7_wrist_lower_left.stl"/>
       </geometry>
     </collision>
   </link>
   <joint name="right_joint_1" type="continuous">
-    <origin xyz="0.606273192976864 -0.165000000000001 0.118000000002988" rpy="3.14159265358979 0 -2.61267538086395" />
-    <parent link="base_link" />
-    <child link="right_link1_shoulder" />
-    <axis xyz="0 0 -1" />
+    <origin xyz="0.606273192976861 -0.165000000000007 0.11800000000299" rpy="-3.14159265358979 0 -2.63235018652274"/>
+    <parent link="base_link"/>
+    <child link="right_link1_shoulder"/>
+    <axis xyz="0 0 -1"/>
   </joint>
   <joint name="right_joint_2" type="continuous">
-    <origin xyz="0 -0.0957500000000009 0.19" rpy="-1.57079632679489 1.36015554101046 0" />
-    <parent link="right_link1_shoulder" />
-    <child link="right_link2_upper_arm_upper" />
-    <axis xyz="0 0 -1" />
+    <origin xyz="0 -0.0956500000000015 0.21" rpy="1.57079632679489 1.46350949854709 -3.14159265358907"/>
+    <parent link="right_link1_shoulder"/>
+    <child link="right_link2_upper_arm_upper"/>
+    <axis xyz="0 0 -1"/>
   </joint>
   <joint name="right_joint_3" type="continuous">
-    <origin xyz="0 -0.10975 0" rpy="-1.57079632679491 1.44467080178209 0" />
-    <parent link="right_link2_upper_arm_upper" />
-    <child link="right_link3_upper_arm_lower" />
-    <axis xyz="0 0 -1" />
+    <origin xyz="0 -0.12965 0" rpy="1.5707963267949 1.46669417135024 -3.14159265358979"/>
+    <parent link="right_link2_upper_arm_upper"/>
+    <child link="right_link3_upper_arm_lower"/>
+    <axis xyz="0 0 -1"/>
   </joint>
   <joint name="right_joint_4" type="continuous">
-    <origin xyz="0 0 -0.102000000000001" rpy="1.57079632679489 0.200599455542163 -1.5707963267949" />
-    <parent link="right_link3_upper_arm_lower" />
-    <child link="right_link4_lower_arm_upper" />
-    <axis xyz="0 0 -1" />
+    <origin xyz="0 0 -0.121999999999999" rpy="1.5707963267949 0.253455581816449 -1.5707963267949"/>
+    <parent link="right_link3_upper_arm_lower"/>
+    <child link="right_link4_lower_arm_upper"/>
+    <axis xyz="0 0 -1"/>
   </joint>
   <joint name="right_joint_5" type="continuous">
-    <origin xyz="0 -0.10975 0" rpy="1.5707963267949 1.4488957434623 -3.14159265358979" />
-    <parent link="right_link4_lower_arm_upper" />
-    <child link="right_link5_lower_arm_lower" />
-    <axis xyz="0 0 1" />
+    <origin xyz="0 -0.119650000000001 0" rpy="-1.5707963267949 1.42522287235983 0"/>
+    <parent link="right_link4_lower_arm_upper"/>
+    <child link="right_link5_lower_arm_lower"/>
+    <axis xyz="0 0 1"/>
   </joint>
   <joint name="right_joint_6" type="continuous">
-    <origin xyz="0 0 -0.102000000000003" rpy="1.5707963267949 -0.0116000594150987 -1.57079632679491" />
-    <parent link="right_link5_lower_arm_lower" />
-    <child link="right_link6_wrist_upper" />
-    <axis xyz="0 0 -1" />
+    <origin xyz="0 0 -0.112" rpy="1.5707963267949 0.0471626595244627 -1.5707963267949"/>
+    <parent link="right_link5_lower_arm_lower"/>
+    <child link="right_link6_wrist_upper"/>
+    <axis xyz="0 0 -1"/>
   </joint>
   <joint name="right_joint_7" type="continuous">
-    <origin xyz="0 -0.0707499999999921 0" rpy="1.57079632679492 -1.37330369135277 -1.57079632679492" />
-    <parent link="right_link6_wrist_upper" />
-    <child link="right_link7_wrist_lower" />
-    <axis xyz="0 0 -1" />
+    <origin xyz="0.0884500000000001 -0.0160000000000001 0" rpy="-1.5707963267949 -0.112821034233788 1.5707963267949"/>
+    <parent link="right_link6_wrist_upper"/>
+    <child link="right_link7_wrist_lower"/>
+    <axis xyz="0 0 -1"/>
   </joint>
+  <!-- Use the mirrored right-arm rotation direction for positive left-arm angles. -->
   <joint name="left_joint_1" type="continuous">
-    <origin xyz="0.606273192976864 0.165000000000001 0.118000000002988" rpy="3.14159265358979 0 -0.528917272725839" />
-    <parent link="base_link" />
-    <child link="left_link1_shoulder" />
-    <axis xyz="0 0 -1" />
+    <origin xyz="0.606273192976865 0.165 0.118000000000083" rpy="3.14159265358979 0 -0.504400344947869"/>
+    <parent link="base_link"/>
+    <child link="left_link1_shoulder"/>
+    <axis xyz="0 0 1"/>
   </joint>
   <joint name="left_joint_2" type="continuous">
-    <origin xyz="0 -0.0957500000000009 0.189999999999999" rpy="-1.57079632679489 -1.36015554101046 0" />
-    <parent link="left_link1_shoulder" />
-    <child link="left_link2_upper_arm_upper" />
-    <axis xyz="0 0 -1" />
+    <origin xyz="0 -0.0956500000000012 0.21" rpy="1.57079632679489 -1.46530416725595 -3.14159265358906"/>
+    <parent link="left_link1_shoulder"/>
+    <child link="left_link2_upper_arm_upper"/>
+    <axis xyz="0 0 1"/>
   </joint>
   <joint name="left_joint_3" type="continuous">
-    <origin xyz="0 -0.10975 0" rpy="-1.57079632679491 -1.44467080178209 0" />
-    <parent link="left_link2_upper_arm_upper" />
-    <child link="left_link3_upper_arm_lower" />
-    <axis xyz="0 0 -1" />
+    <origin xyz="0 -0.12965 0" rpy="1.57079632679478 -1.56033244113416 -3.14159265358969"/>
+    <parent link="left_link2_upper_arm_upper"/>
+    <child link="left_link3_upper_arm_lower"/>
+    <axis xyz="0 0 1"/>
   </joint>
   <joint name="left_joint_4" type="continuous">
-    <origin xyz="0 0 -0.102000000000001" rpy="1.57079632679489 -0.200599455542163 1.5707963267949" />
-    <parent link="left_link3_upper_arm_lower" />
-    <child link="left_link4_lower_arm_upper" />
-    <axis xyz="0 0 -1" />
+    <origin xyz="0 0 -0.122" rpy="1.5707963267949 -0.214180109911696 1.5707963267949"/>
+    <parent link="left_link3_upper_arm_lower"/>
+    <child link="left_link4_lower_arm_upper"/>
+    <axis xyz="0 0 1"/>
   </joint>
   <joint name="left_joint_5" type="continuous">
-    <origin xyz="0 -0.10975 0" rpy="1.5707963267949 -1.44889574346231 3.14159265358979" />
-    <parent link="left_link4_lower_arm_upper" />
-    <child link="left_link5_lower_arm_lower" />
-    <axis xyz="0 0 1" />
+    <origin xyz="0 -0.11965 0" rpy="-1.57079632679489 -1.54781309801312 0"/>
+    <parent link="left_link4_lower_arm_upper"/>
+    <child link="left_link5_lower_arm_lower"/>
+    <axis xyz="0 0 -1"/>
   </joint>
   <joint name="left_joint_6" type="continuous">
-    <origin xyz="0 0 -0.102000000000003" rpy="1.5707963267949 0.0116000594150988 1.57079632679491" />
-    <parent link="left_link5_lower_arm_lower" />
-    <child link="left_link6_wrist_upper" />
-    <axis xyz="0 0 -1" />
+    <origin xyz="0 0 -0.112" rpy="1.5707963267949 -0.0384283282081401 1.57079632679489"/>
+    <parent link="left_link5_lower_arm_lower"/>
+    <child link="left_link6_wrist_upper"/>
+    <axis xyz="0 0 1"/>
   </joint>
   <joint name="left_joint_7" type="continuous">
-    <origin xyz="0.00223345866813776 -0.0707499999999922 0" rpy="1.57079632679488 -1.37330369135277 -1.57079632679488" />
-    <parent link="left_link6_wrist_upper" />
-    <child link="left_link7_wrist_lower" />
-    <axis xyz="0 0 -1" />
+    <origin xyz="-0.08845 -0.0160000000000001 0" rpy="-1.5707963267949 -0.0310609927171764 -1.5707963267949"/>
+    <parent link="left_link6_wrist_upper"/>
+    <child link="left_link7_wrist_lower"/>
+    <axis xyz="0 0 1"/>
   </joint>
 </robot>

@@ -61,6 +61,10 @@ class Feedback:
         self.data = None
         self.received = 0.
         self.contacts=ContactInputs(rospy.get_param('~contacts',[{}]),self.robot)
+        self.hardware = rospy.get_param('~hardware', False)
+        self.hardware_limits = None
+        if self.hardware:
+            rospy.Subscriber(self.device+'/control/status', String, self.hardware_status, queue_size=1)
         self.previous = np.zeros(n)
         self.input_previous = None
         self.last_tick = time.monotonic()
@@ -71,6 +75,19 @@ class Feedback:
         for i,spec in enumerate(self.contacts.specs):
             rospy.Subscriber(spec['topic'],WrenchStamped,lambda msg,index=i:self.contact_state(msg,index),queue_size=1)
         rospy.on_shutdown(self.stop)
+
+    def hardware_status(self, msg):
+        try:
+            status = json.loads(msg.data)
+            limits = {
+                name: float(status['max_torque_by_joint'][name])
+                for name in status['measured_joints'] if status['available'][name]
+            } if status['backend'] == 'spinal_direct' else {}
+            if any(not np.isfinite(limit) or limit <= 0 for limit in limits.values()):
+                raise ValueError('invalid actuator torque limit')
+            self.hardware_limits = (time.monotonic(), limits)
+        except (KeyError, TypeError, ValueError):
+            self.hardware_limits = None
 
     def state(self,msg):
         try:
@@ -120,6 +137,9 @@ class Feedback:
         return combine_torque(raw,np.zeros_like(raw),np.zeros_like(raw),self.limit)
 
     def stop(self):
+        if self.hardware:
+            # The hardware adapter stops the session when this stream expires.
+            return
         msg = JointState()
         msg.name, msg.effort = self.names, [0.]*len(self.names)
         msg.header.stamp = rospy.Time.now()
@@ -129,7 +149,10 @@ class Feedback:
         rate = rospy.Rate(10.)
         while not rospy.is_shutdown():
             start = time.monotonic()
+            hardware_limits = self.hardware_limits
             try:
+                if self.hardware and (not hardware_limits or start-hardware_limits[0] >= .15):
+                    raise ValueError('fresh calibrated actuator status required')
                 torque = self.torque()
                 if time.monotonic()-start>.1: raise ValueError('haptic computation over budget')
                 torque = rate_limit(torque,self.previous,self.slew,min(start-self.last_tick,.1))
@@ -137,10 +160,23 @@ class Feedback:
                 rospy.logwarn_throttle(3.,'haptics zero: %s',str(error))
                 torque = np.zeros(len(self.names))
                 self.input_previous = None
+                if self.hardware:
+                    self.previous, self.last_tick = torque, start
+                    rate.sleep()
+                    continue
+            names = self.names
+            if self.hardware:
+                # Apply both the haptic limit and the live actuator cap, and omit unmapped joints.
+                limits = hardware_limits[1]
+                caps = np.array([limits.get(name, 0.) for name in self.names])
+                torque = np.clip(torque, -caps, caps)
+                names = [name for name in self.names if name in limits]
             self.previous, self.last_tick = torque,start
             msg = JointState()
-            msg.header.stamp, msg.name, msg.effort = rospy.Time.now(),self.names,torque.tolist()
-            self.publisher.publish(msg)
+            msg.header.stamp, msg.name = rospy.Time.now(), names
+            msg.effort = torque[caps > 0].tolist() if self.hardware else torque.tolist()
+            if names:
+                self.publisher.publish(msg)
             rate.sleep()
 
 

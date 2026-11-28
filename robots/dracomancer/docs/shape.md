@@ -9,7 +9,7 @@ Catkin workspaceでビルド・sourceしてから実行する。
 
 ```bash
 roslaunch dracomancer shape_demo.launch
-# 2026年11月27日版のCADモデルで両腕の幾何写像を確認する。
+# CADアセンブリ表示で両腕の幾何写像を確認する。
 roslaunch dracomancer shape_demo.launch assembly:=true geometry_only:=true
 # 同じ肩・肘入力を繰り返す。スライダを同時操作しない。
 roslaunch dracomancer shape_demo.launch motion:=true
@@ -21,7 +21,7 @@ roslaunch dracomancer shape_demo.launch motion:=true gui:=false rviz:=false
 
 Mk-II viewerとDRAGON Gazeboを起動する。離陸も偽のHOVER配信も行わない。
 デモだけはHover条件を外し、既存のsimulation用preflight関節制御で地上動作させる。
-通常の`teleoperation.launch`ではHover条件を維持する。
+通常の`bringup.launch`ではHover条件を維持する。
 他のDRAGON、Gazebo、`/dragon/joints_ctrl`指令ノードを重複起動しない。
 
 `geometry_only:=true`は地上シミュレーションで形状写像の反応を見るための設定。
@@ -34,22 +34,22 @@ RVizには両モデル、物理端点、等弧長点、重ねた正規化中心�
 RVizでは両モデルの基準位置を2 m離して固定する。`display_gap:=2.5`のように間隔を変更できる。
 DRAGONの表示にはGazeboの関節角を使う。
 [両腕のランダム軌道に応じてDRAGONが形状を変える録画（斜め・真上の同時表示、MP4、36秒）](../figures/archive/shape-mashup.mp4)
-`assembly:=true`の標準設定では、左右それぞれの手先点に新しいCADの手先リンク重心を使う。
-片腕では体幹から肩への正方向を、両腕では左から右への方向を、DRAGONの尾側座標系に合わせる。
+標準設定の手先点は、左右とも同じ最新CADの各手先リンク重心を使う。
+`assembly:=true`の場合は、片腕では体幹から肩への正方向を、両腕では左から右への方向を、DRAGONの尾側座標系に合わせる。
 
 ## 通常起動と設定
 
 Mk-IIとDRAGONを別々に起動する場合は、校正した設定を指定する。
 
 ```bash
-roslaunch dracomancer teleoperation.launch shape_config:=/absolute/path/to/shape.yaml
+roslaunch dracomancer bringup.launch start_control:=true shape_config:=/absolute/path/to/shape.yaml
 # 条件がそろってから形状操作を有効化する
 rostopic pub -1 /dracomancer/teleop_mode std_msgs/Bool 'data: true'
 ```
 
 設定元は`config/control/shape.yaml`。標準の`torso_point: []`では写像を有効化しない。
 体幹点、人体代表点、固定軸合わせを実機に合わせて設定する。
-`shape_demo.launch`と`contact.launch`は、シミュレーション用に`base_link`原点の体幹代理点を明示する。
+`shape_demo.launch`と`haptics.launch simulation:=true`は、シミュレーション用に`base_link`原点の体幹代理点を明示する。
 CADフレーム原点・手先重心とidentityの軸合わせも代理値で、解剖学的な実測値ではない。
 最後の手首回転を反映するため、手先点を回転軸原点から離す。
 URDFを変更したら人体代表点と`dragon_tail`の整合を確認する。
@@ -58,10 +58,10 @@ URDFを変更したら人体代表点と`dragon_tail`の整合を確認する。
 形態指令は`control_joint_angle.py`だけが発行する。別ノードから同じtopicへ指令しない。
 対応モードは`shape`（標準）・`joint`・`dual_shape`・`dual_joint`。feasibility gateは`hold`のみ。
 `shape_demo.launch mapping_mode:=dual_shape`等で選ぶ。関節角方式の既定の零点・符号はシミュレーション用。
-`teleoperation.launch anchor_mode:=tail`は尾側点、`mid`は中央関節の位置補償を有効化する。
+`bringup.launch anchor_mode:=tail`は尾側点、`mid`は中央関節の位置補償を有効化する。
 両腕方式の標準は`mid`。移動指令は単一の`control_position.py`が担当し、Joystick入力が零でも変形による位置差を補償する。
 `enable_position_control:=true`でJoystickによる基準位置の移動も有効化する。補償はHover中に限る。
-力覚は`enable_haptics:=true`で明示的に有効化し、実機のARMは自動実行しない。[修論対応](thesis.md)と[実機手順](hardware.md)を参照する。
+力覚には`haptics.launch`を使える。実機のARMには操作者による準備とボタン押下が必要。[修論対応](thesis.md)と[実機手順](hardware.md#実機の力覚提示)を参照する。
 `teleop_mode=false`は最後の指令を保持する。現在のclutch解除は人体基準姿勢の再設定を行わない。
 
 ## 実装の入口

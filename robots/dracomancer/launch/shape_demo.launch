@@ -18,13 +18,6 @@
   <arg name="assembly_alignment" value="$(eval [0.0, 0.0, -pi / 2 if arg('mapping_mode') == 'dual_shape' else pi])"/>
   <arg name="force_dimensions" default="2"/>
   <arg name="torso_point" default="[0, 0, 0]"/>
-  <!-- Approved simulation proxy only; safety thresholds remain unchanged. -->
-  <include file="$(find dracomancer)/launch/view.launch">
-    <arg name="rviz" value="false"/>
-    <arg name="panel" value="$(arg panel)"/>
-    <arg name="assembly" value="$(arg assembly)"/>
-    <arg name="mount_height" value="$(arg display_height)"/>
-  </include>
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(find aerial_robot_simulation)/gazebo_model/world/empty.world"/>
     <arg name="gui" value="$(arg gui)"/>
@@ -50,9 +43,12 @@
           args="0 $(arg display_gap) $(arg display_height) 0 0 0 world dragon_view/root"/>
   </group>
   <node pkg="rviz" type="rviz" name="shape_rviz" if="$(arg rviz)"
-        args="-d $(find dracomancer)/config/control/shape.rviz"/>
-  <include file="$(find dracomancer)/launch/teleoperation.launch">
-    <arg name="device_ns" value="dracomancer"/>
+        args="-d $(find dracomancer)/config/visualization/shape.rviz"/>
+  <include file="$(find dracomancer)/launch/bringup.launch">
+    <arg name="rviz" value="false"/>
+    <arg name="panel" value="$(arg panel)"/>
+    <arg name="assembly" value="$(arg assembly)"/>
+    <arg name="mount_height" value="$(arg display_height)"/>
     <arg name="mapping_mode" value="$(arg mapping_mode)"/>
     <arg name="force_dimensions" value="$(arg force_dimensions)"/>
     <arg name="shape_config" value="$(arg shape_config)"/>
@@ -62,15 +58,12 @@
     <arg name="enable_volume_radius_monitor" value="$(eval not arg('geometry_only'))"/>
     <arg name="enable_fc_min_lowpass" value="$(eval not arg('geometry_only'))"/>
   </include>
-  <!-- Match the hand points to this assembly's left and right parts. -->
-  <rosparam command="load" ns="/dracomancer_control_joint_angle/shape"
-            file="$(find dracomancer)/config/control/assembly.yaml" if="$(arg assembly_defaults)"/>
   <!-- Align the torso-to-shoulder (+X) or left-to-right (-Y) direction with DRAGON's -X. -->
   <rosparam param="/dracomancer_control_joint_angle/shape/human_alignment" subst_value="true"
             if="$(eval arg('assembly_defaults') and arg('mapping_mode') in ['shape', 'dual_shape'])">
     $(arg assembly_alignment)
   </rosparam>
-  <!-- Loaded after teleoperation's private YAML so the demo value wins. -->
+  <!-- Loaded after bringup's private YAML so the demo value wins. -->
   <rosparam param="/dracomancer_control_joint_angle/shape/torso_point"
             subst_value="true">$(arg torso_point)</rosparam>
   <param name="/dracomancer_control_joint_angle/dragon_marker_frame" value="dragon_view/link4"/>

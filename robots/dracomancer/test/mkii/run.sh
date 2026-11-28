@@ -39,14 +39,14 @@ run_case() {
   if [[ "$kind" == gazebo ]]; then
     free_ports 11382
     export GAZEBO_MASTER_URI=http://localhost:11382
-    roslaunch -p "$port" dracomancer mkii.launch backend:=gazebo gui:=false rviz:=false panel:=false >"$output/gazebo-launch.log" 2>&1 &
+    roslaunch -p "$port" dracomancer bringup.launch backend:=gazebo gui:=false rviz:=false panel:=false >"$output/gazebo-launch.log" 2>&1 &
     pid=$!
     export MKII_RESULTS="$output/gazebo-results.json"
     timeout --signal=INT 180s python3 -u "$package/test/mkii/simulation.py" >"$output/gazebo-test.log" 2>&1 || {
       cat "$output/gazebo-test.log" >&2; return 1;
     }
   elif [[ "$kind" == viewer ]]; then
-    roslaunch -p "$port" dracomancer mkii.launch rviz:=false panel:=false >"$output/viewer-launch.log" 2>&1 &
+    roslaunch -p "$port" dracomancer bringup.launch rviz:=false panel:=false >"$output/viewer-launch.log" 2>&1 &
     pid=$!
     timeout --signal=INT 60s python3 -u "$package/test/mkii/view_test.py" >"$output/viewer-test.log" 2>&1 || {
       cat "$output/viewer-test.log" >&2; return 1;

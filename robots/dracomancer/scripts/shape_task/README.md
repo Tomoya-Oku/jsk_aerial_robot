@@ -18,10 +18,26 @@ Dracomancer（上肢外骨格デバイス）で DRAGON の形態を操作し、�
 | `dragon_fk.py` | E_s・シャドウ用の簡易 DRAGON FK（共有モジュール） |
 | `../../config/shape_task/targets.yaml` | 目標形態リスト（L-like / Zigzag-like / Spiral-like） |
 | `../../config/shape_task/experiment.yaml` | しきい値・トピック名・試行管理などの全設定 |
-| `../../launch/shape_task.launch` | 実験ノード群の起動 |
 | `../../figures/scripts/plot_task.py` | 結果ディレクトリからの図生成 |
 
 ## 実行手順
+
+### 共通のタスクノード
+
+ROS masterの起動後に設定を読み込み、3つのノードをそれぞれ端末で起動する。
+
+```bash
+task_config="$(rospack find dracomancer)/config/shape_task"
+for task_node in shape_task_manager shape_task_recorder shape_task_shadow; do
+  rosparam load "$task_config/experiment.yaml" "/$task_node"
+done
+rosparam load "$task_config/targets.yaml" /shape_task_manager
+
+# それぞれ別端末で起動
+rosrun dracomancer target_manager.py __name:=shape_task_manager
+rosrun dracomancer task_recorder.py __name:=shape_task_recorder
+rosrun dracomancer shadow_visualizer.py __name:=shape_task_shadow _shadow_frame:=world
+```
 
 ### A. Dracomancer 条件（Gazebo シミュレーション）
 
@@ -29,14 +45,10 @@ Dracomancer（上肢外骨格デバイス）で DRAGON の形態を操作し、�
 # 端末1: DRAGON シミュレータ
 roslaunch dragon bringup.launch real_machine:=false simulation:=true headless:=false
 
-# 端末2: Mk-IIのCADスライダ（実機へ接続しない）
-roslaunch dracomancer bringup.launch
-# 体幹点・固定軸合わせを設定したshape設定を明示する
-roslaunch dracomancer teleoperation.launch shape_config:=/absolute/path/to/shape.yaml
+# 端末2: Mk-IIのCADスライダと、体幹点・固定軸合わせを指定した形態制御
+roslaunch dracomancer bringup.launch start_control:=true shape_config:=/absolute/path/to/shape.yaml
 
-# 端末3: 形態目標到達タスク
-roslaunch dracomancer shape_task.launch
-
+# 共通のタスクノードを起動した後、別端末から操作する
 # 離陸（rostopic pub /dragon/teleop_command/takeoff など既存手順）後、
 # teleop_mode=true へ切替
 rostopic pub -1 /dracomancer/teleop_mode std_msgs/Bool "data: true"
@@ -50,10 +62,9 @@ RViz では `MarkerArray` ディスプレイを追加し、トピック
 シャドウは既定で `world` フレームに貼られ、目標姿勢がロボット側TFに追従して動かない。
 これは位置の重なりではなく、関節角目標の固定参照として使うための表示である。
 表示先は DRAGON 側 RViz（`dragon/config/rviz_config`）を想定する。Dracomancer 側 RViz は
-統合後はworld固定のCADモデルを使用する。表示設定は`config/mkii/mkii.rviz`を参照する。
-`shape_task.launch` 起動直後は最初の目標を灰色のプレビューとして表示し、試行開始後に状態色へ切り替わる。
-従来の重ね合わせ表示が必要な場合は `roslaunch dracomancer shape_task.launch shadow_frame:=dragon/link4`
-で link4 追従表示に戻せる。
+統合後はworld固定のCADモデルを使用する。表示設定は`config/visualization/mkii.rviz`を参照する。
+タスクノードの起動直後は最初の目標を灰色でプレビューし、試行開始後に状態色へ切り替わる。
+link4追従表示には、シャドウノードの起動時に`_shadow_frame:=dragon/link4`を指定する。
 
 `dragon bringup.launch` で `SpawnModel: Failure - model name dragon already exist.` が出る場合は、
 前回の Gazebo/roslaunch が残っている。いったん既存の Gazebo を終了するか、別端末で
@@ -62,16 +73,17 @@ RViz では `MarkerArray` ディスプレイを追加し、トピック
 ### B. keyboard 比較条件
 
 Dracomancer 入力の代わりにキーボードで 6 関節を操作する。
-`teleoperation.launch` は起動しない（`joints_ctrl` の競合を避ける）。
+`joints_ctrl`を発行するのは`keyboard_baseline.py`のみとする。
 
 ```bash
 # 端末1: DRAGON シミュレータ（A と同じ）
-# 端末2: 安全ゲートのサーバ + タスクノード
-roslaunch dracomancer shape_task.launch launch_feasibility:=true
+# 端末2: 安全ゲートのサーバ
+ROS_NAMESPACE=/dragon rosrun dracomancer shape_feasibility_node __name:=shape_feasibility \
+  _robot_model_plugin_name:=dragon/full_vectoring_robot_model _prediction_mode:=optimized_gimbal
 # しきい値配信が必要なら（bringup.launch を使わない場合）:
 rosrun dracomancer volume_radius_monitor.py
 
-# 端末3: キーボード入力（stdin が必要なので必ず rosrun で起動する）
+# 共通のタスクノードを起動し、別端末でキーボード入力を開始する
 rosrun dracomancer keyboard_baseline.py
 ```
 
@@ -88,16 +100,16 @@ keyboard 条件は Dracomancer 条件と同一の hold 型フィージビリテ�
 ### C. dry-run（Gazebo・実機・Dracomancer なし）
 
 ```bash
-# 端末1: 擬似 DRAGON 込みでタスクを起動（fc は安全な定数を配信）
-roslaunch dracomancer shape_task.launch dryrun:=true auto_start:=true
+# roscoreを起動した後、擬似DRAGONを起動（fcは安全な定数を配信）
+rosrun dracomancer dummy_robot.py
 
-# 端末2: キーボードで形態を操作（ゲートなし）
+# 共通のタスクノードを起動する。自動開始には管理ノードの引数に _auto_start:=true を追加する
+# 別端末でキーボードを操作（ゲートなし）
 rosrun dracomancer keyboard_baseline.py _enable_feasibility_gate:=false
 ```
 
 Dracomancerの仮想入力を併用する場合は、[形状操作](../../docs/shape.md)に従って
 viewerと体幹点・固定軸合わせを設定する。入力は`/dracomancer/measured_joint_states`。
-`teleoperation.launch`自体は入力を生成しない。
 
 ### 試行管理サービス
 
@@ -176,6 +188,6 @@ q_candidate_0..5, q_exo_0..6, r_f, r_tau, mu, gate_rejected, E_q, E_s` +
   `/dracomancer/candidate/fc_*` を同じ意味で publish するノード」を追加するだけでよい。
   タスク管理・記録・評価・可視化は入力に依存しない。
 - 条件ラベルを結果に残すには試行ごとに `results_dir` を分ける
-  （例: `roslaunch dracomancer shape_task.launch results_dir:=~/exp/keyboard_01`）。
-- ゲート仕様を変える場合は Dracomancer 条件 (`teleoperation.launch` の引数) と
+  （例: 管理ノードの引数に `_results_dir:="$HOME/exp/keyboard_01"` を追加）。
+- ゲート仕様を変える場合は Dracomancer 条件（`bringup.launch` の引数）と
   `keyboard_baseline.py` のパラメータを必ず同時に揃えること。

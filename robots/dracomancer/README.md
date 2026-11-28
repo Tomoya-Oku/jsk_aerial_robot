@@ -18,17 +18,16 @@ roslaunch dracomancer shape_demo.launch
 ```
 
 実機は`backend:=hardware`を指定し、[直結制御の手順](docs/hardware.md)に従う。
-未校正で動きだけを見る場合は`roslaunch dracomancer observe.launch`で読み取り専用の仮表示を起動する。
+未校正で動きだけを見る場合は`roslaunch dracomancer bringup.launch backend:=preview`で読み取り専用の仮表示を起動する。
 既定はID 1〜7の右腕で、起動姿勢を0度とする。[仮表示の条件](docs/hardware.md#未校正の動作確認だけを行う場合)を参照する。
 既定は`calibrated: false`・空の関節対応表で、サーボを駆動しない。
-`mkii.launch`も同じ引数で利用できる。
+各launchの用途は[起動一覧](docs/usage.md#launch一覧)を参照する。
 
 | 場所 | 内容 |
 |---|---|
-| `urdf/cad.urdf`、`urdf/mkii.urdf.xacro` | CAD基準モデルとシミュレーション用モデル |
-| `meshes/` | 新STL 8種類。旧STLは使用しない |
-| `config/mkii/` | CAD検証情報、14関節の対応・制御・実機校正設定 |
-| `config/plotjuggler.xml` | 力・トルク余裕のPlotJuggler表示設定 |
+| `urdf/cad.urdf`、`urdf/mkii.urdf.xacro` | 2026年11月27日版のCAD基準モデルと、同じ形状・関節を使うROS/Gazebo用モデル |
+| `meshes/` | CAD基部・左右共用の腕部品・左右別の手首部品を収めるSTL 10点 |
+| [`config/`](docs/usage.md#設定ファイル一覧) | 関節、実機校正、制御、可視化、実験の設定 |
 | `scripts/mkii/` | viewer・Gazebo・直結制御とGUI |
 | `src/dracomancer/` | 校正済み電流換算・セッション・出力排他のPython部品 |
 | `scripts/control/shape_*.py` | CAD中心線による形状写像・診断 |

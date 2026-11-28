@@ -4,15 +4,16 @@
   <arg name="serial_baud" default="921600"/>
 
   <group ns="$(arg spinal_ns)">
-    <!-- Servo topics are already arm-relative in Spinal. Translate the joystick names here. -->
-    <remap from="joystick/raw" to="right/joystick/raw"/>
-    <remap from="joystick/left/raw" to="left/joystick/raw"/>
-    <include file="$(find spinal)/launch/bridge.launch">
-      <arg name="serial_port" value="$(arg serial_port)"/>
-      <arg name="serial_baud" value="$(arg serial_baud)"/>
-    </include>
+    <group>
+      <!-- Servo topics are already arm-relative in Spinal. Translate the joystick names here. -->
+      <remap from="joystick/raw" to="right/joystick/raw"/>
+      <remap from="joystick/left/raw" to="left/joystick/raw"/>
+      <include file="$(find spinal)/launch/bridge.launch">
+        <arg name="serial_port" value="$(arg serial_port)"/>
+        <arg name="serial_baud" value="$(arg serial_baud)"/>
+      </include>
+    </group>
+    <node pkg="dracomancer" type="joystick.py" name="decoder" ns="right/joystick" output="screen"/>
+    <node pkg="dracomancer" type="joystick.py" name="decoder" ns="left/joystick" output="screen"/>
   </group>
-  <include file="$(find dracomancer)/launch/joystick.launch">
-    <arg name="spinal_ns" value="$(arg spinal_ns)"/>
-  </include>
 </launch>

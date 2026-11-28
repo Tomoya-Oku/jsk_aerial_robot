@@ -12,7 +12,7 @@ from python_qt_binding.QtCore import QTimer, Signal
 from python_qt_binding.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel,
     QPushButton, QTabWidget, QTableWidget, QTableWidgetItem, QCheckBox, QDoubleSpinBox)
 from sensor_msgs.msg import JointState
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
 from std_srvs.srv import SetBool, Trigger
 
 
@@ -36,7 +36,11 @@ class Panel(QWidget):
         self.last_status = 0.0
         self.torque_backend = False
         self.available = dict.fromkeys(self.names, True)
-        self.torque_pub = rospy.Publisher('torque_cmd', JointState, queue_size=1)
+        self.haptic_feedback = rospy.get_param('~haptic_feedback', False)
+        if self.haptic_feedback:
+            self.hold_pub = rospy.Publisher('control/haptics_hold', Bool, queue_size=1)
+        else:
+            self.torque_pub = rospy.Publisher('torque_cmd', JointState, queue_size=1)
         self.status_sub = rospy.Subscriber('control/status', String, lambda m: self.feedback.emit(m.data), queue_size=1)
         self.feedback.connect(self.status)
         layout = QVBoxLayout(self)
@@ -48,10 +52,12 @@ class Panel(QWidget):
         tabs.addTab(self.angles, 'Angles [rad] — Mk-I sliders')
         torque = QWidget()
         torque_layout = QVBoxLayout(torque)
-        torque_layout.addWidget(QLabel('Select torque mode, enter Nm, then HOLD Apply. Release sends zero.\n'
-                                      'Zero torque does not hold the arm against gravity.'))
+        operation = ('Select the joints and HOLD for force feedback. Release to stop.'
+                     if self.haptic_feedback else
+                     'Select torque mode, enter Nm, then HOLD Apply. Release sends zero.')
+        torque_layout.addWidget(QLabel(operation + '\nZero torque does not hold the arm against gravity.'))
         self.table = QTableWidget(len(self.names), 3)
-        self.table.setHorizontalHeaderLabels(['Joint', 'Torque mode', 'Command [Nm]'])
+        self.table.setHorizontalHeaderLabels(['Joint', 'Torque mode', 'Feedback [Nm]' if self.haptic_feedback else 'Command [Nm]'])
         self.checks, self.values = {}, {}
         limit = float(rospy.get_param('max_torque', 2.0))
         for row, name in enumerate(self.names):
@@ -63,12 +69,13 @@ class Panel(QWidget):
             value.setDecimals(3)
             value.setRange(-limit, limit)
             value.setSingleStep(0.01)
+            value.setReadOnly(self.haptic_feedback)
             self.table.setCellWidget(row, 1, check)
             self.table.setCellWidget(row, 2, value)
             self.checks[name], self.values[name] = check, value
         self.table.resizeColumnsToContents()
         torque_layout.addWidget(self.table)
-        self.apply = QPushButton('HOLD to apply selected torque')
+        self.apply = QPushButton('HOLD for force feedback' if self.haptic_feedback else 'HOLD to apply selected torque')
         self.apply.setEnabled(False)
         self.apply.released.connect(self.zero)
         torque_layout.addWidget(self.apply)
@@ -121,8 +128,9 @@ class Panel(QWidget):
         self.torque_backend = data['backend'] in ('gazebo', 'spinal_direct')
         self.available = data.get('available', dict.fromkeys(self.names, True))
         if hardware:
-            self.notice.setText('Spinal direct UART: angles read-only. Checkbox prepares mode 0; HOLD arms.\n'
-                                'Unmapped joints are shown at CAD q=0. Release/zero requests torque OFF.')
+            source = 'computed force feedback' if self.haptic_feedback else 'manual torque'
+            self.notice.setText('Spinal direct UART: angles read-only. Checkbox prepares mode 0.\n'
+                                f'HOLD enables {source}. Release/zero requests torque OFF.')
         elif self.torque_backend:
             self.notice.setText('Gazebo: simulated joint torque [Nm].')
         else:
@@ -142,6 +150,8 @@ class Panel(QWidget):
             if hardware and name in data.get('max_torque_by_joint', {}):
                 limit = data['max_torque_by_joint'][name]
                 self.values[name].setRange(-limit, limit)
+                if self.haptic_feedback:
+                    self.values[name].setValue(data['commanded_torque'][name])
         self.angles.update_sliders()
 
     def tick(self):
@@ -151,7 +161,9 @@ class Panel(QWidget):
         self.apply.setEnabled(healthy and self.torque_backend and not self.pending)
         if not healthy:
             self.notice.setText('Controller status missing; torque commands stopped.')
-        if healthy and self.torque_backend and self.apply.isDown():
+        if self.apply.isEnabled() and self.apply.isDown() and self.haptic_feedback:
+            self.hold_pub.publish(True)
+        elif self.apply.isEnabled() and self.apply.isDown():
             msg = JointState()
             msg.header.stamp = rospy.Time.now()
             msg.name = [n for n in self.names if self.mode[n]]
@@ -161,11 +173,14 @@ class Panel(QWidget):
             self.close()
 
     def zero(self, _checked=False, request_stop=True):
-        msg = JointState()
-        msg.header.stamp = rospy.Time.now()
-        msg.name = [n for n in self.names if self.mode[n]]
-        msg.effort = [0.0]*len(msg.name)
-        self.torque_pub.publish(msg)
+        if self.haptic_feedback:
+            self.hold_pub.publish(False)
+        else:
+            msg = JointState()
+            msg.header.stamp = rospy.Time.now()
+            msg.name = [n for n in self.names if self.mode[n]]
+            msg.effort = [0.0]*len(msg.name)
+            self.torque_pub.publish(msg)
         # Works even if a different ROS client issued the previous effort command.
         def call():
             try:

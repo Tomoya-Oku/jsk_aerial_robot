@@ -10,7 +10,7 @@ import secrets
 
 import rospy
 from sensor_msgs.msg import JointState
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
 from std_srvs.srv import SetBool, SetBoolResponse, Trigger, TriggerResponse
 from spinal.msg import DirectServoCurrent, ServoStates
 from spinal.srv import DirectServoMode, DirectServoModeRequest as Mode, GetBoardInfo
@@ -118,6 +118,8 @@ class SpinalControl:
         self.busy = set()
         self.alive = True
         self.timeout = 0.15  # Shorter than the independent MCU's fixed 250ms deadline.
+        self.haptic_feedback = rospy.get_param('~haptic_feedback', False)
+        self.haptics_held_at = -math.inf
         if self.dual:
             prefix = rospy.get_param('~spinal_ns', '/dracomancer').rstrip('/')
             active = [bus for bus in self.buses if self.joints_by_bus[bus]]
@@ -146,7 +148,10 @@ class SpinalControl:
         self.state_sub = [rospy.Subscriber(topic, ServoStates, self.states, callback_args=bus, queue_size=1)
                           if self.dual else rospy.Subscriber(topic, ServoStates, self.states, queue_size=1)
                           for bus, topic in state_paths.items()]
-        self.torque_sub = rospy.Subscriber('torque_cmd', JointState, self.torques, queue_size=1)
+        torque_topic = 'haptic_torque' if self.haptic_feedback else 'torque_cmd'
+        self.torque_sub = rospy.Subscriber(torque_topic, JointState, self.torques, queue_size=1)
+        if self.haptic_feedback:
+            self.hold_sub = rospy.Subscriber('control/haptics_hold', Bool, self.haptics_hold, queue_size=1)
         self.services = [rospy.Service('control/'+n+'/torque_mode', SetBool,
                          lambda req, name=n: self.change_mode(name, req.data)) for n in self.names]
         self.stop_service = rospy.Service('control/stop', Trigger, self.stop)
@@ -221,6 +226,13 @@ class SpinalControl:
         return (self.error[name] == 0 and time.monotonic()-self.last_state[name] < self.timeout
                 and -0.1 <= (rospy.Time.now()-self.measurement_stamp[name]).to_sec() < self.timeout)
 
+    def haptics_hold(self, msg):
+        with self.lock:
+            self.haptics_held_at = time.monotonic() if msg.data else -math.inf
+
+    def torque_allowed(self):
+        return not self.haptic_feedback or time.monotonic() - self.haptics_held_at < self.timeout
+
     def change_mode(self, name, enabled):
         if name not in self.config:
             return SetBoolResponse(False, 'Unmapped joint (displayed at CAD q=0)')
@@ -250,7 +262,7 @@ class SpinalControl:
                     effective_cap*CurrentScale.UNIT_A*self.config[name]['joint_nm_per_amp'])
                 self.mode[name] = True
                 self.sequence[name] = 0
-            return SetBoolResponse(True, 'Mode 0 verified, torque OFF. HOLD Apply to arm and command.')
+            return SetBoolResponse(True, 'Mode 0 verified, torque OFF. Hold the torque button to arm.')
         except RuntimeError as error:
             self.stop_joints([name])
             return SetBoolResponse(False, str(error))
@@ -263,6 +275,7 @@ class SpinalControl:
             result = self.request(name, Mode.ARM, session=token)
             with self.lock:
                 if (self.token[name] != token or not self.mode[name] or not self.fresh(name)
+                        or not self.torque_allowed()
                         or time.monotonic()-self.last_command[name] >= self.timeout
                         or result.session != token or not result.torque_enabled or result.operating_mode != 0):
                     raise RuntimeError('ARM canceled or expired')
@@ -274,6 +287,8 @@ class SpinalControl:
                 self.busy.discard(name)
 
     def torques(self, msg):
+        if self.haptic_feedback and not self.torque_allowed():
+            return
         age = (rospy.Time.now()-msg.header.stamp).to_sec()
         if msg.header.stamp.to_sec() <= 0 or not -0.05 <= age < self.timeout:
             self.stop(None)
@@ -292,6 +307,8 @@ class SpinalControl:
             self.stop(None)
             return
         with self.lock:
+            if not self.torque_allowed():
+                return
             for name, value in zip(msg.name, msg.effort):
                 if not self.mode[name] or not self.fresh(name):
                     continue
@@ -349,8 +366,10 @@ class SpinalControl:
     def loop(self):
         while self.alive and not rospy.is_shutdown():
             with self.lock:
+                allowed = self.torque_allowed()
                 expire = [n for n in self.config if self.mode[n] and
-                          (not self.fresh(n) or (self.armed[n] and time.monotonic()-self.last_command[n] >= self.timeout))]
+                          (not self.fresh(n) or (self.armed[n] and
+                           (not allowed or time.monotonic()-self.last_command[n] >= self.timeout)))]
                 if expire:
                     self.stop_joints(expire)
                 self.publish_current([n for n in self.config if self.armed[n]])

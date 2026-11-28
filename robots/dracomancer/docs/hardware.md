@@ -19,7 +19,9 @@ Gazeboとは別のROS masterを使い、`use_sim_time=true`の環境では起動
 
 ## 校正ファイル
 
-`config/mkii/hardware.yaml`を別ファイルへコピーし、実機で確認した対応と校正値を設定する。
+`config/device/hardware.yaml`を別ファイルへコピーし、実機で確認した対応と校正値を設定する。
+標準URDFは2026年11月27日版のCAD姿勢と関節軸を使う。旧標準URDF向けに作成した設定を使う前に、
+実機でCAD零点の`zero_tick`と回転方向の`direction`を照合する。左腕7関節の軸符号が旧版から変わっている。
 
 | 設定 | 内容 |
 |---|---|
@@ -51,8 +53,8 @@ bridgeは左右のサーボとJoystickを`/dracomancer/right/`、`/dracomancer/l
 各腕の計測経路を読み取り、装着前に関節とIDの対応を確認できる。
 
 ```bash
-roslaunch dracomancer observe.launch arm:=right
-roslaunch dracomancer observe.launch arm:=left
+roslaunch dracomancer bringup.launch backend:=preview arm:=right
+roslaunch dracomancer bringup.launch backend:=preview arm:=left
 ```
 
 既定は`/dracomancer`のbridgeからID 1〜7を右腕の第1〜第7関節へ対応させる。
@@ -118,6 +120,25 @@ Nmは要求値で、トルクセンサの実測値ではない。
 同一PC・同一ユーザー・同じ一時ディレクトリとROS_MASTER_URIのノードは、電流topicとモードserviceを排他取得する。
 後発ノードは出力・終了処理の登録前に停止し、動作中の所有者へゼロ／OFFを送らない。
 ファイルロックによる複数PC間の排他は実装していない。
+
+## 実機の力覚提示
+
+DRAGONとSpinal bridgeの稼働中に、校正済みのアクチュエータ設定と写像・力覚設定を指定する。
+両腕の形態入力には`mapping_mode:=dual_shape`を指定する。
+
+```bash
+roslaunch dracomancer haptics.launch config:=/absolute/path/to/hardware.yaml \
+  shape_config:=/absolute/path/to/shape.yaml
+```
+
+既存のDracomancer側制御を終了してから起動する。形態操作は既定で待機し、有効化後もHoverと新鮮な形態診断が必要。
+Joystickの位置・姿勢操作も使う場合は`enable_position_control:=true`を追加する。
+Torqueタブで対象関節を選ぶと電流モードを準備する。**HOLD for force feedback**を押している間、
+非ゼロの力覚指令を受けた準備済み関節だけをARMする。ボタンを離す、ZEROを押す、
+または指令・押下の更新が途絶えるとTorque OFFにする。
+実機では関節ごとの電流・トルク上限、力覚設定のトルク・変化率上限が適用される。
+接触由来の提示を使う場合は`contacts`と`haptics.contact_gain`を校正し、レンチを配信する。
+レンチを可行性判定にも含める場合は`use_contact_wrench:=true`を指定する。
 
 ## 元の位置モードへの復旧
 

@@ -7,7 +7,7 @@ Republishes DRAGON's feasible control inradius (fc_f_min / fc_t_min) as
 Dracomancer volume-radius topics, publishes the safety thresholds, accepts
 runtime threshold updates, and computes the operator-visible shape-safety scale.
 
-This normally runs from teleoperation.launch so the shape_safety logs,
+This normally runs from bringup.launch so the shape_safety logs,
 threshold topics, and shape controller are observed together. bringup.launch
 can still start it explicitly for device-only monitoring.
 """

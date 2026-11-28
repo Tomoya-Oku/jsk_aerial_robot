@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Integration test against a running, isolated gazebo.launch (no hardware)."""
+"""Integration test against a running, isolated Gazebo bringup (no hardware)."""
 import importlib.util
 import json
 import math

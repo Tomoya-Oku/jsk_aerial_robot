@@ -1,0 +1,159 @@
+{
+  "source_cad": "dracomancer_mk2_with_mannequin.SLDASM",
+  "source_cad_saved": "2026-11-27",
+  "links": 15,
+  "continuous_joints": 14,
+  "unique_meshes": 10,
+  "mannequin_included": false,
+  "total_mass_kg": 4.322272147394294,
+  "mesh_stats": {
+    "meshes/base.stl": {
+      "triangles": 151153,
+      "min_m": [
+        -0.17999999225139618,
+        -0.003000000026077032,
+        0.24381399154663086
+      ],
+      "max_m": [
+        0.17999999225139618,
+        0.15199999511241913,
+        0.6738139986991882
+      ],
+      "sha256": "2ead1b49a368b0d67a9f440bd3a5273f89e3b7e5bd27df36b56e3ea317f0a20b"
+    },
+    "meshes/link1_shoulder.stl": {
+      "triangles": 55042,
+      "min_m": [
+        -0.02496281825006008,
+        -0.12964999675750732,
+        -0.019999999552965164
+      ],
+      "max_m": [
+        0.02496281825006008,
+        0.0162500012665987,
+        0.22499999403953552
+      ],
+      "sha256": "f5cfccb12ebfb17d6a1c8ae2dd06f6f4585279cc1ce945c04e407d7b37e2abf0"
+    },
+    "meshes/link2_upper_arm_upper.stl": {
+      "triangles": 29696,
+      "min_m": [
+        -0.02044999971985817,
+        -0.11065000295639038,
+        -0.019999999552965164
+      ],
+      "max_m": [
+        0.02044999971985817,
+        0.0162500012665987,
+        0.023399999365210533
+      ],
+      "sha256": "41fb01839bc6ba334be44b5aa2ce90d277a818e4a0b057e2c3fa7e8584268033"
+    },
+    "meshes/link3_upper_arm_lower.stl": {
+      "triangles": 45378,
+      "min_m": [
+        -0.03400000184774399,
+        -0.04019999876618385,
+        -0.13699999451637268
+      ],
+      "max_m": [
+        0.03400000184774399,
+        0.02496281825006008,
+        0.023399999365210533
+      ],
+      "sha256": "7f9967382e19b32003183375ba6efac964abf0736afaebb25ef06bc99bf9f2a4"
+    },
+    "meshes/link4_lower_arm_upper.stl": {
+      "triangles": 29720,
+      "min_m": [
+        -0.02044999971985817,
+        -0.10064999759197235,
+        -0.019999999552965164
+      ],
+      "max_m": [
+        0.02044999971985817,
+        0.0162500012665987,
+        0.023399999365210533
+      ],
+      "sha256": "f8263a040de7fa0bafb805b5c3f886d1052e96380cddc0131ec66c2d49251cf6"
+    },
+    "meshes/link5_lower_arm_lower.stl": {
+      "triangles": 45402,
+      "min_m": [
+        -0.03400000184774399,
+        -0.04019999876618385,
+        -0.12700000405311584
+      ],
+      "max_m": [
+        0.03400000184774399,
+        0.02496281825006008,
+        0.023399999365210533
+      ],
+      "sha256": "2712f37716fd632bd7891ce1f61cf7b0d3f9f743d816f47428545b3a276ce542"
+    },
+    "meshes/link6_wrist_upper.stl": {
+      "triangles": 31346,
+      "min_m": [
+        -0.02044999971985817,
+        -0.04064999893307686,
+        -0.019999999552965164
+      ],
+      "max_m": [
+        0.0694499984383583,
+        0.0162500012665987,
+        0.023399999365210533
+      ],
+      "sha256": "d9e6aed85e9a1810907ad5ca7b420053356487c3198e990b1de8b090f8abdc21"
+    },
+    "meshes/link6_wrist_upper_left.stl": {
+      "triangles": 31312,
+      "min_m": [
+        -0.0694499984383583,
+        -0.04064999893307686,
+        -0.019999999552965164
+      ],
+      "max_m": [
+        0.02044999971985817,
+        0.0162500012665987,
+        0.023399999365210533
+      ],
+      "sha256": "46a18034184c47aa9be6fe120ab3126e8a3e761dc85feb591c6b73f7ca43becd"
+    },
+    "meshes/link7_wrist_lower.stl": {
+      "triangles": 49526,
+      "min_m": [
+        -0.12444999814033508,
+        -0.04064999893307686,
+        -0.019999999552965164
+      ],
+      "max_m": [
+        0.02044999971985817,
+        0.0162500012665987,
+        0.1679999977350235
+      ],
+      "sha256": "b526b2293e9ce333634bb6301958d1f942451b0ac63cd6cf138897d8ad2dd829"
+    },
+    "meshes/link7_wrist_lower_left.stl": {
+      "triangles": 49560,
+      "min_m": [
+        -0.02044999971985817,
+        -0.04064999893307686,
+        -0.019999999552965164
+      ],
+      "max_m": [
+        0.12444999814033508,
+        0.0162500012665987,
+        0.1679999977350235
+      ],
+      "sha256": "340ec44ffd1bbb533090e4d349dc4567ffa19952fb80bf114fb45be9cafefbba"
+    }
+  },
+  "limitations": [
+    "physical joint limits, effort and velocity are unverified",
+    "CAD material masses are unmeasured",
+    "physical collision geometry is unverified"
+  ],
+  "source_urdf_sha256": "4e321ae6b30e8fdb8bdebb2823defacbfebc7b15605e2aa41e80f2e60bab99c4",
+  "baseline_urdf_sha256": "f9142457a1feb0ccf92a80bab0f241763a9602c7e0a6686950f0585ec0ed155d",
+  "baseline_note": "From the repository assembly.urdf export with mirror axes, with mesh paths normalized."
+}

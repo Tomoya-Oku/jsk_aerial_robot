@@ -1,0 +1,60 @@
+<launch>
+  <arg name="simulation" default="false"/>
+  <arg name="headless" default="false"/>
+  <arg name="rviz" default="$(eval not arg('headless'))"/>
+  <arg name="panel" default="$(eval not arg('headless'))"/>
+  <arg name="teleop_mode" default="false"/>
+  <arg name="config" default="$(eval find('dracomancer') + ('/config/simulation/contact.yaml' if arg('simulation') else '/config/device/hardware.yaml'))"
+       doc="Calibrated actuator YAML for hardware, or wall YAML for simulation."/>
+  <arg name="shape_config" default="$(find dracomancer)/config/control/shape.yaml"/>
+  <arg name="mapping_mode" default="shape"/>
+  <arg name="enable_haptics" default="$(eval not arg('simulation'))"/>
+  <arg name="enable_position_control" default="$(arg simulation)"/>
+  <arg name="force_dimensions" default="2"/>
+  <arg name="use_contact_wrench" default="$(arg simulation)"/>
+  <arg name="connect_fc" default="false"/>
+  <arg name="fc_serial_port" default="/dev/ttyUSB0"/>
+  <arg name="fc_serial_baud" default="921600"/>
+  <arg name="spinal_ns" default="/dracomancer"/>
+  <arg name="dual_spinal" default="true"/>
+  <arg name="torso_point" default="[0, 0, 0]"/>
+
+  <group if="$(arg simulation)">
+    <rosparam file="$(arg config)" command="load" ns="dracomancer/contact"/>
+    <env name="GAZEBO_PLUGIN_PATH" value="$(optenv LD_LIBRARY_PATH):$(optenv GAZEBO_PLUGIN_PATH)"/>
+    <include file="$(find dragon)/launch/bringup.launch">
+      <arg name="real_machine" value="false"/>
+      <arg name="simulation" value="true"/>
+      <arg name="mujoco" value="false"/>
+      <arg name="headless" value="$(arg headless)"/>
+    </include>
+    <node pkg="dracomancer" type="wall.py" name="contact_wall" output="screen"/>
+  </group>
+
+  <include file="$(find dracomancer)/launch/bringup.launch">
+    <arg name="backend" value="$(eval 'viewer' if arg('simulation') else 'hardware')"/>
+    <arg name="rviz" value="$(arg rviz)"/>
+    <arg name="panel" value="$(arg panel)"/>
+    <arg unless="$(arg simulation)" name="config" value="$(arg config)"/>
+    <arg name="connect_fc" value="$(arg connect_fc)"/>
+    <arg name="fc_serial_port" value="$(arg fc_serial_port)"/>
+    <arg name="fc_serial_baud" value="$(arg fc_serial_baud)"/>
+    <arg name="spinal_ns" value="$(arg spinal_ns)"/>
+    <arg name="dual_spinal" value="$(arg dual_spinal)"/>
+    <arg name="start_control" value="true"/>
+    <arg name="teleop_mode" value="$(arg teleop_mode)"/>
+    <arg name="enable_position_control" value="$(arg enable_position_control)"/>
+    <arg name="mapping_mode" value="$(arg mapping_mode)"/>
+    <arg name="shape_config" value="$(arg shape_config)"/>
+    <arg name="enable_haptics" value="$(arg enable_haptics)"/>
+    <arg name="force_dimensions" value="$(arg force_dimensions)"/>
+    <arg name="use_contact_wrench" value="$(arg use_contact_wrench)"/>
+  </include>
+
+  <!-- Only the simulator may use the model origin as a torso proxy. -->
+  <group if="$(arg simulation)">
+    <rosparam param="/dracomancer_control_joint_angle/shape/torso_point" subst_value="true">$(arg torso_point)</rosparam>
+    <rosparam param="/dracomancer_feedback/shape/torso_point" subst_value="true"
+              if="$(arg enable_haptics)">$(arg torso_point)</rosparam>
+  </group>
+</launch>

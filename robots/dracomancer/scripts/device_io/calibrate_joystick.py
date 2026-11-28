@@ -5,6 +5,7 @@ import os
 import sys
 import time
 import yaml
+import rospkg
 import rospy
 from std_msgs.msg import Int16MultiArray, Float32MultiArray, Bool
 
@@ -26,7 +27,10 @@ class JoystickCalibPublisher:
         self.save_yaml = rospy.get_param("~save_yaml", True)
         self.use_saved_calibration = rospy.get_param("~use_saved_calibration", True)
         self.force_calibration = rospy.get_param("~force_calibration", False)
-        self.yaml_path = rospy.get_param("~yaml_path", "../config/joystick_calibration.yaml")
+        self.yaml_path = rospy.get_param("~yaml_path", None)
+        if self.yaml_path is None:
+            self.yaml_path = os.path.join(rospkg.RosPack().get_path("dracomancer"),
+                                          "config", "device", "joystick_calibration.yaml")
         ## Buffers
         self.latest_raw = None
         self.raw_timeout = float(rospy.get_param("~raw_timeout", 0.0))

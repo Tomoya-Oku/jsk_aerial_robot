@@ -8,13 +8,13 @@ shape:
     - {link: right_link4_lower_arm_upper, xyz: [0, 0, 0]}
     - {link: right_link6_wrist_upper, xyz: [0, 0, 0]}
     # CAD hand-link mass center: avoids discarding the last wrist rotation.
-    - {link: right_link7_wrist_lower, xyz: [0.0397499858, -0.0627907132, 0.0001589676]}
+    - {link: right_link7_wrist_lower, xyz: [-0.0606174417, -0.0146671814, 0.0442306802]}
   # Bimanual centerline order is left hand -> left shoulder -> right hand.
   left_human_points:
     - {link: left_link1_shoulder, xyz: [0, 0, 0]}
     - {link: left_link4_lower_arm_upper, xyz: [0, 0, 0]}
     - {link: left_link6_wrist_upper, xyz: [0, 0, 0]}
-    - {link: left_link7_wrist_lower, xyz: [0.0397499858, -0.0627907132, 0.0001589676]}
+    - {link: left_link7_wrist_lower, xyz: [0.0606160647, -0.0146671960, 0.0442306802]}
   # Anatomical order: shoulder abd/flex/rot, elbow flex, forearm pron,
   # wrist flex/dev. Identity scales and zero neutral are simulation proxies.
   # Outside sim time, joint/dual_joint require explicit measured calibration.

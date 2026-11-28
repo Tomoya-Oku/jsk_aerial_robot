@@ -4,12 +4,14 @@
 
 主デバイスは座位で使用する右腕7 DoFの上肢外骨格型Dracomancer Mk-II。
 人体関節状態・腕の相対形状を取得し、校正済みの関節にはトルクを提示する。
-CADには両腕の15リンク・14関節があり、新STL 8種類を`meshes/`から使用する。
+2026年11月27日保存のSolidWorksアセンブリから取り出した両腕モデルは15リンク・14関節。
+基部1点、左右共用の肩・上腕・前腕5点、左右別の手首4点のSTLを`meshes/`直下に置く。
 標準入力は`right_joint_1..7`。両腕方式では左腕も含め、入力ベクトルを左7軸・右7軸の順に並べる。
 
-モデルの正本は`urdf/cad.urdf`、world固定・transmission・Gazebo設定を加えたモデルは`urdf/mkii.urdf.xacro`。
-CADの慣性・軸・関節変換とSTLハッシュは`config/mkii/cad.json`と`test/mkii/model.py`で確認する。
-continuous関節、CAD q=0、URDFのeffort・velocity、PID、減衰、箱collisionはシミュレーション用の仮設定。
+CAD基準は`urdf/cad.urdf`。従来の`urdf/assembly.urdf`も同じファイルを指す。
+`urdf/mkii.urdf.xacro`は同じメッシュ・関節フレーム・慣性を使い、world固定・transmission・Gazebo設定を加える。
+CADの慣性・軸・関節変換とSTLハッシュは`test/mkii/model.py`で照合する。
+Gazeboの衝突判定にはSTLの外接箱を使う。URDFのeffort・velocity、PID、減衰はシミュレーション用の仮設定。
 実機の可動限界・許容トルクを保証せず、自己衝突判定も有効化していない。
 
 ## 関節と通信の仕様
@@ -26,7 +28,7 @@ continuous関節、CAD q=0、URDFのeffort・velocity、PID、減衰、箱collis
 | 接続API | `right/`・`left/`配下の`direct_servo_mode`、`servo/direct_current`、`servo/states` |
 | ROS名前空間の既定 | Spinal bridgeとMk-IIの表示・操作は`/dracomancer` |
 
-物理IDの既定値は`config/mkii/hardware.yaml`の`servo_ids`が管理する。
+物理IDの既定値は`config/device/hardware.yaml`の`servo_ids`が管理する。
 Spinal scan indexは各通信系統の接続時に確認する別番号で、物理IDから推定しない。
 各DirectServoの上限は10軸。STM32H7 V2のMk-II構成は右USART2・左USART6の独立RS485を各7軸で使う。
 起動時に各バスの所定の7 IDを確認し、物理ID順でindex 0〜6を割り当てる。
