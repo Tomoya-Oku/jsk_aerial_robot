@@ -1,15 +1,16 @@
 <launch>
   <arg name="device_ns" default="dracomancer" />
-  <arg name="js_raw_topic" default="/$(arg device_ns)/right/joystick/raw"/>
-  <arg name="left_js_raw_topic" default="/$(arg device_ns)/left/joystick/raw"/>
+  <arg name="js_raw_topic" default="/$(arg device_ns)/joystick/raw/right"/>
+  <arg name="left_js_raw_topic" default="/$(arg device_ns)/joystick/raw/left"/>
+  <arg name="right_joystick_calibration" default="$(find dracomancer)/config/device/joystick_calibration.yaml"/>
   <arg name="left_joystick_calibration" default="$(env HOME)/.ros/dracomancer-joystick-left.yaml"/>
   <arg name="robot_ns" default="dragon" />
-  <arg name="mapping_mode" default="shape" />
+  <arg name="mapping_mode" default="shape" doc="Compatibility with existing pose launch calls." />
   <arg name="anchor_mode" default="none" />
   <arg name="imu_topic" default="/$(arg device_ns)/imu"/>
   <arg name="shape_config" default="$(find dracomancer)/config/control/shape.yaml" />
-  <arg name="teleop_mode" default="false" />
-  <arg name="enable_position_control" default="true" />
+  <arg name="view_mode" default="false" doc="Use the operator's viewpoint for translation and rotation." />
+  <arg name="enable_position_control" default="true" doc="Enable joystick position and attitude control." />
   <arg name="position_velocity_only" default="true" />
   <arg name="joy_timeout" default="0.1" />
 
@@ -25,11 +26,11 @@
     <param name="deadzone" value="0.05" />
     <param name="save_yaml" value="true" />
     <param name="use_saved_calibration" value="true" />
-    <param name="yaml_path" value="$(find dracomancer)/config/device/joystick_calibration.yaml" />
+    <param name="yaml_path" value="$(arg right_joystick_calibration)" />
   </node>
 
   <node pkg="dracomancer" type="joystick.py" args="--calibrate" name="$(arg device_ns)_left_joystick"
-        output="screen" if="$(eval arg('enable_position_control') and arg('mapping_mode').startswith('dual_'))">
+        output="screen" if="$(arg enable_position_control)">
     <param name="js_raw_topic" value="$(arg left_js_raw_topic)"/>
     <param name="js_calibrated_topic" value="/$(arg device_ns)/left/joystick/calibrated"/>
     <param name="raw_timeout" value="$(arg joy_timeout)"/>
@@ -43,10 +44,11 @@
     <param name="imu_topic" value="$(arg imu_topic)"/>
     <param name="anchor_mode" value="$(arg anchor_mode)" />
     <param name="allow_joystick" value="$(arg enable_position_control)" />
-    <param name="mapping_mode" value="$(arg mapping_mode)" />
     <rosparam command="load" file="$(arg shape_config)" />
     <param name="robot_name" value="$(arg robot_ns)" />
-    <param name="teleop_mode" value="$(arg teleop_mode)" />
+    <param name="enabled" type="bool" value="true" />
+    <param name="navigation_mode" value="legacy" unless="$(arg view_mode)" />
+    <param name="navigation_mode" value="view" if="$(arg view_mode)" />
     <param name="rate" value="40.0" />
     <param name="joy_topic" value="/$(arg device_ns)/right/joystick/calibrated" />
     <param name="direction_mode" value="none" />
@@ -54,5 +56,15 @@
     <param name="scale_y" value="1.0" />
     <param name="scale_z" value="1.0" />
     <param name="deadzone" value="0.05" />
+  </node>
+
+  <node pkg="dracomancer" type="control_attitude.py" name="$(arg device_ns)_control_attitude"
+        output="screen" if="$(arg enable_position_control)">
+    <rosparam command="load" file="$(arg shape_config)" />
+    <param name="device_ns" value="/$(arg device_ns)" />
+    <param name="robot_name" value="$(arg robot_ns)" />
+    <param name="enabled" type="bool" value="true" />
+    <param name="view_mode" type="bool" value="$(arg view_mode)" />
+    <param name="joy_timeout" value="$(arg joy_timeout)" />
   </node>
 </launch>

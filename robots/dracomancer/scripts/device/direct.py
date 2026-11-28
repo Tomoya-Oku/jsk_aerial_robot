@@ -146,11 +146,11 @@ class SpinalControl:
         if self.dual:
             prefix = rospy.get_param('~spinal_ns', '/dracomancer').rstrip('/')
             active = [bus for bus in self.buses if self.joints_by_bus[bus]]
-            mode_paths = {bus: prefix+'/'+bus+'/direct_servo_mode' for bus in active}
-            current_paths = {bus: prefix+'/'+bus+'/servo/direct_current' for bus in active}
-            state_paths = {bus: prefix+'/'+bus+'/servo/states' for bus in active}
+            mode_paths = {bus: f'{prefix}/direct_servo_mode/{bus}' for bus in active}
+            current_paths = {bus: f'{prefix}/servo/direct_current/{bus}' for bus in active}
+            state_paths = {bus: f'{prefix}/servo/states/{bus}' for bus in active}
             for bus in active:
-                self.check_board(prefix+'/'+bus+'/get_board_info', bus)
+                self.check_board(f'{prefix}/get_board_info/{bus}', bus)
         else:
             mode_paths = {'legacy': rospy.get_param('~mode_service', '/dracomancer/direct_servo_mode')}
             current_paths = {'legacy': rospy.get_param('~current_topic', '/dracomancer/servo/direct_current')}

@@ -1,19 +1,38 @@
 <launch>
   <arg name="spinal_ns" default="/dracomancer"/>
+  <arg name="dual_spinal" default="true"/>
   <arg name="serial_port" default="/dev/ttyUSB0"/>
   <arg name="serial_baud" default="921600"/>
 
   <group ns="$(arg spinal_ns)">
     <group>
-      <!-- Servo topics are already arm-relative in Spinal. Translate the joystick names here. -->
-      <remap from="joystick/raw" to="right/joystick/raw"/>
-      <remap from="joystick/left/raw" to="left/joystick/raw"/>
+      <!-- Translate the two RS485 buses. CAN and single-UART use the original unprefixed names. -->
+      <remap if="$(arg dual_spinal)" from="right/servo/states" to="servo/states/right"/>
+      <remap if="$(arg dual_spinal)" from="left/servo/states" to="servo/states/left"/>
+      <remap if="$(arg dual_spinal)" from="right/servo/torque_states" to="servo/torque_states/right"/>
+      <remap if="$(arg dual_spinal)" from="left/servo/torque_states" to="servo/torque_states/left"/>
+      <remap if="$(arg dual_spinal)" from="right/servo/direct_current" to="servo/direct_current/right"/>
+      <remap if="$(arg dual_spinal)" from="left/servo/direct_current" to="servo/direct_current/left"/>
+      <remap if="$(arg dual_spinal)" from="right/direct_servo_mode" to="direct_servo_mode/right"/>
+      <remap if="$(arg dual_spinal)" from="left/direct_servo_mode" to="direct_servo_mode/left"/>
+      <remap if="$(arg dual_spinal)" from="right/get_board_info" to="get_board_info/right"/>
+      <remap if="$(arg dual_spinal)" from="left/get_board_info" to="get_board_info/left"/>
+      <remap from="joystick/raw" to="joystick/raw/right"/>
+      <remap from="joystick/left/raw" to="joystick/raw/left"/>
       <include file="$(find spinal)/launch/bridge.launch">
         <arg name="serial_port" value="$(arg serial_port)"/>
         <arg name="serial_baud" value="$(arg serial_baud)"/>
       </include>
     </group>
-    <node pkg="dracomancer" type="joystick.py" name="decoder" ns="right/joystick" output="screen"/>
-    <node pkg="dracomancer" type="joystick.py" name="decoder" ns="left/joystick" output="screen"/>
+    <group ns="joystick">
+      <node pkg="dracomancer" type="joystick.py" name="decoder_right" output="screen">
+        <remap from="raw" to="raw/right"/>
+        <remap from="scaled" to="scaled/right"/>
+      </node>
+      <node if="$(arg dual_spinal)" pkg="dracomancer" type="joystick.py" name="decoder_left" output="screen">
+        <remap from="raw" to="raw/left"/>
+        <remap from="scaled" to="scaled/left"/>
+      </node>
+    </group>
   </group>
 </launch>

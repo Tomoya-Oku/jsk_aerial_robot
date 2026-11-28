@@ -4,7 +4,7 @@
   <arg name="target_ns" default="dragon" doc="DRAGON namespace"/>
   <arg name="shape_config" default="$(find dracomancer)/config/control/shape.yaml"/>
   <arg name="mapping_mode" default="shape"/>
-  <arg name="teleop_mode" default="false" doc="Enable joint commands at startup when the controller conditions are met"/>
+  <arg name="enabled" default="false" doc="Enable joint commands at startup when controller conditions are met."/>
   <arg name="enable_joint_angle_control" default="true" />
   <arg name="force_dimensions" default="2"/>
   <arg name="device_joint_topic" default="/$(arg robot_ns)/measured_joint_states" />
@@ -84,13 +84,13 @@
     <param name="allocation_refine_threshold" value="$(arg shape_feasibility_allocation_refine_threshold)" />
   </node>
 
-  <node pkg="dracomancer" type="control_joint_angle.py" name="$(arg robot_ns)_control_joint_angle" output="screen" if="$(arg enable_joint_angle_control)">
+  <node pkg="dracomancer" type="control_shape.py" name="$(arg robot_ns)_control_joint_angle" output="screen" if="$(arg enable_joint_angle_control)">
     <param name="device_ns" value="/$(arg robot_ns)" />
     <param name="robot_name" value="$(arg target_ns)" />
     <param name="mapping_mode" value="$(arg mapping_mode)" />
     <param name="device_joint_topic" value="$(arg device_joint_topic)" />
     <param name="human_description" value="$(arg human_description)" />
-    <param name="teleop_mode" value="$(arg teleop_mode)" />
+    <param name="enabled" type="bool" value="$(arg enabled)" />
     <param name="publish_only_when_hovering" value="$(arg publish_joints_only_when_hovering)" />
     <param name="enable_feasibility_gate" value="$(arg enable_feasibility_gate)" />
     <param name="feasibility_gate_mode" value="$(arg feasibility_gate_mode)" />

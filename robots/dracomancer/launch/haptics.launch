@@ -3,7 +3,8 @@
   <arg name="headless" default="false"/>
   <arg name="rviz" default="$(eval not arg('headless'))"/>
   <arg name="panel" default="$(eval not arg('headless'))"/>
-  <arg name="teleop_mode" default="false"/>
+  <arg name="enabled" default="false" doc="Enable joint commands at startup when controller conditions are met."/>
+  <arg name="view_mode" default="false" doc="Use the operator's viewpoint for translation and rotation."/>
   <arg name="config" default="$(eval find('dracomancer') + ('/config/simulation/contact.yaml' if arg('simulation') else '/config/device/hardware.yaml'))"
        doc="Calibrated actuator YAML for hardware, or wall YAML for simulation."/>
   <arg name="shape_config" default="$(find dracomancer)/config/control/shape.yaml"/>
@@ -44,7 +45,8 @@
     <arg name="spinal_ns" value="$(arg spinal_ns)"/>
     <arg name="dual_spinal" value="$(arg dual_spinal)"/>
     <arg name="start_control" value="true"/>
-    <arg name="teleop_mode" value="$(arg teleop_mode)"/>
+    <arg name="enabled" value="$(arg enabled)"/>
+    <arg name="view_mode" value="$(arg view_mode)"/>
     <arg name="enable_position_control" value="$(arg enable_position_control)"/>
     <arg name="mapping_mode" value="$(arg mapping_mode)"/>
     <arg name="shape_config" value="$(arg shape_config)"/>

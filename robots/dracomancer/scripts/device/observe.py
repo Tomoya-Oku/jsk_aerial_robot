@@ -27,9 +27,8 @@ class Observer:
             raise ValueError('Observed joints must exist in the model')
         dual = rospy.get_param('~dual_spinal', False)
         prefix = rospy.get_param('~spinal_ns', '/dracomancer' if dual else '/').rstrip('/')
-        if dual:
-            prefix += '/'+self.arm
-        service = prefix+'/get_board_info'
+        suffix = '/'+self.arm if dual else ''
+        service = prefix+'/get_board_info'+suffix
         rospy.wait_for_service(service, timeout=10)
         boards = rospy.ServiceProxy(service, GetBoardInfo)().boards
         if len(boards) != 1 or boards[0].slave_id != 0:
@@ -51,7 +50,7 @@ class Observer:
         self.publisher = rospy.Publisher('joint_states', JointState, queue_size=1)
         self.status = rospy.Publisher('preview/status', String, queue_size=1, latch=True)
         self.status.publish(String(data='UNCALIBRATED: waiting for the initial arm pose'))
-        self.subscriber = rospy.Subscriber(prefix+'/servo/states', ServoStates, self.states, queue_size=1)
+        self.subscriber = rospy.Subscriber(prefix+'/servo/states'+suffix, ServoStates, self.states, queue_size=1)
         self.timer = rospy.Timer(rospy.Duration(0.5), self.watchdog)
         rospy.logwarn('UNCALIBRATED read-only preview: %s IDs %s, startup pose = zero, signs = +1',
                       self.arm, self.ids)

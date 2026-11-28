@@ -22,7 +22,7 @@ def button_pressed(values):
 
 def decode():
     rospy.init_node('joystick')
-    publisher = rospy.Publisher('joy', Joy, queue_size=1)
+    publisher = rospy.Publisher('scaled', Joy, queue_size=1)
 
     def publish(raw):
         pressed = button_pressed(raw.data)
@@ -48,7 +48,7 @@ class JoystickCalibPublisher:
         self.rate_hz = rospy.get_param("~rate", 40)
 
         # Topic names
-        self.js_raw_topic = rospy.get_param("~js_raw_topic", "/dracomancer/right/joystick/raw")
+        self.js_raw_topic = rospy.get_param("~js_raw_topic", "/dracomancer/joystick/raw/right")
         self.js_calibrated_topic = rospy.get_param("~js_calibrated_topic", "/dracomancer/right/joystick/calibrated")
 
         # Calibration parameters

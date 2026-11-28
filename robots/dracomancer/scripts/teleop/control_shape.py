@@ -43,7 +43,7 @@ class ControlJoints:
         self.latest_robot_joint_stamp = rospy.Time(0)
         self.robot_hovering = False
         self.hover_flight_state = int(rospy.get_param('~hover_flight_state', 5))
-        self.teleop_mode = bool(rospy.get_param('~teleop_mode', False))
+        self.enabled = bool(rospy.get_param('~enabled', False))
         self.publish_only_when_hovering = bool(rospy.get_param('~publish_only_when_hovering', True))
         self.enable_feasibility_gate = bool(rospy.get_param('~enable_feasibility_gate', True))
         self.feasibility_service_name = rospy.get_param('~feasibility_service', '/' + self.robot_name + '/shape_feasibility/check_shape')
@@ -79,7 +79,7 @@ class ControlJoints:
         rospy.Subscriber(rospy.get_param('~device_joint_topic', self.device_ns + '/measured_joint_states'), JointState, self.device_joint_cb, queue_size=1)
         rospy.Subscriber('/' + self.robot_name + '/joint_states', JointState, self.robot_joint_cb, queue_size=1)
         rospy.Subscriber('/' + self.robot_name + '/flight_state', UInt8, self.robot_flight_state_cb, queue_size=1)
-        rospy.Subscriber(self.device_ns + '/teleop_mode', Bool, self.mode_cb, queue_size=1)
+        rospy.Subscriber(self.device_ns + '/enabled', Bool, self.enabled_cb, queue_size=1)
         rospy.Subscriber(self.device_ns + '/force_volume_radius_threshold', Float64MultiArray, self.force_threshold_cb, queue_size=1)
         rospy.Subscriber(self.device_ns + '/torque_volume_radius_threshold', Float64MultiArray, self.torque_threshold_cb, queue_size=1)
         if self.use_contact_wrench:
@@ -129,8 +129,8 @@ class ControlJoints:
             self.latest_robot_joints = dict(zip(msg.name, msg.position))
             self.latest_robot_joint_stamp = msg.header.stamp
 
-    def mode_cb(self, msg):
-        self.teleop_mode = bool(msg.data)
+    def enabled_cb(self, msg):
+        self.enabled = bool(msg.data)
         self.shape_solution = self.shape_cached = None
         self.last_command_stamp = None
 
@@ -145,7 +145,7 @@ class ControlJoints:
 
     def desired_target(self):
         # Clutch holds the last emitted command instead of moving to CAD zero.
-        return self.shape_gated_target() if self.teleop_mode else list(self.current_target)
+        return self.shape_gated_target() if self.enabled else list(self.current_target)
 
     def rate_limit(self, target):
         now = rospy.Time.now()
@@ -158,7 +158,7 @@ class ControlJoints:
         self.cycle_previous = list(self.current_target)
         self.shape_cached = None
         target = self.desired_target()
-        desired = self.mapped_target() if self.teleop_mode else target
+        desired = self.mapped_target() if self.enabled else target
         command = self.shape_check_command(self.rate_limit(target))
         self.current_target = self.last_feasible_target = list(command)
         self.shape_result['control_seconds'] = time.perf_counter()-start
@@ -480,7 +480,7 @@ class ControlJoints:
         return candidate if accepted else list(self.current_target)
 
     def shape_check_command(self, candidate):
-        if not self.enable_feasibility_gate or not self.teleop_mode:
+        if not self.enable_feasibility_gate or not self.enabled:
             return candidate
         feasible, force, torque, _ = self.evaluate_feasibility(candidate)
         if force is not None:
@@ -499,7 +499,7 @@ class ControlJoints:
     def publish_shape_diagnostics(self):
         data = {k: v for k, v in self.shape_result.items() if k != "q"}
         data.update(q_command=list(self.current_target), stamp=rospy.Time.now().to_sec(),
-                    teleop=self.teleop_mode)
+                    teleop=self.enabled)
         # One immutable nominal packet for the feedback/anchor consumers.
         data.update(q_previous=self.shape_solution_previous or getattr(self, 'cycle_previous', list(self.current_target)),
                     human=self.shape_solution_human or dict(self.latest_device_joints), robot=dict(self.latest_robot_joints),
@@ -507,7 +507,7 @@ class ControlJoints:
         data['fc_to_cog'] = getattr(self, 'fc_to_cog', None)
         context=getattr(self,'feasibility_context',None)
         data['evaluation_gimbals']=context[0] if context else []
-        data['active'] = (self.teleop_mode and self.shape_initialized and self.shape_input_ready()
+        data['active'] = (self.enabled and self.shape_initialized and self.shape_input_ready()
                           and self.shape_robot_valid
                           and 0 <= (rospy.Time.now()-self.latest_robot_joint_stamp).to_sec() <= self.shape_timeout
                           and (not self.publish_only_when_hovering or self.robot_hovering))

@@ -53,7 +53,7 @@
     <arg name="mapping_mode" value="$(arg mapping_mode)"/>
     <arg name="force_dimensions" value="$(arg force_dimensions)"/>
     <arg name="shape_config" value="$(arg shape_config)"/>
-    <arg name="teleop_mode" value="true"/>
+    <arg name="enabled" value="true"/>
     <arg name="publish_joints_only_when_hovering" value="false"/>
     <arg name="enable_feasibility_gate" value="$(eval not arg('geometry_only'))"/>
     <arg name="enable_volume_radius_monitor" value="$(eval not arg('geometry_only'))"/>

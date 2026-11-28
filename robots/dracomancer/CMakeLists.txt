@@ -46,7 +46,7 @@ catkin_install_python(PROGRAMS
   scripts/haptics/feedback.py
   scripts/safety/volume_radius_monitor.py
   scripts/simulation/backend.py
-  scripts/teleop/control_joint_angle.py scripts/teleop/control_position.py
+  scripts/teleop/control_shape.py scripts/teleop/control_position.py scripts/teleop/control_attitude.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(PROGRAMS scripts/record.sh DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 install(TARGETS wall_contact LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})

@@ -3,7 +3,7 @@
 
 """Minimal DRAGON forward kinematics shared by the shape-task nodes.
 
-Mirrors the fc->link4 chain used by control_joint_angle.py
+Mirrors the fc->link4 chain used by control_shape.py
 (dragon_fc_to_link4_matrix): each link is link_length long; a pitch joint
 (about +Y) sits at the link end, followed by a 2*inter_joint_x_offset spacer
 and the yaw joint (about +Z). All positions are expressed in the link4-root
@@ -68,7 +68,7 @@ def fk_points(q, link_length=DEFAULT_LINK_LENGTH,
 
     # Re-express every node in the link4 frame by inverting the full
     # link1->link4 pose (not just its position, so the reversed chain stays
-    # rigid). link4 is held fixed in the world by control_joint_angle.py's
+    # rigid). link4 is held fixed in the world by control_shape.py's
     # link4-anchor, so after this the far end of the shape is link1 --
     # matching what actually swings during real operation.
     pts_h = np.hstack([np.array(pts), np.ones((len(pts), 1))])

@@ -15,12 +15,13 @@
   <arg name="connect_fc" default="false"/>
   <arg name="fc_serial_port" default="/dev/ttyUSB0"/>
   <arg name="fc_serial_baud" default="921600"/>
-  <arg name="teleop_mode" default="false"/>
+  <arg name="enabled" default="false" doc="Enable joint commands at startup when controller conditions are met."/>
+  <arg name="view_mode" default="false" doc="Use the operator's viewpoint for translation and rotation."/>
   <arg name="shape_config" default="$(find dracomancer)/config/control/shape.yaml"/>
   <arg name="mapping_mode" default="shape"/>
   <arg name="force_dimensions" default="2"/>
   <arg name="enable_haptics" default="false"/>
-  <arg name="enable_position_control" default="false"/>
+  <arg name="enable_position_control" default="true"/>
   <arg name="anchor_mode" default="$(eval 'mid' if arg('mapping_mode').startswith('dual_') else 'none')"/>
 
   <arg name="assembly" default="false"/>
@@ -29,11 +30,12 @@
   <arg name="assembly_view" value="$(eval arg('selected') == 'viewer' and arg('assembly'))"/>
   <arg name="rviz_config" value="$(eval 'observe.rviz' if arg('selected') == 'preview' else ('cad.rviz' if arg('assembly_view') else 'mkii.rviz'))"/>
   <arg name="target_ns" default="dragon"/>
-  <arg name="start_control" default="$(eval arg('teleop_mode') or arg('enable_haptics') or arg('enable_position_control'))"
-       doc="Start the controllers even when teleop_mode initially waits for a mode command."/>
-  <arg name="js_raw_topic" default="$(eval (arg('spinal_ns').rstrip('/') if arg('selected') == 'hardware' else '/' + arg('robot_ns')) + '/right/joystick/raw')"/>
-  <arg name="left_js_raw_topic" default="$(eval (arg('spinal_ns').rstrip('/') if arg('selected') == 'hardware' else '/' + arg('robot_ns')) + '/left/joystick/raw')"/>
+  <arg name="start_control" default="$(eval arg('enabled') or arg('enable_haptics') or arg('enable_position_control'))"
+       doc="Start the controllers even when operation is initially disabled."/>
+  <arg name="js_raw_topic" default="$(eval (arg('spinal_ns').rstrip('/') if arg('selected') == 'hardware' else '/' + arg('robot_ns')) + '/joystick/raw/right')"/>
+  <arg name="left_js_raw_topic" default="$(eval (arg('spinal_ns').rstrip('/') if arg('selected') == 'hardware' else '/' + arg('robot_ns')) + '/joystick/raw/left')"/>
   <arg name="imu_topic" default="$(eval (arg('spinal_ns').rstrip('/') if arg('selected') == 'hardware' else '/' + arg('robot_ns')) + '/imu')"/>
+  <arg name="right_joystick_calibration" default="$(find dracomancer)/config/device/joystick_calibration.yaml"/>
   <arg name="left_joystick_calibration" default="$(env HOME)/.ros/dracomancer-joystick-left.yaml"/>
   <arg name="device_joint_topic" default="/$(arg robot_ns)/measured_joint_states" />
   <arg name="enable_feasibility_gate" default="true" />
@@ -85,6 +87,7 @@
   <include file="$(find dracomancer)/launch/bridge.launch"
            if="$(eval arg('selected') in ['hardware', 'preview'] and arg('connect_fc'))">
     <arg name="spinal_ns" value="$(arg spinal_ns)"/>
+    <arg name="dual_spinal" value="$(arg dual_spinal)"/>
     <arg name="serial_port" value="$(arg fc_serial_port)"/>
     <arg name="serial_baud" value="$(arg fc_serial_baud)"/>
   </include>
@@ -152,12 +155,12 @@
       <arg name="js_raw_topic" value="$(arg js_raw_topic)"/>
       <arg name="left_js_raw_topic" value="$(arg left_js_raw_topic)"/>
       <arg name="imu_topic" value="$(arg imu_topic)"/>
+      <arg name="right_joystick_calibration" value="$(arg right_joystick_calibration)"/>
       <arg name="left_joystick_calibration" value="$(arg left_joystick_calibration)"/>
       <arg name="robot_ns" value="$(arg target_ns)"/>
-      <arg name="mapping_mode" value="$(arg mapping_mode)"/>
       <arg name="anchor_mode" value="$(arg anchor_mode)"/>
       <arg name="shape_config" value="$(arg shape_config)"/>
-      <arg name="teleop_mode" value="$(arg teleop_mode)"/>
+      <arg name="view_mode" value="$(arg view_mode)"/>
       <arg name="enable_position_control" value="$(arg enable_position_control)"/>
       <arg name="position_velocity_only" value="$(arg position_velocity_only)"/>
       <arg name="joy_timeout" value="$(arg joy_timeout)"/>

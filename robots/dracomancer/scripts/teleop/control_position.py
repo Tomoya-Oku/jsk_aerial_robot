@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DRAGON position, attitude and reference-point compensation."""
+"""DRAGON position and reference-point compensation."""
 import json
 import math
 import time
@@ -7,13 +7,14 @@ import time
 import numpy as np
 import rospy
 from aerial_robot_msgs.msg import FlightNav
-from geometry_msgs.msg import PoseStamped, Vector3Stamped
+from geometry_msgs.msg import PoseStamped, QuaternionStamped
 from nav_msgs.msg import Odometry
 from spinal.msg import Imu as SpinalImu
 from std_msgs.msg import Bool, Empty, Float32MultiArray, String, UInt8
 
 from control.contacts import ContactModel, anchor_position
-from control.shape import DRAGON_JOINTS, rotation, rpy_matrix, vector
+from control.pose import matrix_rpy, quat_from_euler, quaternion_matrix
+from control.shape import DRAGON_JOINTS, rpy_matrix, vector
 
 
 # --------------------------------------------------------------------------
@@ -48,19 +49,6 @@ def quat_rotate_vec(q, v):
     return quat_mult(quat_mult(q, qv), quat_inverse(q))[:3]
 
 
-def quat_from_euler(roll, pitch, yaw):
-    # intrinsic Rz(yaw) * Ry(pitch) * Rx(roll)
-    cr, sr = math.cos(roll * 0.5), math.sin(roll * 0.5)
-    cp, sp = math.cos(pitch * 0.5), math.sin(pitch * 0.5)
-    cy, sy = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
-    return np.array([
-        sr * cp * cy - cr * sp * sy,
-        cr * sp * cy + sr * cp * sy,
-        cr * cp * sy - sr * sp * cy,
-        cr * cp * cy + sr * sp * sy,
-    ])
-
-
 def rot_z(a, v):
     c, s = math.cos(a), math.sin(a)
     return np.array([c * v[0] - s * v[1], s * v[0] + c * v[1], v[2]])
@@ -75,34 +63,14 @@ def wrap_pi(a):
     return (a + math.pi) % (2.0 * math.pi) - math.pi
 
 
-def quaternion_matrix(xyzw):
-    q=vector(xyzw,4)
-    if np.linalg.norm(q)<1e-9: raise ValueError('invalid orientation')
-    x,y,z,w=q/np.linalg.norm(q)
-    return np.array([[1-2*(y*y+z*z),2*(x*y-z*w),2*(x*z+y*w)],
-                     [2*(x*y+z*w),1-2*(x*x+z*z),2*(y*z-x*w)],
-                     [2*(x*z-y*w),2*(y*z+x*w),1-2*(x*x+y*y)]])
-
-
-def matrix_rpy(r):
-    return np.array([np.arctan2(r[2,1],r[2,2]),
-                     np.arctan2(-r[2,0],np.hypot(r[0,0],r[1,0])),
-                     np.arctan2(r[1,0],r[0,0])])
-
-
 class ViewControl:
-    def __init__(self,operator_position,linear=(.3,.3),angular=(.3,.3),deadzone=.05,maximum=(None,None)):
-        self.operator=vector(operator_position,3)
-        self.linear,self.angular=vector(linear,2),vector(angular,2)
-        if np.any(self.linear<=0) or np.any(self.angular<=0):raise ValueError('positive speed scales required')
-        self.maximum=np.array([self.linear.max() if maximum[0] is None else maximum[0],
-                               self.angular.max() if maximum[1] is None else maximum[1]],dtype=float)
-        if not np.all(np.isfinite(self.maximum)) or np.any(self.maximum<=0):raise ValueError('positive speed limits required')
-        self.deadzone=float(deadzone)
-        if not np.isfinite(self.deadzone) or not 0<=self.deadzone<1:raise ValueError('invalid neutral zone')
-        self.previous_right=None
-        self.rotation_target=None
-        self.rotate_mode=self.pressed=self.pending=False
+    def __init__(self, operator_position, linear, maximum):
+        self.operator = vector(operator_position, 3)
+        self.linear = vector(linear, 2)
+        self.maximum = self.linear.max() if maximum is None else float(maximum)
+        if np.any(self.linear <= 0) or not np.isfinite(self.maximum) or self.maximum <= 0:
+            raise ValueError('positive translation scales and speed limit required')
+        self.previous_right = None
 
     def basis(self,position,tilt):
         z=self.operator-vector(position,3)
@@ -122,48 +90,14 @@ class ViewControl:
         if (tilt.shape!=(3,3) or not np.all(np.isfinite(tilt))
                 or not np.allclose(tilt.T@tilt,np.eye(3),atol=1e-7) or np.linalg.det(tilt)<0):
             raise ValueError('invalid tilt rotation')
-        return (axes@tilt)[:,:2]
+        return axes @ tilt
 
-    def button(self,pressed):
-        if pressed and not self.pressed:self.pending=True
-        self.pressed=bool(pressed)
-
-    def commands(self,position,tilt,right,left=None):
-        right=np.clip(vector(right,2),-1.,1.)
-        left=None if left is None else np.clip(vector(left,2),-1.,1.)
-        if self.pending:
-            if np.max(np.abs(right))<=self.deadzone:
-                self.rotate_mode=not self.rotate_mode
-                self.pending=False
-            else:return np.zeros(3),np.zeros(3)
-        right[np.abs(right)<self.deadzone]=0.
-        if left is not None:left[np.abs(left)<self.deadzone]=0.
-        basis=self.basis(position,tilt)
-        translation=right if left is not None or not self.rotate_mode else np.zeros(2)
-        angular=left if left is not None else (right if self.rotate_mode else np.zeros(2))
-        v=basis@(self.linear*translation)
-        turn=self.angular*angular
-        omega=basis@np.array([-turn[1],turn[0]])
-        for value,limit in zip((v,omega),self.maximum):
-            norm=np.linalg.norm(value)
-            if norm>limit:value*=limit/norm
-        return v,omega
-
-    def integrate_rotation(self,measured,omega,dt,limits):
-        if self.rotation_target is None:self.rotation_target=np.asarray(measured,dtype=float).copy()
-        omega=vector(omega,3)
-        if not np.isfinite(dt) or dt<0:raise ValueError('invalid integration time')
-        angle=np.linalg.norm(omega)*dt
-        if angle>0:self.rotation_target=rotation(omega,angle)@self.rotation_target
-        # Integrate as a rotation; Euler components are used only at the
-        # command/limit boundary, never as angular-velocity integrators.
-        angles=matrix_rpy(self.rotation_target)
-        low,high=np.asarray(limits,dtype=float).T
-        if low.shape!=(3,) or not np.all(np.isfinite([low,high])) or np.any(low>=high):
-            raise ValueError('invalid attitude bounds')
-        angles=np.clip(angles,low,high)
-        self.rotation_target=rpy_matrix(angles)
-        return angles
+    def velocity(self, basis, axes):
+        velocity = basis[:, :2] @ (self.linear * np.clip(axes, -1., 1.))
+        speed = np.linalg.norm(velocity)
+        if speed > self.maximum:
+            velocity *= self.maximum / speed
+        return velocity
 
 
 class ControlPose:
@@ -193,8 +127,8 @@ class ControlPose:
         self.joy_timeout = float(rospy.get_param("~joy_timeout", 0.0))
         self.last_joy_time = None
 
-        self.teleop_mode = self.parse_bool_param(rospy.get_param("~teleop_mode", False), False)
-        self.mode_topic = rospy.get_param("~mode_topic", self.device_ns + "/teleop_mode")
+        self.enabled = self.parse_bool_param(rospy.get_param("~enabled", False), False)
+        self.mode_topic = rospy.get_param("~mode_topic", self.device_ns + "/enabled")
 
         # ----- navigation target: COG or BASELINK -----
         nav_target = str(rospy.get_param("~nav_target", "cog")).lower()
@@ -202,7 +136,7 @@ class ControlPose:
 
         # ----- IMU based relative direction control -----
         # one of: none / yaw / yaw_pitch / full
-        self.direction_mode = str(rospy.get_param("~direction_mode", "yaw")).lower()
+        self.direction_mode = str(rospy.get_param("~direction_mode", "none")).lower()
         if self.direction_mode not in ("none", "yaw", "yaw_pitch", "full"):
             rospy.logwarn("unknown direction_mode '%s', fall back to 'none'", self.direction_mode)
             self.direction_mode = "none"
@@ -219,30 +153,21 @@ class ControlPose:
         self.flight_nav.target = self.nav_target
         self.flight_nav.pos_xy_nav_mode = FlightNav.POS_VEL_MODE
         self.flight_nav.pos_z_nav_mode = FlightNav.POS_VEL_MODE
-        self.flight_nav.yaw_nav_mode = FlightNav.POS_VEL_MODE
-        self.flight_nav.roll_nav_mode = FlightNav.POS_VEL_MODE
-        self.flight_nav.pitch_nav_mode = FlightNav.POS_VEL_MODE
+        self.flight_nav.yaw_nav_mode = FlightNav.NO_NAVIGATION
+        self.flight_nav.roll_nav_mode = FlightNav.NO_NAVIGATION
+        self.flight_nav.pitch_nav_mode = FlightNav.NO_NAVIGATION
         if rospy.get_param("~velocity_only", False):
             # VEL_MODE integrates velocity into the existing hover target in
             # FlightNavigator. POS_VEL_MODE would overwrite position with zero.
             self.flight_nav.pos_xy_nav_mode = FlightNav.VEL_MODE
             self.flight_nav.pos_z_nav_mode = FlightNav.VEL_MODE
-            self.flight_nav.yaw_nav_mode = FlightNav.NO_NAVIGATION
-            self.flight_nav.roll_nav_mode = FlightNav.NO_NAVIGATION
-            self.flight_nav.pitch_nav_mode = FlightNav.NO_NAVIGATION
-        self.target_att_nav = Vector3Stamped()
 
-        # Robot's Pose Limitation
+        # Robot position limits
         self.pos_limit = rospy.get_param("~pos_limit", True)
-        self.att_limit = rospy.get_param("~att_limit", False)
         ## Position in Room-0066
         self.LIMIT_X = [-1.3, 2.0]
         self.LIMIT_Y = [-1.6, 1.6]
         self.LIMIT_Z = [0.3, 1.2]
-        ## Attitude (not used for now)
-        # self.LIMIT_R = [-0.5, 0.5]  # roll
-        # self.LIMIT_P = [-0.5, 0.5]  # pitch
-        # self.LIMIT_Y = [-1.0, 1.0]  # yaw
 
         # Joystick
         ## Scaling for Joystick (negative means inverted)
@@ -276,8 +201,6 @@ class ControlPose:
 
         # Publishers
         self.nav_pub = rospy.Publisher('/'+self.robot_name + "/uav/nav", FlightNav, queue_size=1)
-        self.att_pub = rospy.Publisher('/'+self.robot_name+'/final_target_baselink_rpy', Vector3Stamped, queue_size=1)
-        self.rotation_pub=rospy.Publisher('/'+self.robot_name+'/target_rotation_motion',Odometry,queue_size=1)
 
         # Subscribers
         self.robot_flight_state_sub = rospy.Subscriber('/'+self.robot_name+'/flight_state', UInt8, self.robot_flight_state_cb)
@@ -285,33 +208,28 @@ class ControlPose:
         self.js_calibrated_sub = rospy.Subscriber(self.joy_topic, Float32MultiArray, self.joystick_calib_cb, queue_size=1)
         self.imu_sub = rospy.Subscriber(self.imu_topic, SpinalImu, self.imu_cb, queue_size=1)
         self.recapture_sub = rospy.Subscriber("~recapture_neutral", Empty, self.recapture_cb, queue_size=1)
-        self.mode_sub = rospy.Subscriber(self.mode_topic, Bool, self.mode_cb, queue_size=1)
+        self.mode_sub = rospy.Subscriber(self.mode_topic, Bool, self.enabled_cb, queue_size=1)
         self.init_anchor()
-        self.navigation_mode=rospy.get_param('~navigation_mode','view')
-        if self.navigation_mode not in ('view','legacy'):raise ValueError('navigation_mode must be view or legacy')
-        cfg=rospy.get_param('~navigation',{})
-        self.navigation_config=cfg
-        self.operator_dynamic=False
-        self.operator_received=0.
-        operator=cfg.get('operator_position',[])
-        self.view=(ViewControl(operator,cfg.get('linear_scale',[.3,.3]),cfg.get('angular_scale',[.3,.3]),self.deadzone,
-                               (cfg.get('max_linear_speed'),cfg.get('max_angular_speed')))
-                   if operator else None)
-        self.view_tilt_alignment=quaternion_matrix(quat_from_euler(*cfg.get('tilt_alignment',[0.,0.,0.])))
-        self.view_require_imu=cfg.get('require_imu',True)
-        self.view_attitude_limits=cfg.get('attitude_limits',[[-.5,.5],[-.5,.5],[-np.pi,np.pi]])
-        self.view_dual=rospy.get_param('~mapping_mode','shape').startswith('dual_')
-        self.left_axes=None
-        self.left_received=0.
-        self.view_last=None
-        self.view_attitude_ready=False
-        rospy.Subscriber(self.device_ns+'/left/joystick/calibrated',Float32MultiArray,self.left_joystick,queue_size=1)
-        rospy.Subscriber(self.joy_topic+'/pressed',Bool,self.stick_button,queue_size=1)
-        rospy.Subscriber(self.device_ns+'/operator_position',PoseStamped,self.operator_position,queue_size=1)
+        self.navigation_mode = rospy.get_param('~navigation_mode', 'legacy')
+        if self.navigation_mode not in ('view', 'legacy'):
+            raise ValueError('navigation_mode must be view or legacy')
+        if self.navigation_mode == 'view':
+            self.navigation_config = rospy.get_param('~navigation', {})
+            operator = self.navigation_config.get('operator_position', [])
+            self.view = self.make_view(operator) if operator else None
+            self.operator_received = None
+            self.view_tilt_alignment = rpy_matrix(
+                self.navigation_config.get('tilt_alignment', [0., 0., 0.]))
+            self.view_require_imu = self.navigation_config.get('require_imu', True)
+            self.view_pub = rospy.Publisher(self.device_ns + '/view_frame',
+                                            QuaternionStamped, queue_size=1)
+            rospy.Subscriber(self.device_ns + '/operator_position', PoseStamped,
+                             self.operator_position, queue_size=1)
 
         # Logger
         rospy.loginfo("robot_name: %s", self.robot_name)
-        rospy.loginfo("teleop_mode: %s, mode_topic: %s", self.teleop_mode, self.mode_topic)
+        rospy.loginfo("enabled: %s, mode_topic: %s", self.enabled, self.mode_topic)
+        rospy.loginfo("navigation_mode: %s", self.navigation_mode)
         rospy.loginfo("joy_topic: %s", self.joy_topic)
         rospy.loginfo("imu_topic: %s", self.imu_topic)
         rospy.loginfo("direction_mode: %s, nav_target: %s",
@@ -329,18 +247,17 @@ class ControlPose:
             return True
         if text == "false":
             return False
-        rospy.logwarn("unknown teleop_mode bool '%s', use %s", value, default)
+        rospy.logwarn("invalid enabled value '%s', use %s", value, default)
         return default
 
-    def mode_cb(self, msg):
-        mode = bool(msg.data)
-        if mode != self.teleop_mode:
-            old_mode = self.teleop_mode
-            rospy.loginfo("teleop mode: %s -> %s", self.teleop_mode, mode)
-            self.teleop_mode = mode
-            if mode:
+    def enabled_cb(self, msg):
+        enabled = bool(msg.data)
+        if enabled != self.enabled:
+            rospy.loginfo("enabled: %s -> %s", self.enabled, enabled)
+            self.enabled = enabled
+            if enabled:
                 self.want_recapture = True
-            elif old_mode:
+            else:
                 self.publish_zero_nav()
             self.latest_axes = None
 
@@ -379,91 +296,76 @@ class ControlPose:
             return False
         return 0 <= (rospy.Time.now() - self.last_imu_stamp).to_sec() <= self.imu_timeout
 
-    def operator_position(self,msg):
-        if (msg.header.frame_id.lstrip('/')=='world'
-                and msg.header.stamp!=rospy.Time(0)
-                and 0<=(rospy.Time.now()-msg.header.stamp).to_sec()<=.5):
-            p=msg.pose.position
-            value=np.array([p.x,p.y,p.z])
-            if np.all(np.isfinite(value)):
-                if self.view is None:
-                    cfg=self.navigation_config
-                    self.view=ViewControl(value,cfg.get('linear_scale',[.3,.3]),cfg.get('angular_scale',[.3,.3]),self.deadzone,
-                                          (cfg.get('max_linear_speed'),cfg.get('max_angular_speed')))
-                else:self.view.operator=value
-                self.operator_dynamic,self.operator_received=True,time.monotonic()
+    def make_view(self, operator):
+        return ViewControl(operator, self.navigation_config.get('linear_scale', [.3, .3]),
+                           self.navigation_config.get('max_linear_speed'))
 
-    def left_joystick(self,msg):
-        if len(msg.data)==2 and np.all(np.isfinite(msg.data)):
-            self.left_axes=np.clip(msg.data,-1.,1.)
-            self.left_received=time.monotonic()
-
-    def stick_button(self,msg):
-        if self.view is not None and not self.view_dual:self.view.button(msg.data)
+    def operator_position(self, msg):
+        if msg.header.frame_id.lstrip('/') != 'world' or msg.header.stamp == rospy.Time(0):
+            return
+        if not 0 <= (rospy.Time.now() - msg.header.stamp).to_sec() <= .5:
+            return
+        p = msg.pose.position
+        value = np.array([p.x, p.y, p.z])
+        if np.all(np.isfinite(value)):
+            if self.view is None:
+                self.view = self.make_view(value)
+            else:
+                self.view.operator = value
+            self.operator_received = time.monotonic()
 
     def view_nav(self):
-        nav=self.flight_nav
-        self.view_attitude_ready=False
-        nav.target_vel_x=nav.target_vel_y=nav.target_vel_z=0.
-        odom=self.anchor_odom
-        now=rospy.Time.now().to_sec()
-        if self.view is None and self.allow_joystick:
-            rospy.logwarn_throttle(3.,'view input held: set operator_position or provide a world-frame measurement')
-        if (self.view is None or odom is None or time.monotonic()-self.odom_received>.25
-                or (self.operator_dynamic and time.monotonic()-self.operator_received>.5)
-                or not 0<=now-odom.header.stamp.to_sec()<=.25):
-            self.view_last=None
+        nav = self.flight_nav
+        nav.target_vel_x = nav.target_vel_y = nav.target_vel_z = 0.
+        if not self.allow_joystick:
             return nav
-        pose=odom.pose.pose
-        p=pose.position;q=pose.orientation
-        try:measured=quaternion_matrix([q.x,q.y,q.z,q.w])
-        except ValueError:
-            self.view_last=None
-            return nav
-        dt=0. if self.view_last is None else max(0.,min(now-self.view_last,1./self.rate_hz))
-        self.view_last=now
-        right=np.zeros(2)
-        fresh=self.last_joy_time is not None and time.monotonic()-self.last_joy_time<=self.joy_timeout
-        if self.allow_joystick and fresh and self.latest_axes is not None:
-            right=np.array([self.get_axis(self.latest_axes,self.axis_x),self.get_axis(self.latest_axes,self.axis_y)])
-        left=None
-        if self.view_dual:
-            left=self.left_axes if self.allow_joystick and time.monotonic()-self.left_received<=self.joy_timeout else np.zeros(2)
-        tilt=np.eye(3)
-        if self.imu_ready():
-            relative=quaternion_matrix(quat_mult(quat_inverse(self.neutral_q),self.q_wo))
-            tilt=self.view_tilt_alignment@relative@self.view_tilt_alignment.T
-        elif self.view_require_imu:
-            if self.allow_joystick:rospy.logwarn_throttle(3.,'view input held: fresh calibrated body IMU required')
-            right[:]=0.
-            if left is not None:left=np.zeros(2)
-        try:
-            velocity,omega=self.view.commands([p.x,p.y,p.z],tilt,right,left)
-            if self.pos_limit:
-                velocity=np.array([self.limit_velocity_axis(value,speed,bounds) for value,speed,bounds in
-                                   zip([p.x,p.y,p.z],velocity,[self.LIMIT_X,self.LIMIT_Y,self.LIMIT_Z])])
-            angles=self.view.integrate_rotation(measured,omega,dt,self.view_attitude_limits)
-        except ValueError as error:
-            rospy.logwarn_throttle(3.,'view input held: %s',str(error))
-            return nav
-        nav.target_vel_x,nav.target_vel_y,nav.target_vel_z=velocity.tolist()
-        if self.anchor_mode=='none':nav.pos_xy_nav_mode=nav.pos_z_nav_mode=FlightNav.VEL_MODE
-        # BaseNavigator ignores roll/pitch FlightNav fields. Use DRAGON's
-        # existing full CoG rotation interface instead of silently losing axes.
-        nav.roll_nav_mode=nav.pitch_nav_mode=nav.yaw_nav_mode=FlightNav.NO_NAVIGATION
-        nav.target_roll,nav.target_pitch,nav.target_yaw=angles.tolist()
-        self.view_attitude_ready=True
-        return nav
 
-    def publish_view_attitude(self):
-        if not self.view_attitude_ready:return
-        msg=Odometry()
-        msg.header.stamp,msg.header.frame_id=rospy.Time.now(),'cog'
-        q=quat_from_euler(self.flight_nav.target_roll,self.flight_nav.target_pitch,self.flight_nav.target_yaw)
-        msg.pose.pose.orientation.x,msg.pose.pose.orientation.y,msg.pose.pose.orientation.z,msg.pose.pose.orientation.w=q.tolist()
-        # Pose target only: no ambiguity between world and body angular
-        # feedforward conventions. The target itself was integrated on SO(3).
-        self.rotation_pub.publish(msg)
+        odom = self.anchor_odom
+        now = rospy.Time.now()
+        received = time.monotonic()
+        if self.view is None:
+            rospy.logwarn_throttle(3., 'view input held: set operator_position or provide a world-frame measurement')
+            return nav
+        if (odom is None or received - self.odom_received > .25
+                or not 0 <= (now - odom.header.stamp).to_sec() <= .25
+                or (self.operator_received is not None and received - self.operator_received > .5)):
+            return nav
+
+        tilt = np.eye(3)
+        if self.imu_ready():
+            relative = quaternion_matrix(quat_mult(quat_inverse(self.neutral_q), self.q_wo))
+            tilt = self.view_tilt_alignment @ relative @ self.view_tilt_alignment.T
+        elif self.view_require_imu:
+            rospy.logwarn_throttle(3., 'view input held: fresh calibrated body IMU required')
+            return nav
+
+        p = odom.pose.pose.position
+        try:
+            basis = self.view.basis([p.x, p.y, p.z], tilt)
+        except ValueError as error:
+            rospy.logwarn_throttle(3., 'view input held: %s', str(error))
+            return nav
+
+        # Share the same world-frame axes with attitude, even without right-stick input.
+        frame = QuaternionStamped()
+        frame.header.stamp, frame.header.frame_id = now, 'world'
+        q = quat_from_euler(*matrix_rpy(basis))
+        frame.quaternion.x, frame.quaternion.y, frame.quaternion.z, frame.quaternion.w = q
+        self.view_pub.publish(frame)
+
+        if (self.latest_axes is not None and self.last_joy_time is not None
+                and received - self.last_joy_time <= self.joy_timeout):
+            axes = [self.get_axis(self.latest_axes, self.axis_x),
+                    self.get_axis(self.latest_axes, self.axis_y)]
+            velocity = self.view.velocity(basis, axes)
+            if self.pos_limit:
+                velocity = [self.limit_velocity_axis(value, speed, bounds)
+                            for value, speed, bounds in
+                            zip([p.x, p.y, p.z], velocity, [self.LIMIT_X, self.LIMIT_Y, self.LIMIT_Z])]
+            nav.target_vel_x, nav.target_vel_y, nav.target_vel_z = velocity
+        if self.anchor_mode == 'none':
+            nav.pos_xy_nav_mode = nav.pos_z_nav_mode = FlightNav.VEL_MODE
+        return nav
 
     def operator_yaw_pitch(self, q_wo):
         # operator forward axis (body x) expressed in world
@@ -573,43 +475,27 @@ class ControlPose:
         limited[2] = self.limit_velocity_axis(pos.z, limited[2], self.LIMIT_Z)
         return limited
 
-    def limit_pose(self, pos, att):
-        # Limit position
-        if self.pos_limit:
-            pos[0] = max(self.LIMIT_X[0], min(pos[0], self.LIMIT_X[1]))
-            pos[1] = max(self.LIMIT_Y[0], min(pos[1], self.LIMIT_Y[1]))
-            pos[2] = max(self.LIMIT_Z[0], min(pos[2], self.LIMIT_Z[1]))
-
-        # Limit attitude
-        if self.att_limit:
-            att[0] = max(self.LIMIT_R[0], min(att[0], self.LIMIT_R[1]))
-            att[1] = max(self.LIMIT_P[0], min(att[1], self.LIMIT_P[1]))
-            att[2] = max(self.LIMIT_Y[0], min(att[2], self.LIMIT_Y[1]))
-
-        return pos, att
-
     def main(self):
         rate = rospy.Rate(self.rate_hz)
 
         while not rospy.is_shutdown():
-            pose_active = self.teleop_mode and self.robot_hovering and not self.robot_landing
+            pose_active = self.enabled and self.robot_hovering and not self.robot_landing
             if pose_active:
                 if not self.wait_flag:
                     rospy.sleep(self.wait_after_hover)
+                    if not self.enabled or not self.robot_hovering or self.robot_landing:
+                        continue
                     self.wait_flag = True
 
                 self.make_nav_msg()
                 if self.anchor_navigation(self.flight_nav):
                     self.nav_pub.publish(self.flight_nav)
-                    if self.navigation_mode=='view':self.publish_view_attitude()
             else:
                 self.anchor_reference = self.anchor_last = None
-                self.view_last=None
-                if self.view is not None:self.view.rotation_target=None
                 if self.pose_active_prev:
                     self.publish_zero_nav()
                 self.latest_axes = None
-                if not self.teleop_mode:
+                if not self.enabled:
                     self.wait_flag = False
             self.pose_active_prev = pose_active
 
